@@ -165,6 +165,9 @@ pub trait Detector: 'static + Send + DynClone + Debug {
 
     /// Detects the Erda Shower skill from the given BGRA `Mat` image.
     fn detect_erda_shower(&self) -> Result<Rect>;
+
+    /// Detects (text, bounding boxes) pairs from the given BGRA `Mat` image.
+    fn detect_texts(&self) -> Vec<(Rect, String)>;
 }
 
 #[cfg(test)]
@@ -192,6 +195,7 @@ mock! {
             calibrating: ArrowsCalibrating,
         ) -> Result<ArrowsState>;
         fn detect_erda_shower(&self) -> Result<Rect>;
+        fn detect_texts(&self) -> Vec<(Rect, String)>;
     }
 
     impl Debug for Detector {
@@ -323,6 +327,10 @@ impl Detector for CachedDetector {
 
     fn detect_erda_shower(&self) -> Result<Rect> {
         detect_erda_shower(&**self.grayscale)
+    }
+
+    fn detect_texts(&self) -> Vec<(Rect, String)> {
+        detect_texts(&*self.mat)
     }
 }
 
@@ -830,7 +838,7 @@ fn detect_player_current_max_health_bars(
             hp_bar.height,
         ))
         .unwrap();
-    let (left_in, left_w_ratio, left_h_ratio) = preprocess_for_text_bboxes(&left);
+    let (left_in, left_w_ratio, left_h_ratio) = preprocess_for_text_bboxes(&left, 5.0);
     let left_bbox = extract_text_bboxes(&left_in, left_w_ratio, left_h_ratio, hp_bar.x, hp_bar.y)
         .into_iter()
         .min_by_key(|bbox| ((bbox.x + bbox.width) - hp_separator.x).abs())
@@ -852,7 +860,7 @@ fn detect_player_current_max_health_bars(
             hp_bar.height,
         ))
         .unwrap();
-    let (right_in, right_w_ratio, right_h_ratio) = preprocess_for_text_bboxes(&right);
+    let (right_in, right_w_ratio, right_h_ratio) = preprocess_for_text_bboxes(&right, 5.0);
     let right_bbox = extract_text_bboxes(
         &right_in,
         right_w_ratio,
@@ -1544,6 +1552,13 @@ fn detect_erda_shower(mat: &impl MatTraitConst) -> Result<Rect> {
     detect_template(&skill_bar, &*ERDA_SHOWER, crop_bbox.tl(), 0.96)
 }
 
+fn detect_texts(mat: &impl MatTraitConst) -> Vec<(Rect, String)> {
+    let (mat_in, w_ratio, h_ratio) = preprocess_for_text_bboxes(mat, 1.5);
+    let bboxes = extract_text_bboxes(&mat_in, w_ratio, h_ratio, 0, 0);
+    let texts = extract_texts(mat, &bboxes);
+    bboxes.into_iter().zip(texts).collect()
+}
+
 /// Detects a single match from `template` with the given BGR image `Mat`.
 #[inline]
 fn detect_template<T: ToInputArray + MatTraitConst>(
@@ -1966,13 +1981,13 @@ fn preprocess_for_yolo(mat: &impl MatTraitConst) -> (Mat, f32, f32, i32, i32) {
 ///
 /// Returns a `(Mat, width_ratio, height_ratio)`.
 #[inline]
-fn preprocess_for_text_bboxes(mat: &impl MatTraitConst) -> (Mat, f32, f32) {
+fn preprocess_for_text_bboxes(mat: &impl MatTraitConst, magnifiy_ratio: f32) -> (Mat, f32, f32) {
     let mut mat = mat.try_clone().unwrap();
     let size = mat.size().unwrap();
     let size_w = size.width as f32;
     let size_h = size.height as f32;
     let size_max = size_w.max(size_h);
-    let resize_size = 5.0 * size_max;
+    let resize_size = magnifiy_ratio * size_max;
     let resize_ratio = resize_size / size_max;
 
     let resize_w = (resize_ratio * size_w) as i32;

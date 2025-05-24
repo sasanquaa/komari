@@ -21,7 +21,7 @@ pub struct Task<T> {
 }
 
 impl<T: fmt::Debug> Task<T> {
-    fn spawn<F>(f: F) -> Task<T>
+    pub fn spawn<F>(f: F) -> Task<T>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,

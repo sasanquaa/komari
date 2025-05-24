@@ -23,6 +23,7 @@ use crate::{
     bridge::{DefaultKeySender, ImageCapture, ImageCaptureKind, KeySender, KeySenderMethod},
     buff::{Buff, BuffKind, BuffState},
     database::{CaptureMode, InputMethod, KeyBinding},
+    debug::debug_mat,
     detect::{CachedDetector, Detector},
     mat::OwnedMat,
     minimap::{Minimap, MinimapState},
@@ -69,6 +70,8 @@ pub trait Contextual {
 pub struct Context {
     /// The `MapleStory` class game handle
     pub handle: Handle,
+    /// The `MapleStory` class chatbox handle
+    pub chatbox_handle: Handle,
     pub keys: Box<dyn KeySender>,
     pub notification: DiscordNotification,
     pub detector: Option<Box<dyn Detector>>,
@@ -83,7 +86,8 @@ impl Context {
     #[cfg(test)]
     pub fn new(keys: Option<MockKeySender>, detector: Option<MockDetector>) -> Self {
         Context {
-            handle: Handle::new(""),
+            handle: Handle::new("", false),
+            chatbox_handle: Handle::new("", true),
             keys: Box::new(keys.unwrap_or_default()),
             notification: DiscordNotification::new(Rc::new(RefCell::new(Settings::default()))),
             detector: detector.map(|detector| Box::new(detector) as Box<dyn Detector>),
@@ -145,7 +149,8 @@ fn update_loop() {
     // MapleStoryClass <- GMS
     // MapleStoryClassSG <- MSEA
     // MapleStoryClassTW <- TMS
-    let handle = Handle::new("MapleStoryClass");
+    let handle = Handle::new("MapleStoryClass", false);
+    let chatbox_handle = Handle::new("MapleStoryClass", true);
     let mut rotator = Rotator::default();
     let mut actions = Vec::<Action>::new();
     let mut config = query_configs().unwrap().into_iter().next().unwrap(); // Override by UI
@@ -177,10 +182,12 @@ fn update_loop() {
             KeyInputKind::Foreground,
         ));
     }
+    let mut chatbox_image_capture = ImageCapture::new(chatbox_handle, CaptureMode::BitBlt);
 
     let settings = Rc::new(RefCell::new(settings));
     let mut context = Context {
         handle,
+        chatbox_handle,
         keys: Box::new(keys),
         notification: DiscordNotification::new(settings.clone()),
         detector: None,
@@ -208,6 +215,22 @@ fn update_loop() {
     let mut infering_rune = None;
 
     loop_with_fps(FPS, || {
+        let mat_chatbox = chatbox_image_capture.grab().map(OwnedMat::new);
+        if let Some(mat) = mat_chatbox {
+            let detector = CachedDetector::new(mat);
+            println!("??????");
+            let vec = detector.detect_texts();
+            println!("{vec:?}");
+            let _ = debug_mat(
+                "Test",
+                detector.mat(),
+                0,
+                vec.iter()
+                    .map(|(rect, text)| (*rect, text.as_str()))
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+            );
+        }
         let mat = image_capture.grab().map(OwnedMat::new);
         let was_player_alive = !player_state.is_dead;
         let was_minimap_idle = matches!(context.minimap, Minimap::Idle(_));
