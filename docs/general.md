@@ -1,11 +1,12 @@
-- [How to use](#how-to-use)
-  - [Download](#download)
+- [Download](#download)
+- [Concepts](#concepts)
   - [Map](#map)
   - [Configuration](#configuration)
   - [Action](#action)
   - [Condition](#condition)
   - [Linked Key & Linked Action](#linked-key--linked-action)
   - [Rotation Modes](#rotation-modes)
+  - [Auto-mobbing](#auto-mobbing)
   - [Platforms Pathing](#platforms-pathing)
   - [Capture Modes](#capture-modes)
 - [Video guides](#video-guides)
@@ -14,13 +15,12 @@
   - [Auto Mobbing & Platforms Pathing](#auto-mobbing-%26-platforms-pathing)
   - [Rune Solving](#rune-solving)
 
-## How to use
-
-#### Download
+## Download
 - Head to the [Github Release](https://github.com/sasanquaa/komari/releases)
 - Download the `app.zip` and extract it
 - Run the exe file
 
+## Concepts
 #### Map
 - Map is automatically detected but must be created manually by providing a name
 - The created map is saved and can be selected again later
@@ -35,6 +35,10 @@ the order of one action to another depending on rotation mode.
 - Configuration is used to change key bindings, set up buffs,...
 - Configuration can be created for use with different character(s) through preset
 - Configuration is saved globally and not affected by the detected map
+- There are three tabs:
+  - `Game`: For general key bindings, game-related setup
+  - `Buffs`: For automatic buffs configuration
+  - `Fixed Actions`: Actions that are shared across all maps, useful for buffs or one-time skills
 
 For supported buffs in the configuration, the bot relies on detecting buffs on the top-right corner. And the bot
 movement depends heavily on the skill `Rope Lift` to move around platforms, so make sure you set a key for it.
@@ -143,7 +147,8 @@ For other conditions actions:
 - `EveryMillis` actions run out of order
 - `ErdaShowerOffCooldown` actions run in the order added same as `StartToEnd`
 
-When `AutoMobbing` is used:
+#### Auto-mobbing
+Auto-mobbing is feature to hit random mobs detected on screen. It can be enabled by changing `Rotation Mode` to `AutoMobbing`. When `AutoMobbing` is used:
 - Setting the bounds to inside the minimap is required so that the bot will not wrongly detect out of bounds mobs
 - The bounds should be the rectangle where you can move around (two edges of the map)
 - While this mode ignores all `Any` condition actions, it is still possible to use other conditions
@@ -162,7 +167,8 @@ from the ground level.
 Without this feature, the bot movement is quite simple. It just moves horizontally first so the `x` matches the destination
 and then try to up jump, rope lift or drop down as appropriate to match the `y`.
 
-Hot keys can be used to add platforms more quickly.
+When adding platforms, hot keys can be used to add platforms more quickly. And it is encouraged to add platforms when
+used for auto-mobbing as it can help auto-mobbing as documented in [Auto-mobbing](#auto-mobbing).
 
 ![Platforms](https://github.com/sasanquaa/komari/blob/master/.github/images/platforms.png?raw=true)
 
@@ -184,7 +190,7 @@ There are three capture modes, the first two are similar to what you see in OBS:
 3. Rotation modes, linked key and linked actions - TODO
     - [Clockwise rotation example](https://youtu.be/-glx3b0jGEY?si=nuEDmIQTuiz3LtIq) 
 
-## Showcase
+## Showcase (These showcases are from v0.1)
 #### Rotation
 https://github.com/user-attachments/assets/3c66dcb9-7196-4245-a7ea-4253f214bba6
 
