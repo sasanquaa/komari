@@ -133,7 +133,26 @@ pub fn update_double_jumping_context(
                         Ordering::Less => {
                             Some((KeyKind::Left, KeyKind::Right, ActionKeyDirection::Left))
                         }
-                        _ => None,
+                        _ => {
+                            // Mage teleportation requires a direction
+                            if state.config.teleport_key.is_some() {
+                                match state.last_known_direction {
+                                    ActionKeyDirection::Any => None,
+                                    ActionKeyDirection::Right => Some((
+                                        KeyKind::Right,
+                                        KeyKind::Left,
+                                        ActionKeyDirection::Right,
+                                    )),
+                                    ActionKeyDirection::Left => Some((
+                                        KeyKind::Left,
+                                        KeyKind::Right,
+                                        ActionKeyDirection::Left,
+                                    )),
+                                }
+                            } else {
+                                None
+                            }
+                        }
                     };
                     if let Some((key_down, key_up, direction)) = option {
                         let _ = context.keys.send_down(key_down);

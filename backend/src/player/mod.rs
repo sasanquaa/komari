@@ -1,5 +1,5 @@
 use actions::{on_action, on_action_state_mut};
-use adjust::update_adjusting_context;
+use adjust::{ADJUSTING_MEDIUM_THRESHOLD, update_adjusting_context};
 use cash_shop::{CashShop, update_cash_shop_context};
 use double_jump::{DoubleJumping, update_double_jumping_context};
 use fall::update_falling_context;
@@ -91,8 +91,11 @@ impl Player {
             Player::Detecting
             | Player::Idle
             | Player::Moving(_, _, _)
-            | Player::DoubleJumping(DoubleJumping { forced: false, .. })
-            | Player::Adjusting(_) => true,
+            | Player::DoubleJumping(DoubleJumping { forced: false, .. }) => true,
+            Player::Adjusting(moving) => {
+                let (distance, _) = moving.x_distance_direction_from(true, moving.pos);
+                distance >= ADJUSTING_MEDIUM_THRESHOLD
+            }
             Player::Grappling(moving)
             | Player::Jumping(moving)
             | Player::UpJumping(moving)
