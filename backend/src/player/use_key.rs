@@ -4,8 +4,10 @@ use opencv::core::Point;
 use platforms::windows::KeyKind;
 
 use super::{
-    PlayerState, Timeout,
-    actions::{PlayerAction, PlayerActionKey},
+    PingPongDirection, PlayerState, Timeout,
+    actions::{
+        PlayerAction, PlayerActionKey, PlayerActionPingPong, on_ping_pong_double_jump_action,
+    },
     double_jump::DoubleJumping,
 };
 use crate::{
@@ -117,6 +119,21 @@ impl UseKey {
                 with: ActionKeyWith::Any,
                 wait_before_use_ticks: mob.wait_before_ticks,
                 wait_after_use_ticks: mob.wait_after_ticks,
+                stage: UseKeyStage::Precondition,
+            },
+            PlayerAction::PingPong(ping_pong) => Self {
+                key: ping_pong.key,
+                link_key: None,
+                count: ping_pong.count,
+                current_count: 0,
+                direction: if matches!(ping_pong.direction, PingPongDirection::Left) {
+                    ActionKeyDirection::Left
+                } else {
+                    ActionKeyDirection::Right
+                },
+                with: ActionKeyWith::Any,
+                wait_before_use_ticks: ping_pong.wait_before_ticks,
+                wait_after_use_ticks: ping_pong.wait_after_ticks,
                 stage: UseKeyStage::Precondition,
             },
             PlayerAction::SolveRune | PlayerAction::Move { .. } => {
@@ -315,6 +332,21 @@ pub fn update_use_key_context(
                     }
                 }
                 Some((next, is_terminal))
+            }
+            PlayerAction::PingPong(PlayerActionPingPong { direction, .. }) => {
+                if matches!(next, Player::Idle) {
+                    state.clear_unstucking(true);
+                    Some((
+                        on_ping_pong_double_jump_action(
+                            context,
+                            state.last_known_pos.unwrap(),
+                            direction,
+                        ),
+                        false,
+                    ))
+                } else {
+                    None
+                }
             }
             PlayerAction::Key(_) => Some((next, matches!(next, Player::Idle))),
             PlayerAction::Move(_) | PlayerAction::SolveRune => None,

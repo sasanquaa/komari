@@ -351,6 +351,12 @@ impl PlayerState {
         !self.has_priority_action() && matches!(self.normal_action, Some(PlayerAction::AutoMob(_)))
     }
 
+    /// Whether there is only ping pong action.
+    #[inline]
+    pub(super) fn has_ping_pong_action_only(&self) -> bool {
+        !self.has_priority_action() && matches!(self.normal_action, Some(PlayerAction::PingPong(_)))
+    }
+
     /// Clears both on-going normal and priority actions due to being aborted.
     #[inline]
     pub fn clear_actions_aborted(&mut self) {
@@ -486,11 +492,13 @@ impl PlayerState {
     /// Gets the double jump minimum `x` distance threshold
     ///
     /// In auto mob and final destination, the threshold is relaxed for more
-    /// fluid movement.
+    /// fluid movement. In ping pong, there is no threshold.
     #[inline]
     pub(super) fn double_jump_threshold(&self, is_intermediate: bool) -> i32 {
         if self.has_auto_mob_action_only() && !is_intermediate {
             DOUBLE_JUMP_AUTO_MOB_THRESHOLD
+        } else if self.has_ping_pong_action_only() {
+            0 // Ping pong double jumps forever
         } else {
             DOUBLE_JUMP_THRESHOLD
         }
@@ -695,7 +703,10 @@ impl PlayerState {
 
         let x = match self.normal_action.unwrap() {
             PlayerAction::AutoMob(mob) => mob.position.x,
-            PlayerAction::Key(_) | PlayerAction::Move(_) | PlayerAction::SolveRune => {
+            PlayerAction::PingPong(_)
+            | PlayerAction::Key(_)
+            | PlayerAction::Move(_)
+            | PlayerAction::SolveRune => {
                 unreachable!()
             }
         };

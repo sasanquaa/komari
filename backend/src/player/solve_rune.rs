@@ -106,7 +106,10 @@ pub fn update_solving_rune_context(
                 }
                 Some((next, is_terminal))
             }
-            PlayerAction::AutoMob(_) | PlayerAction::Key(_) | PlayerAction::Move(_) => {
+            PlayerAction::PingPong(_)
+            | PlayerAction::AutoMob(_)
+            | PlayerAction::Key(_)
+            | PlayerAction::Move(_) => {
                 unreachable!()
             }
         },

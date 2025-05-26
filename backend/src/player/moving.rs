@@ -265,7 +265,11 @@ pub fn update_moving_context(
     match (skip_destination, x_distance, y_direction, y_distance) {
         (false, d, _, _) if d >= state.double_jump_threshold(is_intermediate) => {
             abort_action_on_state_repeat(
-                Player::DoubleJumping(DoubleJumping::new(moving, false, false)),
+                Player::DoubleJumping(DoubleJumping::new(
+                    moving,
+                    false,
+                    state.has_ping_pong_action_only(),
+                )),
                 context,
                 state,
             )
@@ -406,6 +410,7 @@ fn on_player_action(
             false,
         )),
         PlayerAction::SolveRune => Some((Player::SolvingRune(SolvingRune::default()), false)),
+        PlayerAction::PingPong(_) => Some((Player::Idle, true)),
     }
 }
 

@@ -1,21 +1,22 @@
-use opencv::core::Point;
+use opencv::core::{Point, Rect};
 use platforms::windows::KeyKind;
 use strum::Display;
 
-use super::{Player, PlayerState, use_key::UseKey};
+use super::{Player, PlayerState, moving::Moving, use_key::UseKey};
 use crate::{
     Action, ActionKey, ActionKeyDirection, ActionKeyWith, ActionMove, KeyBinding, Position,
     context::{Context, MS_PER_TICK},
     database::LinkKeyBinding,
+    minimap::Minimap,
 };
 
-/// The minimum x distance required to transition to [`Player::UseKey`] in auto mob action
+/// The minimum x distance required to transition to [`Player::UseKey`] in auto mob action.
 const AUTO_MOB_USE_KEY_X_THRESHOLD: i32 = 16;
 
-/// The minimum y distance required to transition to [`Player::UseKey`] in auto mob action
+/// The minimum y distance required to transition to [`Player::UseKey`] in auto mob action.
 const AUTO_MOB_USE_KEY_Y_THRESHOLD: i32 = 8;
 
-/// Represents the fixed key action
+/// Represents the fixed key action.
 ///
 /// Converted from [`ActionKey`] without fields used by [`Rotator`]
 #[derive(Clone, Copy, Debug)]
@@ -65,9 +66,9 @@ impl From<ActionKey> for PlayerActionKey {
     }
 }
 
-/// Represents the fixed move action
+/// Represents the fixed move action.
 ///
-/// Converted from [`ActionMove`] without fields used by [`Rotator`]
+/// Converted from [`ActionMove`] without fields used by [`Rotator`].
 #[derive(Clone, Copy, Debug)]
 pub struct PlayerActionMove {
     pub position: Position,
@@ -105,17 +106,46 @@ impl std::fmt::Display for PlayerActionAutoMob {
     }
 }
 
-/// Represents an action the `Rotator` can use
+/// Represents a ping pong action.
+///
+/// This is a type of action that moves in one direction and spams a fixed key. Once the player hits
+/// the edge determined by [`Self::bound`], that is when the action completed. The [`Rotator`]
+/// then rotates the next action in the reverse direction.
+///
+/// This action forces the player to always stay inside the bound.
+#[derive(Clone, Copy, Debug)]
+pub struct PlayerActionPingPong {
+    pub key: KeyBinding,
+    pub count: u32,
+    pub wait_before_ticks: u32,
+    pub wait_after_ticks: u32,
+    /// Bound of ping pong action.
+    ///
+    /// This bound is in player relative coordinate.
+    pub bound: Rect,
+    pub direction: PingPongDirection,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum PingPongDirection {
+    Left,
+    Right,
+}
+
+/// Represents an action the [`Rotator`] can use.
 #[derive(Clone, Copy, Debug, Display)]
 pub enum PlayerAction {
-    /// Fixed key action provided by the user
+    /// Fixed key action provided by the user.
     Key(PlayerActionKey),
-    /// Fixed move action provided by the user
+    /// Fixed move action provided by the user.
     Move(PlayerActionMove),
-    /// Solve rune action
+    /// Solve rune action.
     SolveRune,
+    /// Auto-mobbing action provided by [`Rotator`].
     #[strum(to_string = "AutoMob({0})")]
     AutoMob(PlayerActionAutoMob),
+    /// Ping pong action provided by [`Rotator`].
+    PingPong(PlayerActionPingPong),
 }
 
 impl From<Action> for PlayerAction {
@@ -127,9 +157,86 @@ impl From<Action> for PlayerAction {
     }
 }
 
-/// Checks proximity in [`PlayerAction::AutoMob`] for transitioning to [`Player::UseKey`]
+#[inline]
+pub fn on_ping_pong_double_jump_action(
+    context: &Context,
+    cur_pos: Point,
+    direction: PingPongDirection,
+) -> Player {
+    let minimap_width = match context.minimap {
+        Minimap::Idle(idle) => idle.bbox.width,
+        _ => unreachable!(),
+    };
+    let y = cur_pos.y; // y doesn't matter in ping pong
+
+    match direction {
+        PingPongDirection::Left => Player::Moving(Point::new(0, y), false, None),
+        PingPongDirection::Right => Player::Moving(Point::new(minimap_width, y), false, None),
+    }
+}
+
+/// Checks transitioning to [`Player::UseKey`], [`Player::Idle`], [`Player::Falling`],
+/// [`Player::Grappling`] or [`Player::UpJumping`] in [`PlayerAction::PingPong`].
+#[inline]
+pub fn on_ping_pong_use_key_action(
+    context: &Context,
+    action: PlayerAction,
+    cur_pos: Point,
+    bound: Rect,
+    direction: PingPongDirection,
+    flying_or_double_jumped: bool,
+    has_grappling: bool,
+) -> Option<(Player, bool)> {
+    if flying_or_double_jumped {
+        let hit_x_bound_edge = match direction {
+            PingPongDirection::Left => cur_pos.x < bound.x,
+            PingPongDirection::Right => cur_pos.x > bound.x + bound.width,
+        };
+        if hit_x_bound_edge {
+            return Some((Player::Idle, true));
+        }
+
+        if cur_pos.y < bound.y
+            || ((cur_pos.y < (bound.y + bound.height) / 2) && rand::random_bool(0.05))
+        {
+            let moving = Moving::new(
+                cur_pos,
+                Point::new(cur_pos.x, bound.y + bound.height),
+                false,
+                None,
+            );
+            let next = if has_grappling {
+                Player::Grappling(moving)
+            } else {
+                Player::UpJumping(moving)
+            };
+
+            clear_keys(context);
+            return Some((next, false));
+        }
+
+        if cur_pos.y > bound.y + bound.height {
+            clear_keys(context);
+            return Some((
+                Player::Falling(
+                    Moving::new(cur_pos, Point::new(cur_pos.x, bound.y), false, None),
+                    cur_pos,
+                    true,
+                ),
+                false,
+            ));
+        }
+
+        clear_keys(context);
+        Some((Player::UseKey(UseKey::from_action(action)), false))
+    } else {
+        None
+    }
+}
+
+/// Checks proximity in [`PlayerAction::AutoMob`] for transitioning to [`Player::UseKey`].
 ///
-/// This is common logics shared with other contextual states when there is auto mob action
+/// This is common logics shared with other contextual states when there is auto mob action.
 #[inline]
 pub fn on_auto_mob_use_key_action(
     context: &Context,
@@ -139,10 +246,7 @@ pub fn on_auto_mob_use_key_action(
     y_distance: i32,
 ) -> Option<(Player, bool)> {
     if x_distance <= AUTO_MOB_USE_KEY_X_THRESHOLD && y_distance <= AUTO_MOB_USE_KEY_Y_THRESHOLD {
-        let _ = context.keys.send_up(KeyKind::Down);
-        let _ = context.keys.send_up(KeyKind::Up);
-        let _ = context.keys.send_up(KeyKind::Left);
-        let _ = context.keys.send_up(KeyKind::Right);
+        clear_keys(context);
         Some((
             Player::UseKey(UseKey::from_action_pos(action, Some(cur_pos))),
             false,
@@ -152,9 +256,16 @@ pub fn on_auto_mob_use_key_action(
     }
 }
 
-/// Callbacks for when there is a normal or priority [`PlayerAction`]
+fn clear_keys(context: &Context) {
+    let _ = context.keys.send_up(KeyKind::Down);
+    let _ = context.keys.send_up(KeyKind::Up);
+    let _ = context.keys.send_up(KeyKind::Left);
+    let _ = context.keys.send_up(KeyKind::Right);
+}
+
+/// Callbacks for when there is a normal or priority [`PlayerAction`].
 ///
-/// This version does not require [`PlayerState`] in the callbacks arguments
+/// This version does not require [`PlayerState`] in the callbacks arguments.
 #[inline]
 pub fn on_action(
     state: &mut PlayerState,
@@ -168,9 +279,9 @@ pub fn on_action(
     )
 }
 
-/// Callbacks for when there is a normal or priority [`PlayerAction`]
+/// Callbacks for when there is a normal or priority [`PlayerAction`].
 ///
-/// This version requires a shared reference [`PlayerState`] in the callbacks arguments
+/// This version requires a shared reference [`PlayerState`] in the callbacks arguments.
 #[inline]
 pub fn on_action_state(
     state: &mut PlayerState,
@@ -184,7 +295,7 @@ pub fn on_action_state(
     )
 }
 
-/// Callbacks for when there is a normal or priority [`PlayerAction`]
+/// Callbacks for when there is a normal or priority [`PlayerAction`].
 ///
 /// When there is a priority action, it takes precendece over the normal action. The callback
 /// should return a tuple [`Option<(Player, bool)>`] with:
@@ -208,6 +319,7 @@ pub fn on_action_state_mut(
         if is_terminal {
             match action {
                 PlayerAction::SolveRune
+                | PlayerAction::PingPong(_)
                 | PlayerAction::Move(_)
                 | PlayerAction::Key(PlayerActionKey {
                     position: Some(Position { .. }),
@@ -215,6 +327,7 @@ pub fn on_action_state_mut(
                 }) => {
                     state.clear_unstucking(false);
                 }
+                // Should not clear unstucking for auto-mobbing as it is pretty error prone...
                 PlayerAction::AutoMob(_)
                 | PlayerAction::Key(PlayerActionKey { position: None, .. }) => (),
             }

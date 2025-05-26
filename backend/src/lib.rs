@@ -39,9 +39,9 @@ pub use {
     database::{
         Action, ActionCondition, ActionConfiguration, ActionKey, ActionKeyDirection, ActionKeyWith,
         ActionMove, AutoMobbing, Bound, CaptureMode, Class, Configuration, InputMethod, KeyBinding,
-        KeyBindingConfiguration, LinkKeyBinding, Minimap, Notifications, Platform, Position,
-        PotionMode, RotationMode, Settings, delete_map, query_configs, query_maps, query_settings,
-        upsert_config, upsert_map, upsert_settings,
+        KeyBindingConfiguration, LinkKeyBinding, Minimap, Notifications, PingPong, Platform,
+        Position, PotionMode, RotationMode, Settings, delete_map, query_configs, query_maps,
+        query_settings, upsert_config, upsert_map, upsert_settings,
     },
     pathing::MAX_PLATFORMS_COUNT,
     rotator::RotatorMode,

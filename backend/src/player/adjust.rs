@@ -176,6 +176,7 @@ fn on_player_action(
             with: ActionKeyWith::Stationary,
             ..
         })
+        | PlayerAction::PingPong(_)
         | PlayerAction::SolveRune
         | PlayerAction::Move(_) => None,
     }

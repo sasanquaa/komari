@@ -1,6 +1,6 @@
 use super::{
-    Player, PlayerAction, PlayerState,
-    actions::{on_action, on_auto_mob_use_key_action},
+    Player, PlayerAction, PlayerActionPingPong, PlayerState,
+    actions::{on_action, on_auto_mob_use_key_action, on_ping_pong_double_jump_action},
     moving::Moving,
     state::LastMovement,
 };
@@ -83,6 +83,18 @@ pub fn update_grappling_context(
                         let (x_distance, _) = moving.x_distance_direction_from(false, cur_pos);
                         let (y_distance, _) = moving.y_distance_direction_from(false, cur_pos);
                         on_auto_mob_use_key_action(context, action, cur_pos, x_distance, y_distance)
+                    }
+                    PlayerAction::PingPong(PlayerActionPingPong {
+                        bound, direction, ..
+                    }) => {
+                        if cur_pos.y >= bound.y && rand::random_bool(0.1) {
+                            Some((
+                                on_ping_pong_double_jump_action(context, cur_pos, direction),
+                                false,
+                            ))
+                        } else {
+                            None
+                        }
                     }
                     PlayerAction::Key(_) | PlayerAction::Move(_) | PlayerAction::SolveRune => None,
                 },

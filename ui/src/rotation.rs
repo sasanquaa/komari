@@ -1,4 +1,4 @@
-use backend::{AutoMobbing, Bound, RotationMode};
+use backend::{AutoMobbing, Bound, PingPong, RotationMode};
 use dioxus::prelude::*;
 
 use crate::{
@@ -18,12 +18,6 @@ pub fn Rotations(
     rotation_mode: RotationMode,
     reset_on_erda: bool,
 ) -> Element {
-    let auto_mobbing = if let RotationMode::AutoMobbing(mobbing) = rotation_mode {
-        mobbing
-    } else {
-        AutoMobbing::default()
-    };
-
     rsx! {
         div { class: "flex flex-col space-y-2",
             ul { class: "list-disc text-xs text-gray-700 pl-4",
@@ -53,18 +47,32 @@ pub fn Rotations(
                 label_class: LABEL_CLASS,
                 div_class: DIV_CLASS,
                 input_class: "w-36 text-xs text-gray-700 text-ellipsis rounded outline-none disabled:cursor-not-allowed disabled:text-gray-400",
-                disabled,
+                disabled: disabled
+                    | matches!(
+                        rotation_mode,
+                        RotationMode::PingPong(_) | RotationMode::AutoMobbing(_)
+                    ),
                 on_input: move |checked| {
                     on_reset_on_erda(checked);
                 },
                 value: reset_on_erda,
             }
-            AutoMobbingInput {
-                disabled: disabled || !matches!(rotation_mode, RotationMode::AutoMobbing(_)),
-                on_input: move |mobbing| {
-                    on_rotation_mode(RotationMode::AutoMobbing(mobbing));
-                },
-                value: auto_mobbing,
+            if let RotationMode::AutoMobbing(auto_mobbing) = rotation_mode {
+                AutoMobbingInput {
+                    disabled,
+                    on_input: move |mobbing| {
+                        on_rotation_mode(RotationMode::AutoMobbing(mobbing));
+                    },
+                    value: auto_mobbing,
+                }
+            } else if let RotationMode::PingPong(ping_pong) = rotation_mode {
+                PingPongInput {
+                    disabled,
+                    on_input: move |ping_pong| {
+                        on_rotation_mode(RotationMode::PingPong(ping_pong));
+                    },
+                    value: ping_pong,
+                }
             }
         }
     }
@@ -186,6 +194,129 @@ fn AutoMobbingInput(
             disabled,
             on_input: move |height| {
                 on_input(AutoMobbing {
+                    bound: Bound { height, ..bound },
+                    ..value
+                });
+            },
+            value: bound.height,
+        }
+    }
+}
+
+// TODO: UI is too easy fr fr, just dupe em
+// TODO: Pay the price in some months
+#[component]
+fn PingPongInput(disabled: bool, on_input: EventHandler<PingPong>, value: PingPong) -> Element {
+    let PingPong {
+        bound,
+        key,
+        key_count,
+        key_wait_before_millis,
+        key_wait_after_millis,
+    } = value;
+
+    rsx! {
+        KeyBindingInput {
+            label: "Key",
+            label_class: LABEL_CLASS,
+            div_class: DIV_CLASS,
+            input_class: INPUT_CLASS,
+            disabled,
+            on_input: move |key| {
+                on_input(PingPong { key, ..value });
+            },
+            value: key,
+        }
+        NumberInputU32 {
+            label: "Key Count",
+            div_class: DIV_CLASS,
+            label_class: LABEL_CLASS,
+            input_class: INPUT_CLASS,
+            disabled,
+            minimum_value: 1,
+            on_input: move |key_count| {
+                on_input(PingPong { key_count, ..value });
+            },
+            value: key_count,
+        }
+        MillisInput {
+            label: "Key Wait Before",
+            div_class: DIV_CLASS,
+            label_class: LABEL_CLASS,
+            input_class: INPUT_CLASS,
+            disabled,
+            on_input: move |key_wait_before_millis| {
+                on_input(PingPong {
+                    key_wait_before_millis,
+                    ..value
+                });
+            },
+            value: key_wait_before_millis,
+        }
+        MillisInput {
+            label: "Key Wait After",
+            div_class: DIV_CLASS,
+            label_class: LABEL_CLASS,
+            input_class: INPUT_CLASS,
+            disabled,
+            on_input: move |key_wait_after_millis| {
+                on_input(PingPong {
+                    key_wait_after_millis,
+                    ..value
+                });
+            },
+            value: key_wait_after_millis,
+        }
+        NumberInputI32 {
+            label: "X",
+            div_class: DIV_CLASS,
+            label_class: LABEL_CLASS,
+            input_class: INPUT_CLASS,
+            disabled,
+            on_input: move |x| {
+                on_input(PingPong {
+                    bound: Bound { x, ..bound },
+                    ..value
+                });
+            },
+            value: bound.x,
+        }
+        NumberInputI32 {
+            label: "Y",
+            div_class: DIV_CLASS,
+            label_class: LABEL_CLASS,
+            input_class: INPUT_CLASS,
+            disabled,
+            on_input: move |y| {
+                on_input(PingPong {
+                    bound: Bound { y, ..bound },
+                    ..value
+                });
+            },
+            value: bound.y,
+        }
+        NumberInputI32 {
+            label: "Width",
+            div_class: DIV_CLASS,
+            label_class: LABEL_CLASS,
+            input_class: INPUT_CLASS,
+            disabled,
+            on_input: move |width| {
+                on_input(PingPong {
+                    bound: Bound { width, ..bound },
+                    ..value
+                });
+            },
+            value: bound.width,
+        }
+        NumberInputI32 {
+            label: "Height",
+            div_class: DIV_CLASS,
+            label_class: LABEL_CLASS,
+            input_class: INPUT_CLASS,
+            disabled,
+            on_input: move |height| {
+                on_input(PingPong {
                     bound: Bound { height, ..bound },
                     ..value
                 });

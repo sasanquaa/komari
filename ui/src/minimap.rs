@@ -56,7 +56,7 @@ const MINIMAP_JS: &str = r#"
 const MINIMAP_ACTIONS_JS: &str = r#"
     const canvas = document.getElementById("canvas-minimap-actions");
     const canvasCtx = canvas.getContext("2d");
-    const [width, height, actions, autoMobEnabled, autoMobBound, platforms] = await dioxus.recv();
+    const [width, height, actions, boundEnabled, bound, platforms] = await dioxus.recv();
     canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
     const anyActions = actions.filter((action) => action.condition === "Any");
     const erdaActions = actions.filter((action) => action.condition === "ErdaShowerOffCooldown");
@@ -65,13 +65,15 @@ const MINIMAP_ACTIONS_JS: &str = r#"
     canvasCtx.fillStyle = "rgb(255, 153, 128)";
     canvasCtx.strokeStyle = "rgb(255, 153, 128)";
     drawActions(canvas, canvasCtx, anyActions, true);
-    if (autoMobEnabled) {
-        const x = (autoMobBound.x / width) * canvas.width;
-        const y = (autoMobBound.y / height) * canvas.height;
-        const w = (autoMobBound.width / width) * canvas.width;
-        const h = (autoMobBound.height / height) * canvas.height;
+    if (boundEnabled) {
+        const x = (bound.x / width) * canvas.width;
+        const y = (bound.y / height) * canvas.height;
+        const w = (bound.width / width) * canvas.width;
+        const h = (bound.height / height) * canvas.height;
         canvasCtx.beginPath();
-        canvasCtx.rect(x, y, w, h);
+        canvasCtx.globalAlpha = 0.6;
+        canvasCtx.fillRect(x, y, w, h);
+        canvasCtx.globalAlpha = 1.0;
         canvasCtx.stroke();
     }
     for (const platform of platforms) {
@@ -228,7 +230,7 @@ pub fn Minimap(
         },
     );
 
-    // draw actions, auto mob bound
+    // draw actions, auto mob / ping pong bound
     use_effect(move || {
         let minimap = minimap();
         let preset = preset();
@@ -260,17 +262,21 @@ pub fn Minimap(
                 Action::Key(ActionKey { position: None, .. }) => None,
             })
             .collect::<Vec<ActionView>>();
+
         let platforms_bound = platforms_bound();
         if let Some(minimap) = minimap {
-            let bound = if let RotationMode::AutoMobbing(mobbing) = minimap.rotation_mode {
-                if minimap.auto_mob_platforms_bound {
-                    platforms_bound.or(Some(mobbing.bound))
-                } else {
-                    Some(mobbing.bound)
+            let bound = match minimap.rotation_mode {
+                RotationMode::AutoMobbing(mobbing) => {
+                    if minimap.auto_mob_platforms_bound {
+                        platforms_bound.or(Some(mobbing.bound))
+                    } else {
+                        Some(mobbing.bound)
+                    }
                 }
-            } else {
-                None
+                RotationMode::PingPong(ping_pong) => Some(ping_pong.bound),
+                RotationMode::StartToEnd | RotationMode::StartToEndThenReverse => None,
             };
+
             spawn(async move {
                 document::eval(MINIMAP_ACTIONS_JS)
                     .send((

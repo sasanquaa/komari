@@ -291,7 +291,7 @@ impl From<ActionConfiguration> for Action {
         Self::Key(ActionKey {
             key: value.key,
             link_key: None,
-            count: 1,
+            count: key_count_default(),
             position: None,
             condition: ActionCondition::EveryMillis(value.every_millis),
             direction: ActionKeyDirection::Any,
@@ -341,10 +341,32 @@ impl From<Rect> for Bound {
 }
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
+pub struct PingPong {
+    pub bound: Bound,
+    pub key: KeyBinding,
+    #[serde(default = "key_count_default")]
+    pub key_count: u32,
+    pub key_wait_before_millis: u64,
+    pub key_wait_after_millis: u64,
+}
+
+impl Default for PingPong {
+    fn default() -> Self {
+        Self {
+            bound: Bound::default(),
+            key: KeyBinding::default(),
+            key_count: key_count_default(),
+            key_wait_before_millis: 0,
+            key_wait_after_millis: 0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub struct AutoMobbing {
     pub bound: Bound,
     pub key: KeyBinding,
-    #[serde(default = "auto_mobbing_key_count_default")]
+    #[serde(default = "key_count_default")]
     pub key_count: u32,
     pub key_wait_before_millis: u64,
     pub key_wait_after_millis: u64,
@@ -355,14 +377,14 @@ impl Default for AutoMobbing {
         Self {
             bound: Bound::default(),
             key: KeyBinding::default(),
-            key_count: auto_mobbing_key_count_default(),
+            key_count: key_count_default(),
             key_wait_before_millis: 0,
             key_wait_after_millis: 0,
         }
     }
 }
 
-fn auto_mobbing_key_count_default() -> u32 {
+fn key_count_default() -> u32 {
     1
 }
 
@@ -374,6 +396,7 @@ pub enum RotationMode {
     #[default]
     StartToEndThenReverse,
     AutoMobbing(AutoMobbing),
+    PingPong(PingPong),
 }
 
 impl Identifiable for Configuration {

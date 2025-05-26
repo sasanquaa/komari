@@ -5,14 +5,18 @@ use opencv::core::Point;
 use platforms::windows::KeyKind;
 
 use super::{
-    Player, PlayerAction, PlayerActionKey, PlayerState, actions::on_auto_mob_use_key_action,
-    moving::Moving, use_key::UseKey,
+    Player, PlayerAction, PlayerActionKey, PlayerState,
+    actions::{
+        PlayerActionPingPong, on_action_state, on_auto_mob_use_key_action,
+        on_ping_pong_use_key_action,
+    },
+    moving::Moving,
+    use_key::UseKey,
 };
 use crate::{
     ActionKeyDirection, ActionKeyWith,
     context::Context,
     player::{
-        actions::on_action,
         moving::MOVE_TIMEOUT,
         state::LastMovement,
         timeout::{ChangeAxis, Timeout, update_moving_axis_context},
@@ -113,6 +117,7 @@ pub fn update_double_jumping_context(
         {
             return Player::Falling(moving.pos(cur_pos), cur_pos, true);
         }
+        // Stalls until near stationary
         if double_jumping.require_near_stationary
             && (state.velocity.0 > X_NEAR_STATIONARY_VELOCITY_THRESHOLD
                 || state.velocity.1 > Y_NEAR_STATIONARY_VELOCITY_THRESHOLD)
@@ -174,9 +179,19 @@ pub fn update_double_jumping_context(
                 }
             }
 
-            on_action(
+            on_action_state(
                 state,
-                |action| on_player_action(context, cur_pos, double_jumping.forced, action, moving),
+                |state, action| {
+                    on_player_action(
+                        context,
+                        cur_pos,
+                        double_jumping.forced,
+                        action,
+                        moving,
+                        state.velocity.0,
+                        state.config.grappling_key.is_some(),
+                    )
+                },
                 || {
                     if !ignore_grappling
                         && moving.completed
@@ -214,11 +229,24 @@ fn on_player_action(
     forced: bool,
     action: PlayerAction,
     moving: Moving,
+    x_velocity: f32,
+    has_grapping: bool,
 ) -> Option<(Player, bool)> {
     let (x_distance, _) = moving.x_distance_direction_from(false, cur_pos);
     let (y_distance, _) = moving.y_distance_direction_from(false, cur_pos);
 
     match action {
+        PlayerAction::PingPong(PlayerActionPingPong {
+            bound, direction, ..
+        }) => on_ping_pong_use_key_action(
+            context,
+            action,
+            cur_pos,
+            bound,
+            direction,
+            x_velocity > X_VELOCITY_THRESHOLD,
+            has_grapping,
+        ),
         PlayerAction::AutoMob(_) => {
             on_auto_mob_use_key_action(context, action, moving.pos, x_distance, y_distance)
         }
