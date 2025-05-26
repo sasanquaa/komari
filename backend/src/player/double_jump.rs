@@ -145,19 +145,7 @@ pub fn update_double_jumping_context(
                         _ => {
                             // Mage teleportation requires a direction
                             if state.config.teleport_key.is_some() {
-                                match state.last_known_direction {
-                                    ActionKeyDirection::Any => None,
-                                    ActionKeyDirection::Right => Some((
-                                        KeyKind::Right,
-                                        KeyKind::Left,
-                                        ActionKeyDirection::Right,
-                                    )),
-                                    ActionKeyDirection::Left => Some((
-                                        KeyKind::Left,
-                                        KeyKind::Right,
-                                        ActionKeyDirection::Left,
-                                    )),
-                                }
+                                get_mage_teleport_direction(state)
                             } else {
                                 None
                             }
@@ -259,6 +247,29 @@ fn on_player_action(
         })
         | PlayerAction::SolveRune
         | PlayerAction::Move { .. } => None,
+    }
+}
+
+/// Gets the mage teleport direction when the player is already at destination.
+fn get_mage_teleport_direction(
+    state: &PlayerState,
+) -> Option<(KeyKind, KeyKind, ActionKeyDirection)> {
+    // FIXME: Currently, PlayerActionKey with double jump + has position + has direction:
+    //  1. Double jump near proximity
+    //  2. Transition to UseKey and update direction
+    //  3. Transition back to double jump
+    //  4. Use last_known_direction to double jump
+    //
+    // This will cause mage to teleport to the opposite direction of destination, which is not
+    // desired. The desired behavior would be to use skill near the destination in the direction
+    // specified by PlayerActionKey. HOW TO FIX?
+    match state.last_known_direction {
+        // Clueless
+        ActionKeyDirection::Any => None,
+        ActionKeyDirection::Right => {
+            Some((KeyKind::Right, KeyKind::Left, ActionKeyDirection::Right))
+        }
+        ActionKeyDirection::Left => Some((KeyKind::Left, KeyKind::Right, ActionKeyDirection::Left)),
     }
 }
 
