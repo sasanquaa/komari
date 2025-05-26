@@ -197,7 +197,7 @@ pub fn on_ping_pong_use_key_action(
         }
 
         if cur_pos.y < bound.y
-            || ((cur_pos.y < (bound.y + bound.height) / 2) && rand::random_bool(0.05))
+            || ((cur_pos.y < (bound.y + bound.height) / 2) && rand::random_bool(0.1))
         {
             let moving = Moving::new(
                 cur_pos,
