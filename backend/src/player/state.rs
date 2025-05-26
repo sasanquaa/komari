@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, VecDeque},
-    range::Range,
-};
+use std::{collections::HashMap, range::Range};
 
 use anyhow::Result;
 use log::debug;
@@ -15,6 +12,7 @@ use super::{
 };
 use crate::{
     ActionKeyDirection, Class,
+    array::Array,
     buff::{Buff, BuffKind},
     context::Context,
     detect::ArrowsState,
@@ -72,6 +70,9 @@ const UNSTUCK_COUNT_THRESHOLD: u32 = 6;
 
 /// The number of times [`Player::Unstucking`] can be transitioned to before entering GAMBA MODE.
 const UNSTUCK_GAMBA_MODE_COUNT: u32 = 3;
+
+/// The number of samples to store for approximating velocity.
+const VELOCITY_SAMPLES: usize = MOVE_TIMEOUT as usize;
 
 /// The player previous movement-related contextual state.
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
@@ -232,7 +233,7 @@ pub struct PlayerState {
     /// Resets when [`Player::Stalling`] timed out or in [`Player::Idle`].
     pub(super) stalling_timeout_state: Option<Player>,
     /// Stores a list of [`(Point, u64)`] pair samples for approximating velocity.
-    velocity_samples: VecDeque<(Point, u64)>,
+    velocity_samples: Array<(Point, u64), VELOCITY_SAMPLES>,
     /// Approximated player velocity.
     pub(super) velocity: (f32, f32),
 }
@@ -853,27 +854,28 @@ impl PlayerState {
             self.is_stationary_timeout = Timeout::default();
 
             // Approximate velocity
-            self.velocity_samples.push_back((pos, context.tick));
-            if self.velocity_samples.len() > MOVE_TIMEOUT as usize {
-                self.velocity_samples.pop_front();
+            if self.velocity_samples.len() == VELOCITY_SAMPLES {
+                self.velocity_samples.remove(0);
             }
+            self.velocity_samples.push((pos, context.tick));
             if self.velocity_samples.len() >= 2 {
                 let velocity_len = (self.velocity_samples.len() - 1) as f32;
-                let velocity_sum = self.velocity_samples.make_contiguous().windows(2).fold(
-                    (0.0, 0.0),
-                    |acc, window| {
-                        let a = window[0];
-                        let b = window[1];
-                        let dt = b.1 - a.1;
-                        if dt == 0 {
-                            return acc;
-                        }
+                let velocity_sum =
+                    self.velocity_samples
+                        .as_slice()
+                        .windows(2)
+                        .fold((0.0, 0.0), |acc, window| {
+                            let a = window[0].unwrap();
+                            let b = window[1].unwrap();
+                            let dt = b.1 - a.1;
+                            if dt == 0 {
+                                return acc;
+                            }
 
-                        let dx = (b.0.x - a.0.x) as f32 / dt as f32;
-                        let dy = (b.0.y - a.0.y) as f32 / dt as f32;
-                        (dx, dy)
-                    },
-                );
+                            let dx = (b.0.x - a.0.x) as f32 / dt as f32;
+                            let dy = (b.0.y - a.0.y) as f32 / dt as f32;
+                            (dx, dy)
+                        });
                 self.velocity = (
                     (velocity_sum.0 / velocity_len).abs(),
                     (velocity_sum.1 / velocity_len).abs(),

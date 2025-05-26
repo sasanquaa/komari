@@ -17,7 +17,8 @@ use crate::{
 const SPAM_DELAY: u32 = 7;
 const STOP_UP_KEY_TICK: u32 = 3;
 const TIMEOUT: u32 = MOVE_TIMEOUT + 3;
-const UP_JUMPED_THRESHOLD: i32 = 5;
+const UP_JUMPED_Y_VELOCITY_THRESHOLD: f32 = 0.35;
+const X_NEAR_STATIONARY_THRESHOLD: f32 = 0.08;
 const TELEPORT_UP_JUMP_THRESHOLD: i32 = 14;
 
 /// Updates the [`Player::UpJumping`] contextual state
@@ -38,6 +39,9 @@ pub fn update_up_jumping_context(
     let has_teleport_key = state.config.teleport_key.is_some();
 
     if !moving.timeout.started {
+        if state.velocity.0 > X_NEAR_STATIONARY_THRESHOLD {
+            return Player::UpJumping(moving);
+        }
         if let Minimap::Idle(idle) = context.minimap {
             for portal in idle.portals {
                 if portal.x <= cur_pos.x
@@ -54,9 +58,7 @@ pub fn update_up_jumping_context(
         state.last_movement = Some(LastMovement::UpJumping);
     }
 
-    let y_changed = (cur_pos.y - moving.pos.y).abs();
     let jump_key = state.config.jump_key;
-
     update_moving_axis_context(
         moving,
         cur_pos,
@@ -85,7 +87,7 @@ pub fn update_up_jumping_context(
         |mut moving| {
             match (moving.completed, up_jump_key, has_teleport_key) {
                 (false, None, true) | (false, Some(KeyKind::Up), false) | (false, None, false) => {
-                    if y_changed <= UP_JUMPED_THRESHOLD {
+                    if state.velocity.1 <= UP_JUMPED_Y_VELOCITY_THRESHOLD {
                         // Spam jump key until the player y changes
                         // above a threshold as sending jump key twice
                         // doesn't work
@@ -258,9 +260,10 @@ mod tests {
         };
         let mut state = PlayerState::default();
         state.last_known_pos = Some(Point::new(7, 7));
+        state.velocity = (0.0, 0.36);
         let context = Context::new(None, None);
 
-        // up jumped because y changed > 5
+        // up jumped because y velocity > 0.35
         assert_matches!(
             update_up_jumping_context(&context, &mut state, moving),
             Player::UpJumping(Moving {

@@ -25,6 +25,15 @@ impl<T, const N: usize> Array<T, N> {
     }
 
     #[inline]
+    pub fn remove(&mut self, index: usize) {
+        assert!(index < self.len);
+        for i in index..self.len - 1 {
+            self.inner[i] = self.inner[i + 1].take();
+        }
+        self.len -= 1;
+    }
+
+    #[inline]
     pub fn len(&self) -> usize {
         self.len
     }
@@ -32,6 +41,14 @@ impl<T, const N: usize> Array<T, N> {
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// Retrieves the slice from the array.
+    ///
+    /// Each element in the returned slice is guaranteed to be [`Some<T>`].
+    #[inline]
+    pub fn as_slice(&self) -> &[Option<T>] {
+        &self.inner[0..self.len]
     }
 
     #[inline]
