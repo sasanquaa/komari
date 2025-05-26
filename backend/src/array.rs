@@ -231,6 +231,27 @@ mod tests {
     }
 
     #[test]
+    fn remove() {
+        let mut array = Array::<u32, 10>::new();
+        for i in 0..5 {
+            array.push(i);
+        }
+
+        // Array should contain [0, 1, 2, 3, 4]
+        assert_eq!(array.len(), 5);
+
+        // Remove item at index 2 (value 2)
+        array.remove(2);
+
+        // Array should now contain [0, 1, 3, 4]
+        assert_eq!(array.len(), 4);
+        assert_eq!(array[0], 0);
+        assert_eq!(array[1], 1);
+        assert_eq!(array[2], 3);
+        assert_eq!(array[3], 4);
+    }
+
+    #[test]
     fn iter() {
         let mut vec = Vec::new();
         for i in 0..1000 {
@@ -255,5 +276,19 @@ mod tests {
         for (elem, i) in array.iter().zip(333..555) {
             assert_eq!(elem, &i);
         }
+    }
+
+    #[test]
+    fn as_slice() {
+        let mut array = Array::<u32, 10>::new();
+        for i in 0..4 {
+            array.push(i);
+        }
+
+        let slice = array.as_slice();
+        let expected = vec![Some(0), Some(1), Some(2), Some(3)];
+
+        assert_eq!(slice.len(), 4);
+        assert_eq!(slice, expected.as_slice());
     }
 }
