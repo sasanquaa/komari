@@ -65,7 +65,7 @@ fn on_player_action(
             state.last_destinations = intermediates
                 .map(|intermediates| {
                     intermediates
-                        .inner
+                        .inner()
                         .into_iter()
                         .map(|(point, _, _)| point)
                         .collect::<Vec<_>>()
@@ -137,7 +137,7 @@ fn on_player_action(
                     if let Some(mut intermediates) = intermediates {
                         state.last_destinations = Some(
                             intermediates
-                                .inner
+                                .inner()
                                 .into_iter()
                                 .map(|(point, _, _)| point)
                                 .collect(),

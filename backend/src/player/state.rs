@@ -12,6 +12,7 @@ use super::{
 };
 use crate::{
     ActionKeyDirection, Class,
+    array::Array,
     buff::{Buff, BuffKind},
     context::Context,
     detect::ArrowsState,
@@ -22,33 +23,37 @@ use crate::{
 };
 
 /// The maximum number of times rune solving can fail before transition to
-/// `Player::CashShopThenExit`
-pub const MAX_RUNE_FAILED_COUNT: u32 = 8;
+/// [`Player::CashShopThenExit`].
+const MAX_RUNE_FAILED_COUNT: u32 = 8;
 
+/// The maximum number of times horizontal movement can be repeated in non-auto-mobbing action.
 const HORIZONTAL_MOVEMENT_REPEAT_COUNT: u32 = 20;
 
+/// The maximum number of times vertical movement can be repeated in non-auto-mobbing action.
 const VERTICAL_MOVEMENT_REPEAT_COUNT: u32 = 8;
 
-/// The number of times a reachable y must successfuly ensures the player moves to that exact y
+/// The number of times a reachable y must successfuly ensures the player moves to that exact y.
 ///
 /// Once the count is reached, it is considered "solidified" and guaranteed the reachable y is
-/// always a y that has platform(s)
+/// always a y that has platform(s).
 const AUTO_MOB_REACHABLE_Y_SOLIDIFY_COUNT: u32 = 4;
 
-/// The number of times an auto-mob position has made the player aborted the auto-mob action
+/// The number of times an auto-mob position has made the player aborted the auto-mob action.
 ///
-/// If the count is reached, subsequent auto-mob position falling within the x range will be ignored
+/// If the count is reached, subsequent auto-mob position falling within the x range
+/// will be ignored.
 const AUTO_MOB_IGNORE_XS_SOLIDIFY_COUNT: u32 = 3;
 
-/// The range an ignored auto-mob x position spans
+/// The range an ignored auto-mob x position spans.
 ///
-/// If an auto-mob x position is 5, then the range is [2, 8]
+/// If an auto-mob x position is 5, then the range is [2, 8].
 const AUTO_MOB_IGNORE_XS_RANGE: i32 = 3;
 
-/// The maximum of number points for auto mobbing to periodically move to
+/// The maximum of number points for auto mobbing to periodically move to.
 const AUTO_MOB_MAX_PATHING_POINTS: usize = 3;
 
-/// The acceptable y range above and below the detected mob position when matched with a reachable y
+/// The acceptable y range above and below the detected mob position when matched
+/// with a reachable y.
 const AUTO_MOB_REACHABLE_Y_THRESHOLD: i32 = 10;
 
 /// The maximum number of times horizontal movement contextual state can be repeated in
@@ -60,13 +65,16 @@ const AUTO_MOB_HORIZONTAL_MOVEMENT_REPEAT_COUNT: u32 = 4;
 const AUTO_MOB_VERTICAL_MOVEMENT_REPEAT_COUNT: u32 = 3;
 
 /// Maximum number of times [`Player::Moving`] state can be transitioned to
-/// without changing position
-const UNSTUCK_COUNT_THRESHOLD: u32 = 7;
+/// without changing position.
+const UNSTUCK_COUNT_THRESHOLD: u32 = 6;
 
-/// The number of times [`Player::Unstucking`] can be transitioned to before entering GAMBA MODE
+/// The number of times [`Player::Unstucking`] can be transitioned to before entering GAMBA MODE.
 const UNSTUCK_GAMBA_MODE_COUNT: u32 = 3;
 
-/// The player previous movement-related contextual state
+/// The number of samples to store for approximating velocity.
+const VELOCITY_SAMPLES: usize = MOVE_TIMEOUT as usize;
+
+/// The player previous movement-related contextual state.
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub enum LastMovement {
     Adjusting,
@@ -80,41 +88,41 @@ pub enum LastMovement {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PlayerConfiguration {
     pub class: Class,
-    /// Enables platform pathing for rune
+    /// Enables platform pathing for rune.
     pub rune_platforms_pathing: bool,
-    /// Uses only up jump(s) in rune platform pathing
+    /// Uses only up jump(s) in rune platform pathing.
     pub rune_platforms_pathing_up_jump_only: bool,
-    /// Enables platform pathing for auto mob
+    /// Enables platform pathing for auto mob.
     pub auto_mob_platforms_pathing: bool,
-    /// Uses only up jump(s) in auto mob platform pathing
+    /// Uses only up jump(s) in auto mob platform pathing.
     pub auto_mob_platforms_pathing_up_jump_only: bool,
-    /// Uses platforms to compute auto mobbing bound
+    /// Uses platforms to compute auto mobbing bound.
     ///
     /// TODO: This shouldn't be here...
     pub auto_mob_platforms_bound: bool,
-    /// The interact key
+    /// The interact key.
     pub interact_key: KeyKind,
-    /// The RopeLift key
+    /// The `Rope Lift` skill key.
     pub grappling_key: KeyKind,
-    /// The teleport key with [`None`] indicating double jump
+    /// The teleport key with [`None`] indicating double jump.
     pub teleport_key: Option<KeyKind>,
-    /// The jump key
+    /// The jump key.
     ///
-    /// Replaces the previously default [`KeyKind::Space`] key
+    /// Replaces the previously default [`KeyKind::Space`] key.
     pub jump_key: KeyKind,
-    /// The up jump key with [`None`] indicating composite jump (Up arrow + Double Space)
+    /// The up jump key with [`None`] indicating composite jump (Up arrow + Double Space).
     pub upjump_key: Option<KeyKind>,
-    /// The cash shop key
+    /// The cash shop key.
     pub cash_shop_key: KeyKind,
-    /// The potion key
+    /// The potion key.
     pub potion_key: KeyKind,
-    /// Uses potion when health is below a percentage
+    /// Uses potion when health is below a percentage.
     pub use_potion_below_percent: Option<f32>,
-    /// Milliseconds interval to update current health
+    /// Milliseconds interval to update current health.
     pub update_health_millis: Option<u64>,
 }
 
-/// The player persistent states
+/// The player persistent states.
 ///
 /// TODO: Should have a separate struct or trait for Rotator to access PlayerState
 /// TODO: Counter should not be u32 but usize?
@@ -122,76 +130,79 @@ pub struct PlayerConfiguration {
 #[derive(Debug, Default)]
 pub struct PlayerState {
     pub config: PlayerConfiguration,
-    /// The id of the normal action provided by [`Rotator`]
+    /// The id of the normal action provided by [`Rotator`].
     normal_action_id: u32,
-    /// A normal action requested by [`Rotator`]
+    /// A normal action requested by [`Rotator`].
     pub(super) normal_action: Option<PlayerAction>,
-    /// The id of the priority action provided by [`Rotator`]
+    /// The id of the priority action provided by [`Rotator`].
     priority_action_id: u32,
-    /// A priority action requested by [`Rotator`]
+    /// A priority action requested by [`Rotator`].
     ///
     /// This action will override the normal action if it is in the middle of executing.
     pub(super) priority_action: Option<PlayerAction>,
-    /// The player current health and max health
+    /// The player current health and max health.
     pub health: Option<(u32, u32)>,
-    /// The task to update health
+    /// The task to update health.
     health_task: Option<Task<Result<(u32, u32)>>>,
-    /// The rectangular health bar region
+    /// The rectangular health bar region.
     health_bar: Option<Rect>,
-    /// The task for the health bar
+    /// The task for the health bar.
     health_bar_task: Option<Task<Result<Rect>>>,
-    /// Track if the player moved within a specified ticks to determine if the player is stationary
+    /// Track if the player moved within a specified ticks to determine if the player is
+    /// stationary.
     is_stationary_timeout: Timeout,
-    /// Whether the player is stationary
+    /// Whether the player is stationary.
     pub(super) is_stationary: bool,
-    /// Whether the player is dead
+    /// Whether the player is dead.
     pub is_dead: bool,
-    /// The task for detecting if player is dead
+    /// The task for detecting if player is dead.
     is_dead_task: Option<Task<Result<bool>>>,
-    /// Approximates the player direction for using key
+    /// Approximates the player direction for using key.
     pub(super) last_known_direction: ActionKeyDirection,
-    /// Tracks last destination points for displaying to UI
+    /// Tracks last destination points for displaying to UI.
     ///
-    /// Resets when all destinations are reached or in [`Player::Idle`]
+    /// Resets when all destinations are reached or in [`Player::Idle`].
     pub last_destinations: Option<Vec<Point>>,
-    /// Last known position after each detection used for unstucking, also for displaying to UI
+    /// Last known position after each detection.
+    ///
+    /// It is updated to latest current position on each tick.
     pub last_known_pos: Option<Point>,
-    /// Indicates whether to use [`ControlFlow::Immediate`] on this update
+    /// Indicates whether to use [`ControlFlow::Immediate`] on this update.
     pub(super) use_immediate_control_flow: bool,
-    /// Indicates whether to ignore update_pos and use last_known_pos on next update
+    /// Indicates whether to ignore update_pos and use last_known_pos on next update.
     ///
-    /// This is true whenever [`Self::use_immediate_control_flow`] is true
+    /// This is true whenever [`Self::use_immediate_control_flow`] is true.
     pub(super) ignore_pos_update: bool,
-    /// Indicates whether to reset the contextual state back to [`Player::Idle`] on next update
+    /// Indicates whether to reset the contextual state back to [`Player::Idle`] on next update.
     ///
-    /// This is true each time player receives [`PlayerAction`]
+    /// This is true each time player receives [`PlayerAction`].
     pub(super) reset_to_idle_next_update: bool,
-    /// Indicates the last movement
+    /// Indicates the last movement.
     ///
     /// Helps coordinating between movement states (e.g. falling + double jumping). And resets
     /// to [`None`] when the destination (possibly intermediate) is reached or
     /// in [`Player::Idle`].
     pub(super) last_movement: Option<LastMovement>,
     // TODO: 2 maps fr?
-    /// Tracks [`Self::last_movement`] to abort normal action when its position is not accurate
+    /// Tracks [`Self::last_movement`] to abort normal action when its position is not accurate.
     ///
-    /// Clears when a normal action is completed or aborted
+    /// Clears when a normal action is completed or aborted.
     last_movement_normal_map: HashMap<LastMovement, u32>,
-    /// Tracks [`Self::last_movement`] to abort priority action when its position is not accurate
+    /// Tracks [`Self::last_movement`] to abort priority action when its position is not accurate.
     ///
-    /// Clears when a priority action is completed or aborted
+    /// Clears when a priority action is completed or aborted.
     last_movement_priority_map: HashMap<LastMovement, u32>,
-    /// Tracks a map of "reachable" y
+    /// Tracks a map of "reachable" y.
     ///
-    /// A y is reachable if there is a platform the player can stand on
+    /// A y is reachable if there is a platform the player can stand on.
     auto_mob_reachable_y_map: HashMap<i32, u32>,
-    /// The matched reachable y and also the key in [`Self::auto_mob_reachable_y_map`]
+    /// The matched reachable y and also the key in [`Self::auto_mob_reachable_y_map`].
     auto_mob_reachable_y: Option<i32>,
-    /// Tracks a map of reachable y to x ranges that can be ignored
+    /// Tracks a map of reachable y to x ranges that can be ignored.
     ///
-    /// This will help auto-mobbing ignores positions that are known to be not reachable
+    /// This will help auto-mobbing ignores positions that are known to be not reachable.
     auto_mob_ignore_xs_map: HashMap<i32, Vec<(Range<i32>, u32)>>,
-    /// Stores points to periodically move to when auto mobbing
+    /// Stores points to periodically move to when auto mobbing.
     ///
     /// Helps changing location for detecting more mobs. It is populated in terminal state of
     /// [`Player::UseKey`].
@@ -200,33 +211,37 @@ pub struct PlayerState {
     ///
     /// Resets when a limit is reached (for unstucking) or position did change.
     unstuck_count: u32,
-    /// The number of times player transtioned to [`Player::Unstucking`]
+    /// The number of times player transtioned to [`Player::Unstucking`].
     ///
-    /// Resets when threshold reached or position changed
+    /// Resets when threshold reached or position changed.
     unstuck_transitioned_count: u32,
-    /// Unstuck task for detecting settings when mis-pressing ESC key
+    /// Unstuck task for detecting settings when mis-pressing ESC key.
     pub(super) unstuck_task: Option<Task<Result<bool>>>,
-    /// Rune solving task
+    /// Rune solving task.
     pub(super) rune_task: Option<Task<Result<ArrowsState>>>,
-    /// The number of times [`Player::SolvingRune`] failed
-    pub(super) rune_failed_count: u32,
-    /// Indicates the state will be transitioned to [`Player::CashShopThenExit`] in the next tick
+    /// The number of times [`Player::SolvingRune`] failed.
+    rune_failed_count: u32,
+    /// Indicates the state will be transitioned to [`Player::CashShopThenExit`] in the next tick.
     pub(super) rune_cash_shop: bool,
-    /// [`Timeout`] for validating whether the rune is solved
+    /// [`Timeout`] for validating whether the rune is solved.
     ///
     /// This is [`Some`] when [`Player::SolvingRune`] successfully detects the rune
-    /// and sends all the keys
+    /// and sends all the keys.
     pub(super) rune_validate_timeout: Option<Timeout>,
-    /// A state to return to after stalling
+    /// A state to return to after stalling.
     ///
-    /// Resets when [`Player::Stalling`] timed out or in [`Player::Idle`]
+    /// Resets when [`Player::Stalling`] timed out or in [`Player::Idle`].
     pub(super) stalling_timeout_state: Option<Player>,
+    /// Stores a list of [`(Point, u64)`] pair samples for approximating velocity.
+    velocity_samples: Array<(Point, u64), VELOCITY_SAMPLES>,
+    /// Approximated player velocity.
+    pub(super) velocity: (f32, f32),
 }
 
 impl PlayerState {
-    /// Resets the player state except for configuration
+    /// Resets the player state except for configuration.
     ///
-    /// Used whenever minimap data or configuration changes
+    /// Used whenever minimap data or configuration changes.
     #[inline]
     pub fn reset(&mut self) {
         *self = PlayerState {
@@ -236,25 +251,25 @@ impl PlayerState {
         };
     }
 
-    /// The normal action name for displaying to UI
+    /// The normal action name for displaying to UI.
     #[inline]
     pub fn normal_action_name(&self) -> Option<String> {
         self.normal_action.map(|action| action.to_string())
     }
 
-    /// The normal action id provided by [`Rotator`]
+    /// The normal action id provided by [`Rotator`].
     #[inline]
     pub fn normal_action_id(&self) -> Option<u32> {
         self.has_normal_action().then_some(self.normal_action_id)
     }
 
-    /// Whether is a normal action
+    /// Whether is a normal action.
     #[inline]
     pub fn has_normal_action(&self) -> bool {
         self.normal_action.is_some()
     }
 
-    /// Sets the normal action to `id` and `action` and resets to [`Player::Idle`] on next update
+    /// Sets the normal action to `id` and `action` and resets to [`Player::Idle`] on next update.
     #[inline]
     pub fn set_normal_action(&mut self, id: u32, action: PlayerAction) {
         self.reset_to_idle_next_update = true;
@@ -262,33 +277,34 @@ impl PlayerState {
         self.normal_action = Some(action);
     }
 
-    /// Removes the current normal action
+    /// Removes the current normal action.
     #[inline]
     pub fn reset_normal_action(&mut self) {
         self.reset_to_idle_next_update = true;
         self.normal_action = None;
     }
 
-    /// The priority action name for displaying to UI
+    /// The priority action name for displaying to UI.
     #[inline]
     pub fn priority_action_name(&self) -> Option<String> {
         self.priority_action.map(|action| action.to_string())
     }
 
-    /// The priority action id provided by [`Rotator`]
+    /// The priority action id provided by [`Rotator`].
     #[inline]
     pub fn priority_action_id(&self) -> Option<u32> {
         self.has_priority_action()
             .then_some(self.priority_action_id)
     }
 
-    /// Whether there is a priority action
+    /// Whether there is a priority action.
     #[inline]
     pub fn has_priority_action(&self) -> bool {
         self.priority_action.is_some()
     }
 
-    /// Sets the priority action to `id` and `action` and resets to [`Player::Idle`] on next update
+    /// Sets the priority action to `id` and `action` and resets to [`Player::Idle`] on next
+    /// update.
     #[inline]
     pub fn set_priority_action(&mut self, id: u32, action: PlayerAction) {
         let _ = self.replace_priority_action(id, action);
@@ -317,25 +333,25 @@ impl PlayerState {
             .then_some(prev_id)
     }
 
-    /// Whether the player is validating whether the rune is solved
+    /// Whether the player is validating whether the rune is solved.
     #[inline]
     pub fn is_validating_rune(&self) -> bool {
         self.rune_validate_timeout.is_some()
     }
 
-    /// Whether there is a priority rune action
+    /// Whether there is a priority rune action.
     #[inline]
     pub fn has_rune_action(&self) -> bool {
         matches!(self.priority_action, Some(PlayerAction::SolveRune))
     }
 
-    /// Whether there is only auto mob action
+    /// Whether there is only auto mob action.
     #[inline]
     pub(super) fn has_auto_mob_action_only(&self) -> bool {
         !self.has_priority_action() && matches!(self.normal_action, Some(PlayerAction::AutoMob(_)))
     }
 
-    /// Clears both on-going normal and priority actions due to being aborted
+    /// Clears both on-going normal and priority actions due to being aborted.
     #[inline]
     pub fn clear_actions_aborted(&mut self) {
         self.reset_to_idle_next_update = true;
@@ -343,7 +359,7 @@ impl PlayerState {
         self.normal_action = None;
     }
 
-    /// Clears either normal or priority due to completion
+    /// Clears either normal or priority due to completion.
     #[inline]
     pub(super) fn clear_action_completed(&mut self) {
         self.clear_last_movement();
@@ -355,7 +371,7 @@ impl PlayerState {
         }
     }
 
-    /// Clears the last movement tracking for either normal or priority action
+    /// Clears the last movement tracking for either normal or priority action.
     #[inline]
     pub(super) fn clear_last_movement(&mut self) {
         if self.has_priority_action() {
@@ -373,7 +389,8 @@ impl PlayerState {
         }
     }
 
-    /// Increments the rune validation fail count and sets [`PlayerState::rune_cash_shop`] if needed
+    /// Increments the rune validation fail count and sets [`PlayerState::rune_cash_shop`]
+    /// if needed.
     #[inline]
     pub(super) fn track_rune_fail_count(&mut self) {
         self.rune_failed_count += 1;
@@ -383,9 +400,9 @@ impl PlayerState {
         }
     }
 
-    /// Increments the unstucking transitioned counter
+    /// Increments the unstucking transitioned counter.
     ///
-    /// Returns `true` when [`Player::Unstucking`] should enter GAMBA MODE
+    /// Returns `true` when [`Player::Unstucking`] should enter GAMBA MODE.
     #[inline]
     pub(super) fn track_unstucking_transitioned(&mut self) -> bool {
         self.unstuck_transitioned_count += 1;
@@ -397,9 +414,9 @@ impl PlayerState {
         }
     }
 
-    /// Increments the unstucking counter
+    /// Increments the unstucking counter.
     ///
-    /// Returns `true` when the player should transition to [`Player::Unstucking`]
+    /// Returns `true` when the player should transition to [`Player::Unstucking`].
     #[inline]
     pub(super) fn track_unstucking(&mut self) -> bool {
         self.unstuck_count += 1;
@@ -411,7 +428,7 @@ impl PlayerState {
         }
     }
 
-    /// Tracks the last movement to determine whether the state has repeated passing a threshold
+    /// Tracks the last movement to determine whether the state has repeated passing a threshold.
     #[inline]
     pub(super) fn track_last_movement_repeated(&mut self) -> bool {
         if self.last_movement.is_none() {
@@ -453,7 +470,7 @@ impl PlayerState {
         count >= count_max
     }
 
-    /// Gets the falling minimum `y` distance threshold
+    /// Gets the falling minimum `y` distance threshold.
     ///
     /// In auto mob or intermediate destination, the threshold is relaxed for more
     /// fluid movement.
@@ -490,9 +507,9 @@ impl PlayerState {
                 && self.config.rune_platforms_pathing_up_jump_only)
     }
 
-    /// Picks a pathing point in auto mobbing to move to
+    /// Picks a pathing point in auto mobbing to move to.
     ///
-    /// The returned [`Point`] is in player coordinate relative to bottom-left
+    /// The returned [`Point`] is in player coordinate relative to bottom-left.
     #[inline]
     pub fn auto_mob_pathing_point(&mut self, context: &Context) -> Option<Point> {
         let (minimap_width, platforms) = match context.minimap {
@@ -526,7 +543,7 @@ impl PlayerState {
         })
     }
 
-    /// Populates pathing points for an auto mob action
+    /// Populates pathing points for an auto mob action.
     ///
     /// After using key state is fully complete, it will try to populate a pathing point to be used
     /// when [`Rotator`] fails the mob detection. This will will help [`Rotator`] re-uses the previous
@@ -561,7 +578,7 @@ impl PlayerState {
         debug!(target: "player", "auto mob pathing points {:?}", self.auto_mob_pathing_points);
     }
 
-    /// Whether the auto mob reachable y requires "solidifying"
+    /// Whether the auto mob reachable y requires "solidifying".
     #[inline]
     pub(super) fn auto_mob_reachable_y_require_update(&self) -> bool {
         self.auto_mob_reachable_y.is_none_or(|y| {
@@ -569,7 +586,7 @@ impl PlayerState {
         })
     }
 
-    /// Picks a reachable y position for reaching `mob_pos`
+    /// Picks a reachable y position for reaching `mob_pos`.
     ///
     /// The `mob_pos` must be player coordinate relative to bottom-left.
     ///
@@ -630,7 +647,7 @@ impl PlayerState {
         debug!(target: "player", "auto mob initial reachable y map {:?}", self.auto_mob_reachable_y_map);
     }
 
-    /// Tracks the currently picked reachable y to solidify the y position
+    /// Tracks the currently picked reachable y to solidify the y position.
     ///
     /// After [`Self::auto_mob_pick_reachable_y_moving_state`] has been called in the action entry,
     /// this function should be called in the terminal state of the action.
@@ -658,7 +675,7 @@ impl PlayerState {
         }
     }
 
-    /// Tracks whether to ignore a x range for the current reachable y
+    /// Tracks whether to ignore a x range for the current reachable y.
     // TODO: This tracking currently does not clamp to bound, should clamp to non-negative
     pub(super) fn auto_mob_track_ignore_xs(&mut self, context: &Context, is_aborted: bool) {
         if !self.has_auto_mob_action_only() {
@@ -806,7 +823,7 @@ impl PlayerState {
         false
     }
 
-    /// Updates the player current position
+    /// Updates the player current position.
     ///
     /// The player position (as well as other positions in relation to the player) does not follow
     /// OpenCV top-left coordinate but flipped to bottom-left by subtracting the minimap height
@@ -836,6 +853,7 @@ impl PlayerState {
             self.unstuck_transitioned_count = 0;
             self.is_stationary_timeout = Timeout::default();
         }
+        self.update_velocity(pos, context.tick);
 
         let (is_stationary, is_stationary_timeout) = update_with_timeout(
             self.is_stationary_timeout,
@@ -850,7 +868,50 @@ impl PlayerState {
         true
     }
 
-    /// Updates the rune validation [`Timeout`]
+    /// Approximates the player velocity.
+    #[inline]
+    fn update_velocity(&mut self, pos: Point, tick: u64) {
+        if self.velocity_samples.len() == VELOCITY_SAMPLES {
+            self.velocity_samples.remove(0);
+        }
+        self.velocity_samples.push((pos, tick));
+
+        if self.velocity_samples.len() >= 2 {
+            let (weighted_sum, total_weight) = self
+                .velocity_samples
+                .as_slice()
+                .windows(2)
+                .enumerate()
+                .fold(((0.0, 0.0), 0.0), |(acc_sum, acc_weight), (i, window)| {
+                    let a = window[0].unwrap();
+                    let b = window[1].unwrap();
+                    let dt = b.1 - a.1;
+                    if dt == 0 {
+                        return (acc_sum, acc_weight);
+                    }
+
+                    let weight = (i + 1) as f32;
+                    let dx = (b.0.x - a.0.x) as f32 / dt as f32;
+                    let dy = (b.0.y - a.0.y) as f32 / dt as f32;
+                    (
+                        (acc_sum.0 + weight * dx, acc_sum.1 + weight * dy),
+                        acc_weight + weight,
+                    )
+                });
+
+            if total_weight > 0.0 {
+                let avg_dx = (weighted_sum.0 / total_weight).abs();
+                let avg_dy = (weighted_sum.1 / total_weight).abs();
+
+                let smoothed_dx = 0.5 * avg_dx + 0.5 * self.velocity.0;
+                let smoothed_dy = 0.5 * avg_dy + 0.5 * self.velocity.1;
+
+                self.velocity = (smoothed_dx, smoothed_dy);
+            }
+        }
+    }
+
+    /// Updates the rune validation [`Timeout`].
     ///
     /// [`PlayerState::rune_validate_timeout`] is [`Some`] only when [`Player::SolvingRune`]
     /// successfully detects and sends all the keys. After about 12 seconds, it
@@ -879,7 +940,7 @@ impl PlayerState {
         });
     }
 
-    /// Updates the player current health
+    /// Updates the player current health.
     ///
     /// The detection first detects the HP bar and caches the result. The HP bar is then used
     /// to crop into the game image and detects the current health bar and max health bar. These
@@ -937,7 +998,7 @@ impl PlayerState {
         }
     }
 
-    /// Updates whether the player is dead
+    /// Updates whether the player is dead.
     ///
     /// Upon being dead, a notification will be scheduled to notify the user.
     #[inline]

@@ -56,6 +56,7 @@ pub fn update_adjusting_context(
         {
             return Player::Falling(moving.pos(cur_pos), cur_pos, false);
         }
+        state.use_immediate_control_flow = true; // Adjusting does not use on_started
         state.last_movement = Some(LastMovement::Adjusting);
     }
 

@@ -19,38 +19,46 @@ use crate::{
     },
 };
 
-/// Minimum x distance from the destination required to perform a double jump
+/// Minimum x distance from the destination required to perform a double jump.
 pub const DOUBLE_JUMP_THRESHOLD: i32 = 25;
 
-/// Minimum x distance from the destination required to perform a double jump in auto mobbing
+/// Minimum x distance from the destination required to perform a double jump in auto mobbing.
 pub const DOUBLE_JUMP_AUTO_MOB_THRESHOLD: i32 = 15;
 
-/// Minimum x distance from the destination required to transition to [`Player::UseKey`]
+/// Minimum x distance from the destination required to transition to [`Player::UseKey`].
 const USE_KEY_X_THRESHOLD: i32 = DOUBLE_JUMP_THRESHOLD;
 
-/// Minimum y distance from the destination required to transition to [`Player::UseKey`]
+/// Minimum y distance from the destination required to transition to [`Player::UseKey`].
 const USE_KEY_Y_THRESHOLD: i32 = 10;
 
-// Note: even in auto mob, also use the non-auto mob threshold
+/// Maximum number of ticks before timing out.
+///
+/// Note: Even in auto mob, also use the non-auto mob threshold.
 const TIMEOUT: u32 = MOVE_TIMEOUT * 2;
 
-/// Minimum x distance from the destination required to transition to [`Player::Grappling`]
+/// Minimum x distance from the destination required to transition to [`Player::Grappling`].
 const GRAPPLING_THRESHOLD: i32 = 4;
 
-/// Minimum x distance changed to be considered as double jumped
-const FORCE_THRESHOLD: i32 = 3;
+/// Minimum x velocity to be considered as double jumped.
+const X_VELOCITY_THRESHOLD: f32 = 1.0;
 
-/// Minimium y distance required to perform a fall and then double jump
+/// Maximum x velocity allowed to be considered as near stationary.
+const X_NEAR_STATIONARY_VELOCITY_THRESHOLD: f32 = 0.75;
+
+/// Maximum y velocity allowed to be considered as near stationary.
+const Y_NEAR_STATIONARY_VELOCITY_THRESHOLD: f32 = 0.4;
+
+/// Minimium y distance required to perform a fall and then double jump.
 const FALLING_THRESHOLD: i32 = 8;
 
 #[derive(Copy, Clone, Debug)]
 pub struct DoubleJumping {
     moving: Moving,
     /// Whether to force a double jump even when the player current position is already close to
-    /// the destination
+    /// the destination.
     pub forced: bool,
-    /// Whether to wait for the player to become stationary before sending jump keys
-    require_stationary: bool,
+    /// Whether to wait for the player is about to become stationary before sending jump keys.
+    require_near_stationary: bool,
 }
 
 impl DoubleJumping {
@@ -58,7 +66,7 @@ impl DoubleJumping {
         Self {
             moving,
             forced,
-            require_stationary,
+            require_near_stationary: require_stationary,
         }
     }
 
@@ -68,20 +76,21 @@ impl DoubleJumping {
     }
 }
 
-/// Updates the [`Player::DoubleJumping`] contextual state
+/// Updates the [`Player::DoubleJumping`] contextual state.
 ///
 /// This state continues to double jump as long as the distance x-wise is still
-/// `>= DOUBLE_JUMP_THRESHOLD`. Or when `forced`, this state will attempt a single double jump.
-/// When `require_stationary`, this state will wait for the player to be stationary before
-/// double jumping.
+/// `>= DOUBLE_JUMP_THRESHOLD`. Or when [`DoubleJumping::forced`], this state will attempt
+/// a single double jump. When [`DoubleJumping::require_stationary`], this state will wait for
+/// the player to be stationary before double jumping.
 ///
-/// `forced` is currently true when it is transitioned from [`Player::Idle`], [`Player::Moving`],
-/// [`Player::Adjusting`], and [`Player::UseKey`] with [`PlayerState::last_known_direction`]
-/// matches the [`PlayerAction::Key`] direction.
-///
-/// `require_stationary` is currently true when it is transitioned from [`Player::Idle`] and
+/// [`DoubleJumping::forced`] is currently true when it is transitioned
+/// from [`Player::Idle`], [`Player::Moving`], [`Player::Adjusting`], and
 /// [`Player::UseKey`] with [`PlayerState::last_known_direction`] matches the
 /// [`PlayerAction::Key`] direction.
+///
+/// [`DoubleJumping::require_stationary`] is currently true when it is transitioned
+/// from [`Player::Idle`] and [`Player::UseKey`] with [`PlayerState::last_known_direction`] matches
+/// the [`PlayerAction::Key`] direction.
 pub fn update_double_jumping_context(
     context: &Context,
     state: &mut PlayerState,
@@ -90,7 +99,6 @@ pub fn update_double_jumping_context(
     let moving = double_jumping.moving;
     let cur_pos = state.last_known_pos.unwrap();
     let ignore_grappling = double_jumping.forced || state.should_disable_grappling();
-    let x_changed = (cur_pos.x - moving.pos.x).abs();
     let (x_distance, x_direction) = moving.x_distance_direction_from(true, cur_pos);
     let (y_distance, y_direction) = moving.y_distance_direction_from(true, cur_pos);
     let is_intermediate = moving.is_destination_intermediate();
@@ -105,11 +113,13 @@ pub fn update_double_jumping_context(
         {
             return Player::Falling(moving.pos(cur_pos), cur_pos, true);
         }
-        if double_jumping.require_stationary && !state.is_stationary {
-            let _ = context.keys.send_up(KeyKind::Right);
-            let _ = context.keys.send_up(KeyKind::Left);
+        if double_jumping.require_near_stationary
+            && (state.velocity.0 > X_NEAR_STATIONARY_VELOCITY_THRESHOLD
+                || state.velocity.1 > Y_NEAR_STATIONARY_VELOCITY_THRESHOLD)
+        {
             return Player::DoubleJumping(double_jumping.moving(moving.pos(cur_pos)));
         }
+        state.use_immediate_control_flow = true; // Double jumping does not use on_started
         state.last_movement = Some(LastMovement::DoubleJumping);
     }
 
@@ -124,7 +134,6 @@ pub fn update_double_jumping_context(
         }),
         |mut moving| {
             if !moving.completed {
-                // Mage teleportation requires a direction
                 if !double_jumping.forced || state.config.teleport_key.is_some() {
                     let option = match x_direction.cmp(&0) {
                         Ordering::Greater => {
@@ -133,7 +142,14 @@ pub fn update_double_jumping_context(
                         Ordering::Less => {
                             Some((KeyKind::Left, KeyKind::Right, ActionKeyDirection::Left))
                         }
-                        _ => None,
+                        _ => {
+                            // Mage teleportation requires a direction
+                            if state.config.teleport_key.is_some() {
+                                get_mage_teleport_direction(state)
+                            } else {
+                                None
+                            }
+                        }
                     };
                     if let Some((key_down, key_up, direction)) = option {
                         let _ = context.keys.send_down(key_down);
@@ -144,11 +160,13 @@ pub fn update_double_jumping_context(
 
                 let can_continue = !double_jumping.forced
                     && x_distance >= state.double_jump_threshold(is_intermediate);
-                let can_press = double_jumping.forced && x_changed <= FORCE_THRESHOLD;
+                let can_press = double_jumping.forced && state.velocity.0 <= X_VELOCITY_THRESHOLD;
                 if can_continue || can_press {
-                    let _ = context
-                        .keys
-                        .send(state.config.teleport_key.unwrap_or(state.config.jump_key));
+                    if state.velocity.0 <= X_VELOCITY_THRESHOLD {
+                        let _ = context
+                            .keys
+                            .send(state.config.teleport_key.unwrap_or(state.config.jump_key));
+                    }
                 } else {
                     let _ = context.keys.send_up(KeyKind::Right);
                     let _ = context.keys.send_up(KeyKind::Left);
@@ -176,8 +194,8 @@ pub fn update_double_jumping_context(
             )
         },
         if double_jumping.forced {
-            // this ensures it won't double jump forever when
-            // jumping towards either edge of the map
+            // This ensures it won't double jump forever when jumping towards either
+            // edges of the map.
             ChangeAxis::Horizontal
         } else {
             ChangeAxis::Both
@@ -185,7 +203,7 @@ pub fn update_double_jumping_context(
     )
 }
 
-/// Handles [`PlayerAction`] during double jump
+/// Handles [`PlayerAction`] during double jump.
 ///
 /// It currently handles action for auto mob and a key action with [`ActionKeyWith::Any`] or
 /// [`ActionKeyWith::DoubleJump`]. For auto mob, the same handling logics is reused. For the other,
@@ -201,8 +219,6 @@ fn on_player_action(
     let (y_distance, _) = moving.y_distance_direction_from(false, cur_pos);
 
     match action {
-        // ignore proximity check when it is forced to double jumped
-        // this indicates the player is already near the destination
         PlayerAction::AutoMob(_) => {
             on_auto_mob_use_key_action(context, action, moving.pos, x_distance, y_distance)
         }
@@ -213,6 +229,8 @@ fn on_player_action(
             if !moving.completed {
                 return None;
             }
+            // Ignore proximity check when it is forced to double jumped as this indicates the
+            // player is already near the destination.
             if forced
                 || (!moving.exact
                     && x_distance <= USE_KEY_X_THRESHOLD
@@ -230,4 +248,120 @@ fn on_player_action(
         | PlayerAction::SolveRune
         | PlayerAction::Move { .. } => None,
     }
+}
+
+/// Gets the mage teleport direction when the player is already at destination.
+fn get_mage_teleport_direction(
+    state: &PlayerState,
+) -> Option<(KeyKind, KeyKind, ActionKeyDirection)> {
+    // FIXME: Currently, PlayerActionKey with double jump + has position + has direction:
+    //  1. Double jump near proximity
+    //  2. Transition to UseKey and update direction
+    //  3. Transition back to double jump
+    //  4. Use last_known_direction to double jump
+    //
+    // This will cause mage to teleport to the opposite direction of destination, which is not
+    // desired. The desired behavior would be to use skill near the destination in the direction
+    // specified by PlayerActionKey. HOW TO FIX?
+    match state.last_known_direction {
+        // Clueless
+        ActionKeyDirection::Any => None,
+        ActionKeyDirection::Right => {
+            Some((KeyKind::Right, KeyKind::Left, ActionKeyDirection::Right))
+        }
+        ActionKeyDirection::Left => Some((KeyKind::Left, KeyKind::Right, ActionKeyDirection::Left)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use opencv::core::Point;
+    use platforms::windows::KeyKind;
+
+    use super::update_double_jumping_context;
+    use crate::{
+        ActionKeyDirection,
+        bridge::MockKeySender,
+        context::Context,
+        player::{
+            double_jump::DoubleJumping, moving::Moving, state::PlayerState, timeout::Timeout,
+        },
+    };
+
+    #[test]
+    fn double_jumping_update_correct_direction() {
+        let pos = Point::new(100, 50);
+        let dest = Point::new(50, 50); // Move to the left
+        let moving = Moving {
+            pos,
+            dest,
+            timeout: Timeout {
+                started: true,
+                ..Timeout::default()
+            },
+            ..Default::default()
+        };
+        let jumping = DoubleJumping::new(moving, false, false);
+
+        let mut state = PlayerState::default();
+        state.last_known_pos = Some(pos);
+        state.config.jump_key = KeyKind::Space;
+
+        let mut keys = MockKeySender::new();
+        keys.expect_send_down()
+            .withf(|k| matches!(k, KeyKind::Left))
+            .once()
+            .returning(|_| Ok(()));
+        keys.expect_send_up()
+            .withf(|k| matches!(k, KeyKind::Right))
+            .once()
+            .returning(|_| Ok(()));
+        keys.expect_send()
+            .withf(|k| matches!(k, KeyKind::Space))
+            .once()
+            .returning(|_| Ok(()));
+        let context = Context::new(Some(keys), None);
+
+        update_double_jumping_context(&context, &mut state, jumping);
+    }
+
+    #[test]
+    fn double_jumping_mage_requires_direction_even_when_x_direction_zero() {
+        let pos = Point::new(100, 50);
+        let dest = pos; // Same x => x_direction == 0
+        let moving = Moving {
+            pos,
+            dest,
+            timeout: Timeout {
+                started: true,
+                ..Timeout::default()
+            },
+            ..Default::default()
+        };
+        let jumping = DoubleJumping::new(moving, true, false);
+
+        let mut state = PlayerState::default();
+        state.last_known_pos = Some(pos);
+        state.last_known_direction = ActionKeyDirection::Right;
+        state.config.teleport_key = Some(KeyKind::Shift); // Mage
+
+        let mut keys = MockKeySender::new();
+        keys.expect_send_down()
+            .withf(|k| matches!(k, KeyKind::Right)) // Must still send right
+            .once()
+            .returning(|_| Ok(()));
+        keys.expect_send_up()
+            .withf(|k| matches!(k, KeyKind::Left))
+            .once()
+            .returning(|_| Ok(()));
+        keys.expect_send()
+            .withf(|k| matches!(k, KeyKind::Shift)) // Teleport key used, not jump
+            .once()
+            .returning(|_| Ok(()));
+        let context = Context::new(Some(keys), None);
+
+        update_double_jumping_context(&context, &mut state, jumping);
+    }
+
+    // TODO: Add tests for player action
 }

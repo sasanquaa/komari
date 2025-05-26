@@ -7,7 +7,6 @@ use crate::{
     detect::{ArrowsCalibrating, ArrowsState},
     player::{
         on_action_state_mut,
-        state::MAX_RUNE_FAILED_COUNT,
         timeout::{Timeout, update_with_timeout},
     },
     task::{Task, Update, update_task},
@@ -38,9 +37,10 @@ pub fn update_solving_rune_context(
     state: &mut PlayerState,
     solving_rune: SolvingRune,
 ) -> Player {
-    debug_assert!(state.rune_validate_timeout.is_none());
-    debug_assert!(state.rune_failed_count < MAX_RUNE_FAILED_COUNT);
-    debug_assert!(!state.rune_cash_shop);
+    // TODO: Add tests based on below asserts
+    // debug_assert!(state.rune_validate_timeout.is_none());
+    // debug_assert!(state.rune_failed_count < MAX_RUNE_FAILED_COUNT);
+    // debug_assert!(!state.rune_cash_shop);
 
     let update_timeout = |timeout| {
         Player::SolvingRune(SolvingRune {

@@ -13,22 +13,33 @@ use crate::{
     },
 };
 
-/// Minimum y distance from the destination required to perform a fall
+/// Minimum y distance from the destination required to perform a fall.
 pub const FALLING_THRESHOLD: i32 = 4;
 
-/// The tick to stop helding down [`KeyKind::Down`] at
+/// Maximum y distance from the destination allowed to transition to [`Player::UseKey`] during
+/// a [`PlayerAction::Key`] with [`ActionKeyWith::Any`].
+const FALLING_TO_USE_KEY_THRESHOLD: i32 = 5;
+
+/// Tick to stop helding down [`KeyKind::Down`] at.
 const STOP_DOWN_KEY_TICK: u32 = 3;
 
+/// Maximum number of ticks before timing out.
 const TIMEOUT: u32 = MOVE_TIMEOUT + 3;
 
-const TELEPORT_FALL_THRESHOLD: i32 = 14;
+/// Maximum y distance from the destination allowed to skip normal falling and use teleportation
+/// for mage.
+const TELEPORT_FALL_THRESHOLD: i32 = 15;
 
-/// Updates the [`Player::Falling`] contextual state
+/// Updates the [`Player::Falling`] contextual state.
 ///
-/// This state will perform a drop down action. It is completed as soon as the player current `y`
-/// position is below `anchor`. If `timeout_on_complete` is provided, it will timeout when the
+/// This state performs a drop down action. It is completed as soon as the player current `y`
+/// position is below `anchor`. If `timeout_on_complete` is true, it will timeout when the
 /// action is complete and return to [`Player::Moving`]. Timing out early is currently used by
 /// [`Player::DoubleJumping`] to perform a composite action `drop down and then double jump`.
+///
+/// Before performing a drop down, it will wait for player to become stationary in case the player
+/// is already moving. Or if the player is already at destination or lower, it will returns
+/// to [`Player::Moving`].
 pub fn update_falling_context(
     context: &Context,
     state: &mut PlayerState,
@@ -60,7 +71,7 @@ pub fn update_falling_context(
         |moving| {
             let _ = context.keys.send_down(KeyKind::Down);
             if let Some(key) = teleport_key
-                && y_distance <= TELEPORT_FALL_THRESHOLD
+                && y_distance < TELEPORT_FALL_THRESHOLD
             {
                 let _ = context.keys.send(key);
             } else {
@@ -83,44 +94,52 @@ pub fn update_falling_context(
 
             on_action(
                 state,
-                |action| match action {
-                    PlayerAction::AutoMob(_) => {
-                        // Ignore `timeout_on_complete` for auto-mobbing intermediate destination
-                        if moving.completed
-                            && moving.is_destination_intermediate()
-                            && y_direction >= 0
-                        {
-                            let _ = context.keys.send_up(KeyKind::Down);
-                            return Some((
-                                Player::Moving(moving.dest, moving.exact, moving.intermediates),
-                                false,
-                            ));
-                        }
-                        let (x_distance, _) = moving.x_distance_direction_from(false, cur_pos);
-                        let (y_distance, _) = moving.y_distance_direction_from(false, cur_pos);
-                        on_auto_mob_use_key_action(context, action, cur_pos, x_distance, y_distance)
-                    }
-                    PlayerAction::Key(PlayerActionKey {
-                        with: ActionKeyWith::Any,
-                        ..
-                    }) => {
-                        if !moving.completed || y_direction < 0 {
-                            return None;
-                        }
-                        Some((Player::UseKey(UseKey::from_action(action)), false))
-                    }
-                    PlayerAction::Key(PlayerActionKey {
-                        with: ActionKeyWith::Stationary | ActionKeyWith::DoubleJump,
-                        ..
-                    })
-                    | PlayerAction::Move(_)
-                    | PlayerAction::SolveRune => None,
-                },
+                |action| on_player_action(context, cur_pos, action, moving),
                 || Player::Falling(moving, anchor, timeout_on_complete),
             )
         },
         ChangeAxis::Vertical,
     )
+}
+
+#[inline]
+fn on_player_action(
+    context: &Context,
+    cur_pos: Point,
+    action: PlayerAction,
+    moving: Moving,
+) -> Option<(Player, bool)> {
+    let (y_distance, y_direction) = moving.y_distance_direction_from(true, cur_pos);
+    match action {
+        PlayerAction::AutoMob(_) => {
+            // Ignore `timeout_on_complete` for auto-mobbing intermediate destination
+            if moving.completed && moving.is_destination_intermediate() && y_direction >= 0 {
+                let _ = context.keys.send_up(KeyKind::Down);
+                return Some((
+                    Player::Moving(moving.dest, moving.exact, moving.intermediates),
+                    false,
+                ));
+            }
+            let (x_distance, _) = moving.x_distance_direction_from(false, cur_pos);
+            let (y_distance, _) = moving.y_distance_direction_from(false, cur_pos);
+            on_auto_mob_use_key_action(context, action, cur_pos, x_distance, y_distance)
+        }
+        PlayerAction::Key(PlayerActionKey {
+            with: ActionKeyWith::Any,
+            ..
+        }) => {
+            if !moving.completed || y_distance >= FALLING_TO_USE_KEY_THRESHOLD {
+                return None;
+            }
+            Some((Player::UseKey(UseKey::from_action(action)), false))
+        }
+        PlayerAction::Key(PlayerActionKey {
+            with: ActionKeyWith::Stationary | ActionKeyWith::DoubleJump,
+            ..
+        })
+        | PlayerAction::Move(_)
+        | PlayerAction::SolveRune => None,
+    }
 }
 
 #[cfg(test)]
@@ -139,51 +158,64 @@ mod tests {
 
     #[test]
     fn falling_start() {
-        let mut state = PlayerState::default();
-        state.config.jump_key = KeyKind::Space;
-        let mut keys = MockKeySender::new();
-        keys.expect_send_down()
-            .withf(|key| matches!(key, KeyKind::Down))
-            .returning(|_| Ok(()));
-        keys.expect_send()
-            .withf(|key| matches!(key, KeyKind::Space))
-            .returning(|_| Ok(()));
-        let context = Context::new(Some(keys), None);
         let pos = Point::new(5, 5);
         let moving = Moving {
             pos,
-            dest: pos,
+            dest: Point::new(pos.x, pos.y - 1), // Ensure player is not already at destination
             ..Default::default()
         };
-        // Send keys if stationary
+
+        let mut state = PlayerState::default();
+        state.config.jump_key = KeyKind::Space;
         state.is_stationary = true;
         state.last_known_pos = Some(pos);
-        update_falling_context(&context, &mut state, moving, Point::default(), false);
-        let _ = context.keys;
 
-        // Don't send keys if not stationary
+        let mut keys = MockKeySender::new();
+        keys.expect_send_down()
+            .withf(|key| matches!(key, KeyKind::Down))
+            .once()
+            .returning(|_| Ok(()));
+        keys.expect_send()
+            .withf(|key| matches!(key, KeyKind::Space))
+            .once()
+            .returning(|_| Ok(()));
+        let context = Context::new(Some(keys), None);
+
+        // (1) Send keys if stationary
+        update_falling_context(&context, &mut state, moving, Point::default(), false);
+        let _ = context.keys; // Drop for test checkpoint
+
+        // (2) Don't send keys if not stationary
+        state.is_stationary = false;
+
         let mut keys = MockKeySender::new();
         keys.expect_send_down().never();
         keys.expect_send().never();
         let context = Context::new(Some(keys), None);
-        state.is_stationary = false;
+
+        update_falling_context(&context, &mut state, moving, Point::default(), false);
+        let _ = context.keys; // Drop for test checkpoint
+
+        // (3) Don't send keys if already at destination
+        state.is_stationary = true;
+
+        let moving = Moving {
+            dest: pos,
+            ..moving
+        };
+        let mut keys = MockKeySender::new();
+        keys.expect_send_down().never();
+        keys.expect_send().never();
+        let context = Context::new(Some(keys), None);
+
         update_falling_context(&context, &mut state, moving, Point::default(), false);
     }
 
     #[test]
     fn falling_update() {
-        let mut keys = MockKeySender::new();
-        keys.expect_send_up()
-            .withf(|key| matches!(key, KeyKind::Down))
-            .once()
-            .returning(|_| Ok(()));
-        let context = Context::new(Some(keys), None);
         let pos = Point::new(5, 5);
-        let anchor = Point::new(6, 6);
-        let dest = Point::new(2, 2);
-        let mut state = PlayerState::default();
-        state.last_known_pos = Some(pos);
-        state.is_stationary = true;
+        let anchor = Point::new(pos.x, pos.y + 1);
+        let dest = Point::new(pos.x, pos.y - 1);
         let moving = Moving {
             pos,
             dest,
@@ -195,17 +227,58 @@ mod tests {
             ..Default::default()
         };
 
-        // Send up key because total = 2 and timeout early
+        let mut keys = MockKeySender::new();
+        keys.expect_send_up()
+            .withf(|key| matches!(key, KeyKind::Down))
+            .once()
+            .returning(|_| Ok(()));
+        let context = Context::new(Some(keys), None);
+
+        let mut state = PlayerState::default();
+        state.last_known_pos = Some(pos);
+        state.is_stationary = true;
+
+        // (1) Send up key because total == 2, so next tick is total == 3 == STOP_DOWN_KEY_TICK
+        update_falling_context(&context, &mut state, moving, anchor, false);
+        let _ = context.keys; // Drop for test checkpoint
+
+        // (2) Timeout early after complete if enabled
+        let moving = Moving {
+            completed: true,
+            timeout: Timeout {
+                total: 3, // So that down arrow key does not send up
+                ..moving.timeout
+            },
+            ..moving
+        };
+        let player = update_falling_context(&context, &mut state, moving, anchor, true);
         assert_matches!(
-            update_falling_context(&context, &mut state, moving, anchor, false),
+            player,
             Player::Falling(
                 Moving {
-                    completed: true,
-                    timeout: Timeout {
-                        current: 1,
-                        total: 3,
-                        ..
-                    },
+                    timeout: Timeout { current: 8, .. },
+                    ..
+                },
+                _,
+                _
+            )
+        );
+
+        // (3) Do not timeout early after complete if disabled
+        let moving = Moving {
+            completed: true,
+            timeout: Timeout {
+                total: 3, // So that down arrow key does not send up
+                ..moving.timeout
+            },
+            ..moving
+        };
+        let player = update_falling_context(&context, &mut state, moving, anchor, false);
+        assert_matches!(
+            player,
+            Player::Falling(
+                Moving {
+                    timeout: Timeout { current: 1, .. },
                     ..
                 },
                 _,
@@ -213,4 +286,6 @@ mod tests {
             )
         );
     }
+
+    // TODO: Add tests for handling actions
 }

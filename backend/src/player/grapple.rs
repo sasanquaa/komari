@@ -22,7 +22,7 @@ const TIMEOUT: u32 = MOVE_TIMEOUT * 10;
 
 const STOPPING_TIMEOUT: u32 = MOVE_TIMEOUT * 2;
 
-const STOPPING_THRESHOLD: i32 = 5;
+const STOPPING_THRESHOLD: i32 = 4;
 
 /// Updates the [`Player::Grappling`] contextual state
 ///
