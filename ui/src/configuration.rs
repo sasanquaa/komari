@@ -145,13 +145,14 @@ fn ConfigGameKeyBindings(
                 label: ROPE_LIFT,
                 label_active: active,
                 is_disabled: is_disabled(),
+                is_optional: true,
                 on_input: move |key: Option<KeyBindingConfiguration>| {
                     on_config(ConfigurationData {
-                        ropelift_key: key.unwrap(),
+                        ropelift_key: key,
                         ..config_view.peek().clone()
                     });
                 },
-                value: Some(config_view().ropelift_key),
+                value: config_view().ropelift_key,
             }
             KeyBindingConfigurationInput {
                 label: TELEPORT,

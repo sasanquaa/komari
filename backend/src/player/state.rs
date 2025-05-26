@@ -103,7 +103,7 @@ pub struct PlayerConfiguration {
     /// The interact key.
     pub interact_key: KeyKind,
     /// The `Rope Lift` skill key.
-    pub grappling_key: KeyKind,
+    pub grappling_key: Option<KeyKind>,
     /// The teleport key with [`None`] indicating double jump.
     pub teleport_key: Option<KeyKind>,
     /// The jump key.
@@ -498,10 +498,11 @@ impl PlayerState {
 
     #[inline]
     pub(super) fn should_disable_grappling(&self) -> bool {
-        // FIXME: ....
-        (self.has_auto_mob_action_only()
-            && self.config.auto_mob_platforms_pathing
-            && self.config.auto_mob_platforms_pathing_up_jump_only)
+        // FIXME: ?????
+        (self.config.grappling_key.is_none())
+            || (self.has_auto_mob_action_only()
+                && self.config.auto_mob_platforms_pathing
+                && self.config.auto_mob_platforms_pathing_up_jump_only)
             || (self.has_rune_action()
                 && self.config.rune_platforms_pathing
                 && self.config.rune_platforms_pathing_up_jump_only)

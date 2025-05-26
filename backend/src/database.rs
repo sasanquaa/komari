@@ -172,7 +172,8 @@ pub struct Configuration {
     #[serde(skip_serializing, default)]
     pub id: Option<i64>,
     pub name: String,
-    pub ropelift_key: KeyBindingConfiguration,
+    #[serde(default)]
+    pub ropelift_key: Option<KeyBindingConfiguration>,
     pub teleport_key: Option<KeyBindingConfiguration>,
     #[serde(default = "jump_key_default")]
     pub jump_key: KeyBindingConfiguration,
@@ -220,7 +221,7 @@ impl Default for Configuration {
         Self {
             id: None,
             name: String::new(),
-            ropelift_key: KeyBindingConfiguration::default(),
+            ropelift_key: None,
             teleport_key: None,
             jump_key: jump_key_default(),
             up_jump_key: None,

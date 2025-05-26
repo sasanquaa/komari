@@ -12,19 +12,22 @@ use crate::{
     },
 };
 
-/// Minimum y distance from the destination required to perform a grappling hook
+/// Minimum y distance from the destination required to perform a grappling hook.
 pub const GRAPPLING_THRESHOLD: i32 = 24;
 
-/// Maximum y distance from the destination required to perform a grappling hook
+/// Maximum y distance from the destination allowed to perform a grappling hook.
 pub const GRAPPLING_MAX_THRESHOLD: i32 = 41;
 
+/// Timeout for grappling.
 const TIMEOUT: u32 = MOVE_TIMEOUT * 10;
 
+/// Timeout after stopping grappling.
 const STOPPING_TIMEOUT: u32 = MOVE_TIMEOUT * 2;
 
+/// Maximum y distance allowed to stop grpapling.
 const STOPPING_THRESHOLD: i32 = 4;
 
-/// Updates the [`Player::Grappling`] contextual state
+/// Updates the [`Player::Grappling`] contextual state.
 ///
 /// This state can only be transitioned via [`Player::Moving`] or [`Player::DoubleJumping`]
 /// when the player has reached or close to the destination x-wise.
@@ -40,7 +43,7 @@ pub fn update_grappling_context(
     }
 
     let cur_pos = state.last_known_pos.unwrap();
-    let key = state.config.grappling_key;
+    let key = state.config.grappling_key.unwrap(); // Cannot transition if None
     let x_changed = cur_pos.x != moving.pos.x;
     let (y_distance, y_direction) = moving.y_distance_direction_from(true, moving.pos);
 
