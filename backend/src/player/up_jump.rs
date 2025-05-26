@@ -17,8 +17,8 @@ use crate::{
 const SPAM_DELAY: u32 = 7;
 const STOP_UP_KEY_TICK: u32 = 3;
 const TIMEOUT: u32 = MOVE_TIMEOUT + 3;
-const UP_JUMPED_Y_VELOCITY_THRESHOLD: f32 = 0.35;
-const X_NEAR_STATIONARY_THRESHOLD: f32 = 0.08;
+const UP_JUMPED_Y_VELOCITY_THRESHOLD: f32 = 1.3;
+const X_NEAR_STATIONARY_THRESHOLD: f32 = 0.28;
 const TELEPORT_UP_JUMP_THRESHOLD: i32 = 14;
 
 /// Updates the [`Player::UpJumping`] contextual state
@@ -260,10 +260,10 @@ mod tests {
         };
         let mut state = PlayerState::default();
         state.last_known_pos = Some(Point::new(7, 7));
-        state.velocity = (0.0, 0.36);
+        state.velocity = (0.0, 1.36);
         let context = Context::new(None, None);
 
-        // up jumped because y velocity > 0.35
+        // up jumped because y velocity > 1.35
         assert_matches!(
             update_up_jumping_context(&context, &mut state, moving),
             Player::UpJumping(Moving {

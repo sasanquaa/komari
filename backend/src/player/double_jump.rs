@@ -40,7 +40,13 @@ const TIMEOUT: u32 = MOVE_TIMEOUT * 2;
 const GRAPPLING_THRESHOLD: i32 = 4;
 
 /// Minimum x velocity to be considered as double jumped.
-const X_VELOCITY_THRESHOLD: f32 = 0.25;
+const X_VELOCITY_THRESHOLD: f32 = 1.0;
+
+/// Maximum x velocity allowed to be considered as near stationary.
+const X_NEAR_STATIONARY_VELOCITY_THRESHOLD: f32 = 0.75;
+
+/// Maximum y velocity allowed to be considered as near stationary.
+const Y_NEAR_STATIONARY_VELOCITY_THRESHOLD: f32 = 0.4;
 
 /// Minimium y distance required to perform a fall and then double jump.
 const FALLING_THRESHOLD: i32 = 8;
@@ -108,10 +114,8 @@ pub fn update_double_jumping_context(
             return Player::Falling(moving.pos(cur_pos), cur_pos, true);
         }
         if double_jumping.require_near_stationary
-            && !{
-                let velocity = state.velocity;
-                velocity.0 <= X_VELOCITY_THRESHOLD
-            }
+            && (state.velocity.0 > X_NEAR_STATIONARY_VELOCITY_THRESHOLD
+                || state.velocity.1 > Y_NEAR_STATIONARY_VELOCITY_THRESHOLD)
         {
             return Player::DoubleJumping(double_jumping.moving(moving.pos(cur_pos)));
         }

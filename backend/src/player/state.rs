@@ -852,36 +852,8 @@ impl PlayerState {
             self.unstuck_count = 0;
             self.unstuck_transitioned_count = 0;
             self.is_stationary_timeout = Timeout::default();
-
-            // Approximate velocity
-            if self.velocity_samples.len() == VELOCITY_SAMPLES {
-                self.velocity_samples.remove(0);
-            }
-            self.velocity_samples.push((pos, context.tick));
-            if self.velocity_samples.len() >= 2 {
-                let velocity_len = (self.velocity_samples.len() - 1) as f32;
-                let velocity_sum =
-                    self.velocity_samples
-                        .as_slice()
-                        .windows(2)
-                        .fold((0.0, 0.0), |acc, window| {
-                            let a = window[0].unwrap();
-                            let b = window[1].unwrap();
-                            let dt = b.1 - a.1;
-                            if dt == 0 {
-                                return acc;
-                            }
-
-                            let dx = (b.0.x - a.0.x) as f32 / dt as f32;
-                            let dy = (b.0.y - a.0.y) as f32 / dt as f32;
-                            (dx, dy)
-                        });
-                self.velocity = (
-                    (velocity_sum.0 / velocity_len).abs(),
-                    (velocity_sum.1 / velocity_len).abs(),
-                );
-            }
         }
+        self.update_velocity(pos, context.tick);
 
         let (is_stationary, is_stationary_timeout) = update_with_timeout(
             self.is_stationary_timeout,
@@ -893,10 +865,50 @@ impl PlayerState {
         self.is_stationary = is_stationary;
         self.is_stationary_timeout = is_stationary_timeout;
         self.last_known_pos = Some(pos);
-        if is_stationary {
-            self.velocity = (0.0, 0.0);
-        }
         true
+    }
+
+    /// Approximates the player velocity.
+    #[inline]
+    fn update_velocity(&mut self, pos: Point, tick: u64) {
+        if self.velocity_samples.len() == VELOCITY_SAMPLES {
+            self.velocity_samples.remove(0);
+        }
+        self.velocity_samples.push((pos, tick));
+
+        if self.velocity_samples.len() >= 2 {
+            let (weighted_sum, total_weight) = self
+                .velocity_samples
+                .as_slice()
+                .windows(2)
+                .enumerate()
+                .fold(((0.0, 0.0), 0.0), |(acc_sum, acc_weight), (i, window)| {
+                    let a = window[0].unwrap();
+                    let b = window[1].unwrap();
+                    let dt = b.1 - a.1;
+                    if dt == 0 {
+                        return (acc_sum, acc_weight);
+                    }
+
+                    let weight = (i + 1) as f32;
+                    let dx = (b.0.x - a.0.x) as f32 / dt as f32;
+                    let dy = (b.0.y - a.0.y) as f32 / dt as f32;
+                    (
+                        (acc_sum.0 + weight * dx, acc_sum.1 + weight * dy),
+                        acc_weight + weight,
+                    )
+                });
+
+            if total_weight > 0.0 {
+                let avg_dx = (weighted_sum.0 / total_weight).abs();
+                let avg_dy = (weighted_sum.1 / total_weight).abs();
+
+                let smoothed_dx = 0.5 * avg_dx + 0.5 * self.velocity.0;
+                let smoothed_dy = 0.5 * avg_dy + 0.5 * self.velocity.1;
+
+                self.velocity = (smoothed_dx, smoothed_dy);
+            }
+        }
     }
 
     /// Updates the rune validation [`Timeout`].
