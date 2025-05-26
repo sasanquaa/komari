@@ -2,7 +2,7 @@ use opencv::core::{Point, Rect};
 use platforms::windows::KeyKind;
 use strum::Display;
 
-use super::{JUMP_THRESHOLD, Player, PlayerState, moving::Moving, use_key::UseKey};
+use super::{Player, PlayerState, moving::Moving, use_key::UseKey};
 use crate::{
     Action, ActionKey, ActionKeyDirection, ActionKeyWith, ActionMove, KeyBinding, Position,
     context::{Context, MS_PER_TICK},
@@ -196,9 +196,8 @@ pub fn on_ping_pong_use_key_action(
             return Some((Player::Idle, true));
         }
 
-        if cur_pos.y < bound.y
-            || ((cur_pos.y < (bound.y + bound.height) / 2) && rand::random_bool(0.1))
-        {
+        let bound_y_mid = (bound.y + bound.height) / 2;
+        if cur_pos.y < bound.y || ((cur_pos.y < bound_y_mid) && rand::random_bool(0.1)) {
             let moving = Moving::new(
                 cur_pos,
                 Point::new(cur_pos.x, bound.y + bound.height),
@@ -216,9 +215,7 @@ pub fn on_ping_pong_use_key_action(
         }
 
         let bound_y_max = bound.y + bound.height;
-        if cur_pos.y > bound_y_max
-            || (((cur_pos.y - bound_y_max).abs() < JUMP_THRESHOLD) && rand::random_bool(0.1))
-        {
+        if cur_pos.y > bound_y_max || (cur_pos.y > bound_y_mid && rand::random_bool(0.1)) {
             clear_keys(context);
             return Some((
                 Player::Falling(
