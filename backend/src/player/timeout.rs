@@ -35,7 +35,7 @@ pub struct Timeout {
     pub started: bool,
 }
 
-/// Updates the [`Timeout`] current tick
+/// Updates the [`Timeout`] current tick.
 ///
 /// This is basic building block for contextual states that can
 /// be timed out.
@@ -71,7 +71,7 @@ pub fn update_with_timeout<T>(
     }
 }
 
-/// Updates movement-related contextual states
+/// Updates movement-related contextual states.
 ///
 /// This function helps resetting the [`Timeout`] when the player's position changed
 /// based on [`ChangeAxis`]. Upon timing out, it returns to [`Player::Moving`].

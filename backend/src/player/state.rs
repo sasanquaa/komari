@@ -122,39 +122,42 @@ pub struct PlayerConfiguration {
 #[derive(Debug, Default)]
 pub struct PlayerState {
     pub config: PlayerConfiguration,
-    /// The id of the normal action provided by [`Rotator`]
+    /// The id of the normal action provided by [`Rotator`].
     normal_action_id: u32,
-    /// A normal action requested by [`Rotator`]
+    /// A normal action requested by [`Rotator`].
     pub(super) normal_action: Option<PlayerAction>,
-    /// The id of the priority action provided by [`Rotator`]
+    /// The id of the priority action provided by [`Rotator`].
     priority_action_id: u32,
-    /// A priority action requested by [`Rotator`]
+    /// A priority action requested by [`Rotator`].
     ///
     /// This action will override the normal action if it is in the middle of executing.
     pub(super) priority_action: Option<PlayerAction>,
-    /// The player current health and max health
+    /// The player current health and max health.
     pub health: Option<(u32, u32)>,
-    /// The task to update health
+    /// The task to update health.
     health_task: Option<Task<Result<(u32, u32)>>>,
-    /// The rectangular health bar region
+    /// The rectangular health bar region.
     health_bar: Option<Rect>,
-    /// The task for the health bar
+    /// The task for the health bar.
     health_bar_task: Option<Task<Result<Rect>>>,
-    /// Track if the player moved within a specified ticks to determine if the player is stationary
+    /// Track if the player moved within a specified ticks to determine if the player is
+    /// stationary.
     is_stationary_timeout: Timeout,
-    /// Whether the player is stationary
+    /// Whether the player is stationary.
     pub(super) is_stationary: bool,
-    /// Whether the player is dead
+    /// Whether the player is dead.
     pub is_dead: bool,
-    /// The task for detecting if player is dead
+    /// The task for detecting if player is dead.
     is_dead_task: Option<Task<Result<bool>>>,
-    /// Approximates the player direction for using key
+    /// Approximates the player direction for using key.
     pub(super) last_known_direction: ActionKeyDirection,
-    /// Tracks last destination points for displaying to UI
+    /// Tracks last destination points for displaying to UI.
     ///
-    /// Resets when all destinations are reached or in [`Player::Idle`]
+    /// Resets when all destinations are reached or in [`Player::Idle`].
     pub last_destinations: Option<Vec<Point>>,
-    /// Last known position after each detection used for unstucking, also for displaying to UI
+    /// Last known position after each detection.
+    ///
+    /// It is updated to latest current position on each tick.
     pub last_known_pos: Option<Point>,
     /// Indicates whether to use [`ControlFlow::Immediate`] on this update
     pub(super) use_immediate_control_flow: bool,

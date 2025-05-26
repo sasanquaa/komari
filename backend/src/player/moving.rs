@@ -63,12 +63,15 @@ impl MovingIntermediates {
 #[derive(Clone, Copy, Debug)]
 #[cfg_attr(test, derive(Default))]
 pub struct Moving {
-    /// The player's previous position and will be updated to current position
-    /// after calling [`update_moving_axis_timeout`].
+    /// The player's previous position.
+    ///
+    /// It will be updated to current position after calling [`update_moving_axis_timeout`].
+    /// Before calling this function, it will always be the previous position in relative to
+    /// [`PlayerState::last_known_pos`].
     pub pos: Point,
     /// The destination the player is moving to.
     ///
-    /// When [`Self::intermediates`] is [`Some`], this could be an intermediate point.
+    /// When [`Self::intermediates`] is [`Some`], this could be an intermediate destination.
     pub dest: Point,
     /// Whether to allow adjusting to precise destination.
     pub exact: bool,
@@ -136,9 +139,9 @@ impl Moving {
             .map(|intermediates| intermediates.inner[intermediates.current.saturating_sub(1)].1)
     }
 
-    /// Computes the x distance and direction between [`Self::dest`] and [`cur_pos`].
+    /// Computes the x distance and direction between [`Self::dest`] and `cur_pos`.
     ///
-    /// If [`current_destination`] is false, it will use the last destination if
+    /// If `current_destination` is false, it will use the last destination if
     /// [`Self::intermediates`] is [`Some`].
     ///
     /// Returns the distance and direction values pair computed from `dest - cur_pos`.
@@ -151,9 +154,9 @@ impl Moving {
         self.distance_direction_from(true, current_destination, cur_pos)
     }
 
-    /// Computes the y distance and direction between [`Self::dest`] and [`cur_pos`].
+    /// Computes the y distance and direction between [`Self::dest`] and `cur_pos`.
     ///
-    /// If [`current_destination`] is false, it will use the last destination if
+    /// If `current_destination` is false, it will use the last destination if
     /// [`Self::intermediates`] is [`Some`].
     ///
     /// Returns the distance and direction values pair computed from `dest - cur_pos`.
