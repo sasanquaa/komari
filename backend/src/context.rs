@@ -67,7 +67,7 @@ pub trait Contextual {
 /// A struct that stores the game information
 #[derive(Debug)]
 pub struct Context {
-    /// The `MapleStory` class game handle
+    /// The `MapleStory` class game handle.
     pub handle: Handle,
     pub keys: Box<dyn KeySender>,
     pub notification: DiscordNotification,
@@ -77,6 +77,8 @@ pub struct Context {
     pub skills: [Skill; SkillKind::COUNT],
     pub buffs: [Buff; BuffKind::COUNT],
     pub halting: bool,
+    /// The game current tick.
+    pub tick: u64,
 }
 
 impl Context {
@@ -92,6 +94,7 @@ impl Context {
             skills: [Skill::Detecting; SkillKind::COUNT],
             buffs: [Buff::NoBuff; BuffKind::COUNT],
             halting: false,
+            tick: 0,
         }
     }
 
@@ -189,6 +192,7 @@ fn update_loop() {
         skills: [Skill::Detecting],
         buffs: [Buff::NoBuff; BuffKind::COUNT],
         halting: true,
+        tick: 0,
     };
     let mut player_state = PlayerState::default();
     let mut minimap_state = MinimapState::default();
@@ -213,6 +217,7 @@ fn update_loop() {
         let was_minimap_idle = matches!(context.minimap, Minimap::Idle(_));
         let detector = mat.map(CachedDetector::new);
 
+        context.tick += 1;
         if let Some(detector) = detector {
             context.detector = Some(Box::new(detector));
             context.minimap = fold_context(&context, context.minimap, &mut minimap_state);

@@ -39,8 +39,8 @@ const TIMEOUT: u32 = MOVE_TIMEOUT * 2;
 /// Minimum x distance from the destination required to transition to [`Player::Grappling`].
 const GRAPPLING_THRESHOLD: i32 = 4;
 
-/// Minimum x distance changed to be considered as double jumped.
-const FORCE_THRESHOLD: i32 = 3;
+/// Minimum x velocity to be considered as double jumped.
+const X_VELOCITY_THRESHOLD: f32 = 0.25;
 
 /// Minimium y distance required to perform a fall and then double jump.
 const FALLING_THRESHOLD: i32 = 8;
@@ -51,8 +51,8 @@ pub struct DoubleJumping {
     /// Whether to force a double jump even when the player current position is already close to
     /// the destination.
     pub forced: bool,
-    /// Whether to wait for the player to become stationary before sending jump keys.
-    require_stationary: bool,
+    /// Whether to wait for the player is about to become stationary before sending jump keys.
+    require_near_stationary: bool,
 }
 
 impl DoubleJumping {
@@ -60,7 +60,7 @@ impl DoubleJumping {
         Self {
             moving,
             forced,
-            require_stationary,
+            require_near_stationary: require_stationary,
         }
     }
 
@@ -93,7 +93,6 @@ pub fn update_double_jumping_context(
     let moving = double_jumping.moving;
     let cur_pos = state.last_known_pos.unwrap();
     let ignore_grappling = double_jumping.forced || state.should_disable_grappling();
-    let x_changed = (cur_pos.x - moving.pos.x).abs();
     let (x_distance, x_direction) = moving.x_distance_direction_from(true, cur_pos);
     let (y_distance, y_direction) = moving.y_distance_direction_from(true, cur_pos);
     let is_intermediate = moving.is_destination_intermediate();
@@ -108,7 +107,12 @@ pub fn update_double_jumping_context(
         {
             return Player::Falling(moving.pos(cur_pos), cur_pos, true);
         }
-        if double_jumping.require_stationary && !state.is_stationary {
+        if double_jumping.require_near_stationary
+            && !{
+                let velocity = state.velocity;
+                velocity.0 <= X_VELOCITY_THRESHOLD
+            }
+        {
             return Player::DoubleJumping(double_jumping.moving(moving.pos(cur_pos)));
         }
         state.use_immediate_control_flow = true; // Double jumping does not use on_started
@@ -164,11 +168,13 @@ pub fn update_double_jumping_context(
 
                 let can_continue = !double_jumping.forced
                     && x_distance >= state.double_jump_threshold(is_intermediate);
-                let can_press = double_jumping.forced && x_changed <= FORCE_THRESHOLD;
+                let can_press = double_jumping.forced && state.velocity.0 <= X_VELOCITY_THRESHOLD;
                 if can_continue || can_press {
-                    let _ = context
-                        .keys
-                        .send(state.config.teleport_key.unwrap_or(state.config.jump_key));
+                    if state.velocity.0 <= X_VELOCITY_THRESHOLD {
+                        let _ = context
+                            .keys
+                            .send(state.config.teleport_key.unwrap_or(state.config.jump_key));
+                    }
                 } else {
                     let _ = context.keys.send_up(KeyKind::Right);
                     let _ = context.keys.send_up(KeyKind::Left);
