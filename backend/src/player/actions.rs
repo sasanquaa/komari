@@ -2,7 +2,7 @@ use opencv::core::{Point, Rect};
 use platforms::windows::KeyKind;
 use strum::Display;
 
-use super::{Player, PlayerState, moving::Moving, use_key::UseKey};
+use super::{JUMP_THRESHOLD, Player, PlayerState, moving::Moving, use_key::UseKey};
 use crate::{
     Action, ActionKey, ActionKeyDirection, ActionKeyWith, ActionMove, KeyBinding, Position,
     context::{Context, MS_PER_TICK},
@@ -215,7 +215,10 @@ pub fn on_ping_pong_use_key_action(
             return Some((next, false));
         }
 
-        if cur_pos.y > bound.y + bound.height {
+        let bound_y_max = bound.y + bound.height;
+        if cur_pos.y > bound_y_max
+            || (((cur_pos.y - bound_y_max).abs() < JUMP_THRESHOLD) && rand::random_bool(0.1))
+        {
             clear_keys(context);
             return Some((
                 Player::Falling(
