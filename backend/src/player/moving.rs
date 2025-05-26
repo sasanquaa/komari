@@ -26,13 +26,23 @@ use crate::{
 /// Maximum amount of ticks a change in x or y direction must be detected
 pub const MOVE_TIMEOUT: u32 = 5;
 
+const UP_JUMP_THRESHOLD: i32 = 10;
+
+/// Intermediate points to move by.
+///
+/// The last point is the destination.
 #[derive(Clone, Copy, Debug)]
 pub struct MovingIntermediates {
-    pub current: usize,
-    pub inner: Array<(Point, MovementHint, bool), 16>,
+    current: usize,
+    inner: Array<(Point, MovementHint, bool), 16>,
 }
 
 impl MovingIntermediates {
+    #[inline]
+    pub fn inner(&self) -> Array<(Point, MovementHint, bool), 16> {
+        self.inner
+    }
+
     #[inline]
     pub fn has_next(&self) -> bool {
         self.current < self.inner.len()
@@ -126,25 +136,40 @@ impl Moving {
             .map(|intermediates| intermediates.inner[intermediates.current.saturating_sub(1)].1)
     }
 
+    /// Computes the x distance and direction between [`Self::dest`] and [`cur_pos`].
+    ///
+    /// If [`current_destination`] is false, it will use the last destination if
+    /// [`Self::intermediates`] is [`Some`].
+    ///
+    /// Returns the distance and direction values pair computed from `dest - cur_pos`.
     #[inline]
     pub fn x_distance_direction_from(
         &self,
         current_destination: bool,
         cur_pos: Point,
     ) -> (i32, i32) {
-        let dest = if current_destination {
-            self.dest
-        } else {
-            self.last_destination()
-        };
-        let direction = dest.x - cur_pos.x;
-        let distance = direction.abs();
-        (distance, direction)
+        self.distance_direction_from(true, current_destination, cur_pos)
     }
 
+    /// Computes the y distance and direction between [`Self::dest`] and [`cur_pos`].
+    ///
+    /// If [`current_destination`] is false, it will use the last destination if
+    /// [`Self::intermediates`] is [`Some`].
+    ///
+    /// Returns the distance and direction values pair computed from `dest - cur_pos`.
     #[inline]
     pub fn y_distance_direction_from(
         &self,
+        current_destination: bool,
+        cur_pos: Point,
+    ) -> (i32, i32) {
+        self.distance_direction_from(false, current_destination, cur_pos)
+    }
+
+    #[inline]
+    fn distance_direction_from(
+        &self,
+        compute_x: bool,
         current_destination: bool,
         cur_pos: Point,
     ) -> (i32, i32) {
@@ -153,7 +178,11 @@ impl Moving {
         } else {
             self.last_destination()
         };
-        let direction = dest.y - cur_pos.y;
+        let direction = if compute_x {
+            dest.x - cur_pos.x
+        } else {
+            dest.y - cur_pos.y
+        };
         let distance = direction.abs();
         (distance, direction)
     }
@@ -174,7 +203,7 @@ impl Moving {
             .is_some_and(|intermediates| intermediates.has_next())
     }
 
-    /// Determines whether auto mobbing intermediate destination can be skipped
+    /// Determines whether auto mobbing intermediate destination can be skipped.
     #[inline]
     pub fn auto_mob_can_skip_current_destination(&self, state: &PlayerState) -> bool {
         state.has_auto_mob_action_only()
@@ -214,9 +243,6 @@ pub fn update_moving_context(
     exact: bool,
     intermediates: Option<MovingIntermediates>,
 ) -> Player {
-    const UP_JUMP_THRESHOLD: i32 = 10;
-
-    debug_assert!(intermediates.is_none() || intermediates.unwrap().current > 0);
     state.use_immediate_control_flow = true;
     if state.track_unstucking() {
         return Player::Unstucking(
@@ -282,7 +308,6 @@ pub fn update_moving_context(
                 "reached {:?} with actual position {:?}",
                 dest, cur_pos
             );
-            state.last_movement = None;
             if let Some(mut intermediates) = intermediates
                 && let Some((dest, exact)) = intermediates.next()
             {
@@ -307,7 +332,7 @@ pub fn update_moving_context(
 
                 return Player::Moving(dest, exact, Some(intermediates));
             }
-            state.last_destinations = None;
+
             let last_known_direction = state.last_known_direction;
             on_action(
                 state,

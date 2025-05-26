@@ -61,7 +61,7 @@ const AUTO_MOB_VERTICAL_MOVEMENT_REPEAT_COUNT: u32 = 3;
 
 /// Maximum number of times [`Player::Moving`] state can be transitioned to
 /// without changing position
-const UNSTUCK_COUNT_THRESHOLD: u32 = 7;
+const UNSTUCK_COUNT_THRESHOLD: u32 = 6;
 
 /// The number of times [`Player::Unstucking`] can be transitioned to before entering GAMBA MODE
 const UNSTUCK_GAMBA_MODE_COUNT: u32 = 3;
