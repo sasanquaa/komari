@@ -334,7 +334,7 @@ fn on_ping_pong_use_key_action(
     let upward_bias = cur_pos.y < bound_y_mid;
     let downward_bias = cur_pos.y > bound_y_mid;
 
-    let should_upward = upward_bias && rand::random_bool(0.15);
+    let should_upward = upward_bias && rand::random_bool(0.1);
     let should_downward = downward_bias && rand::random_bool(0.1);
 
     if cur_pos.y < bound.y || should_upward {

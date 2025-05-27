@@ -264,12 +264,13 @@ pub fn update_moving_context(
 
     match (skip_destination, x_distance, y_direction, y_distance) {
         (false, d, _, _) if d >= state.double_jump_threshold(is_intermediate) => {
+            let require_stationary = state.has_ping_pong_action_only()
+                && !matches!(
+                    state.last_movement,
+                    Some(LastMovement::Grappling | LastMovement::UpJumping)
+                );
             abort_action_on_state_repeat(
-                Player::DoubleJumping(DoubleJumping::new(
-                    moving,
-                    false,
-                    state.has_ping_pong_action_only(),
-                )),
+                Player::DoubleJumping(DoubleJumping::new(moving, false, require_stationary)),
                 context,
                 state,
             )
