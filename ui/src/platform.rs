@@ -78,7 +78,7 @@ pub fn Platforms(
             }
             PlatformCheckbox {
                 label: "Rune Pathing Up Jump Only",
-                disabled: minimap().is_none(),
+                disabled: minimap().is_none_or(|data| !data.rune_platforms_pathing),
                 on_input: move |up_jump_only| {
                     if let Some(mut minimap) = minimap.peek().clone() {
                         minimap.rune_platforms_pathing_up_jump_only = up_jump_only;
@@ -104,7 +104,7 @@ pub fn Platforms(
             }
             PlatformCheckbox {
                 label: "Auto Mobbing Pathing Up Jump Only",
-                disabled: minimap().is_none(),
+                disabled: minimap().is_none_or(|data| !data.auto_mob_platforms_pathing),
                 on_input: move |up_jump_only| {
                     if let Some(mut minimap) = minimap.peek().clone() {
                         minimap.auto_mob_platforms_pathing_up_jump_only = up_jump_only;

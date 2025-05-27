@@ -1,7 +1,10 @@
 use log::debug;
 use platforms::windows::KeyKind;
 
-use super::{Player, PlayerActionKey, PlayerState, moving::Moving, use_key::UseKey};
+use super::{
+    Player, PlayerActionKey, PlayerActionPingPong, PlayerState,
+    actions::on_ping_pong_double_jump_action, moving::Moving, use_key::UseKey,
+};
 use crate::{
     ActionKeyWith,
     context::Context,
@@ -122,6 +125,7 @@ pub fn update_up_jumping_context(
                     }
                 }
             }
+
             on_action(
                 state,
                 |action| match action {
@@ -148,6 +152,20 @@ pub fn update_up_jumping_context(
                             return None;
                         }
                         Some((Player::UseKey(UseKey::from_action(action)), false))
+                    }
+                    PlayerAction::PingPong(PlayerActionPingPong {
+                        bound, direction, ..
+                    }) => {
+                        if moving.completed
+                            && moving.timeout.total % MOVE_TIMEOUT == 0 // Interval roll dice
+                            && rand::random_bool(0.7)
+                        {
+                            Some(on_ping_pong_double_jump_action(
+                                context, cur_pos, bound, direction,
+                            ))
+                        } else {
+                            None
+                        }
                     }
                     PlayerAction::Key(PlayerActionKey {
                         with: ActionKeyWith::Stationary | ActionKeyWith::DoubleJump,

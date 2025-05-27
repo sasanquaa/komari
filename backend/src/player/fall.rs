@@ -137,6 +137,7 @@ fn on_player_action(
             with: ActionKeyWith::Stationary | ActionKeyWith::DoubleJump,
             ..
         })
+        | PlayerAction::PingPong(_)
         | PlayerAction::Move(_)
         | PlayerAction::SolveRune => None,
     }

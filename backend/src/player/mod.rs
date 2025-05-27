@@ -42,9 +42,10 @@ mod up_jump;
 mod use_key;
 
 pub use {
-    actions::PlayerAction, actions::PlayerActionAutoMob, actions::PlayerActionKey,
-    actions::PlayerActionMove, double_jump::DOUBLE_JUMP_THRESHOLD,
-    grapple::GRAPPLING_MAX_THRESHOLD, grapple::GRAPPLING_THRESHOLD, state::PlayerState,
+    actions::PingPongDirection, actions::PlayerAction, actions::PlayerActionAutoMob,
+    actions::PlayerActionKey, actions::PlayerActionMove, actions::PlayerActionPingPong,
+    double_jump::DOUBLE_JUMP_THRESHOLD, grapple::GRAPPLING_MAX_THRESHOLD,
+    grapple::GRAPPLING_THRESHOLD, state::PlayerState,
 };
 
 /// Minimum y distance from the destination required to perform a jump

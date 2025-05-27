@@ -1,6 +1,6 @@
 use super::{
-    Player, PlayerAction, PlayerState,
-    actions::{on_action, on_auto_mob_use_key_action},
+    Player, PlayerAction, PlayerActionPingPong, PlayerState,
+    actions::{on_action, on_auto_mob_use_key_action, on_ping_pong_double_jump_action},
     moving::Moving,
     state::LastMovement,
 };
@@ -12,19 +12,22 @@ use crate::{
     },
 };
 
-/// Minimum y distance from the destination required to perform a grappling hook
+/// Minimum y distance from the destination required to perform a grappling hook.
 pub const GRAPPLING_THRESHOLD: i32 = 24;
 
-/// Maximum y distance from the destination required to perform a grappling hook
+/// Maximum y distance from the destination allowed to perform a grappling hook.
 pub const GRAPPLING_MAX_THRESHOLD: i32 = 41;
 
+/// Timeout for grappling.
 const TIMEOUT: u32 = MOVE_TIMEOUT * 10;
 
+/// Timeout after stopping grappling.
 const STOPPING_TIMEOUT: u32 = MOVE_TIMEOUT * 2;
 
+/// Maximum y distance allowed to stop grpapling.
 const STOPPING_THRESHOLD: i32 = 4;
 
-/// Updates the [`Player::Grappling`] contextual state
+/// Updates the [`Player::Grappling`] contextual state.
 ///
 /// This state can only be transitioned via [`Player::Moving`] or [`Player::DoubleJumping`]
 /// when the player has reached or close to the destination x-wise.
@@ -40,7 +43,7 @@ pub fn update_grappling_context(
     }
 
     let cur_pos = state.last_known_pos.unwrap();
-    let key = state.config.grappling_key;
+    let key = state.config.grappling_key.unwrap(); // Cannot transition if None
     let x_changed = cur_pos.x != moving.pos.x;
     let (y_distance, y_direction) = moving.y_distance_direction_from(true, moving.pos);
 
@@ -80,6 +83,20 @@ pub fn update_grappling_context(
                         let (x_distance, _) = moving.x_distance_direction_from(false, cur_pos);
                         let (y_distance, _) = moving.y_distance_direction_from(false, cur_pos);
                         on_auto_mob_use_key_action(context, action, cur_pos, x_distance, y_distance)
+                    }
+                    PlayerAction::PingPong(PlayerActionPingPong {
+                        bound, direction, ..
+                    }) => {
+                        if cur_pos.y >= bound.y
+                            && moving.timeout.total % MOVE_TIMEOUT == 0 // Interval roll dice
+                            && rand::random_bool(0.7)
+                        {
+                            Some(on_ping_pong_double_jump_action(
+                                context, cur_pos, bound, direction,
+                            ))
+                        } else {
+                            None
+                        }
                     }
                     PlayerAction::Key(_) | PlayerAction::Move(_) | PlayerAction::SolveRune => None,
                 },

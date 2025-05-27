@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::Result;
 use log::debug;
-use opencv::core::Point;
+use opencv::core::{Point, Rect};
 use ordered_hash_map::OrderedHashMap;
 use rand::seq::IteratorRandom;
 
@@ -15,11 +15,11 @@ use crate::{
     ActionKeyDirection, ActionKeyWith, AutoMobbing, KeyBinding, Position, RotationMode,
     buff::{Buff, BuffKind},
     context::{Context, MS_PER_TICK},
-    database::{Action, ActionCondition, ActionKey, ActionMove},
+    database::{Action, ActionCondition, ActionKey, ActionMove, PingPong},
     minimap::Minimap,
     player::{
-        GRAPPLING_THRESHOLD, Player, PlayerAction, PlayerActionAutoMob, PlayerActionKey,
-        PlayerState,
+        GRAPPLING_THRESHOLD, PingPongDirection, Player, PlayerAction, PlayerActionAutoMob,
+        PlayerActionKey, PlayerActionPingPong, PlayerState,
     },
     skill::{Skill, SkillKind},
     task::{Task, Update, update_detection_task},
@@ -98,6 +98,7 @@ pub enum RotatorMode {
     #[default]
     StartToEndThenReverse,
     AutoMobbing(AutoMobbing),
+    PingPong(PingPong),
 }
 
 impl From<RotationMode> for RotatorMode {
@@ -106,6 +107,7 @@ impl From<RotationMode> for RotatorMode {
             RotationMode::StartToEnd => RotatorMode::StartToEnd,
             RotationMode::StartToEndThenReverse => RotatorMode::StartToEndThenReverse,
             RotationMode::AutoMobbing(auto_mobbing) => RotatorMode::AutoMobbing(auto_mobbing),
+            RotationMode::PingPong(ping_pong) => RotatorMode::PingPong(ping_pong),
         }
     }
 }
@@ -228,6 +230,9 @@ impl Rotator {
                 RotatorMode::StartToEndThenReverse => self.rotate_start_to_end_then_reverse(player),
                 RotatorMode::AutoMobbing(auto_mobbing) => {
                     self.rotate_auto_mobbing(context, player, auto_mobbing)
+                }
+                RotatorMode::PingPong(ping_pong) => {
+                    self.rotate_ping_pong(context, player, ping_pong)
                 }
             }
         }
@@ -489,6 +494,55 @@ impl Rotator {
                     y: point.y,
                     allow_adjusting: false,
                 },
+            }),
+        );
+    }
+
+    fn rotate_ping_pong(
+        &mut self,
+        context: &Context,
+        player: &mut PlayerState,
+        ping_pong: PingPong,
+    ) {
+        debug_assert!(!player.has_normal_action() && !player.has_priority_action());
+        let Minimap::Idle(idle) = context.minimap else {
+            return;
+        };
+        let Some(pos) = player.last_known_pos else {
+            return;
+        };
+        let PingPong {
+            bound,
+            key,
+            key_count,
+            key_wait_before_millis,
+            key_wait_after_millis,
+        } = ping_pong;
+
+        let bbox = idle.bbox;
+        let dist_left = pos.x - bbox.x;
+        let dist_right = (bbox.x + bbox.width) - pos.x;
+        let direction = if dist_left > dist_right {
+            PingPongDirection::Left
+        } else {
+            PingPongDirection::Right
+        };
+        let bound = Rect::new(
+            bound.x,
+            bbox.height - (bound.y + bound.height),
+            bound.width,
+            bound.height,
+        );
+
+        player.set_normal_action(
+            u32::MAX - 1,
+            PlayerAction::PingPong(PlayerActionPingPong {
+                key,
+                count: key_count.max(1),
+                wait_before_ticks: (key_wait_before_millis / MS_PER_TICK) as u32,
+                wait_after_ticks: (key_wait_after_millis / MS_PER_TICK) as u32,
+                bound,
+                direction,
             }),
         );
     }

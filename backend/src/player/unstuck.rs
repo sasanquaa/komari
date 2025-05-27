@@ -57,7 +57,7 @@ pub fn update_unstucking_context(
         timeout,
         MOVE_TIMEOUT,
         |timeout| {
-            if has_settings.unwrap_or_default() || gamba_mode {
+            if has_settings.unwrap_or_default() || (gamba_mode && rand::random_bool(0.5)) {
                 let _ = context.keys.send(KeyKind::Esc);
             }
             let to_right = match (gamba_mode, pos) {

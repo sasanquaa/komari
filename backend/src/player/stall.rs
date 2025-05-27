@@ -41,9 +41,10 @@ pub fn update_stalling_context(
                 }
                 Some((next, is_terminal))
             }
-            PlayerAction::Key(_) | PlayerAction::Move(_) | PlayerAction::SolveRune => {
-                Some((next, matches!(next, Player::Idle)))
-            }
+            PlayerAction::PingPong(_)
+            | PlayerAction::Key(_)
+            | PlayerAction::Move(_)
+            | PlayerAction::SolveRune => Some((next, matches!(next, Player::Idle))),
         },
         || next,
     )

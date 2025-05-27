@@ -226,7 +226,7 @@ fn points_from(
     /// A margin of error to ensure jump is launched just before the platform edge
     const JUMP_OFFSET: i32 = 2;
 
-    const WALK_AND_JUMP_THRESHOLD: i32 = 12;
+    const WALK_AND_JUMP_THRESHOLD: i32 = 13;
 
     let mut current = to_platform;
     let mut went_to = HashMap::new();
@@ -237,6 +237,7 @@ fn points_from(
     }
     current = from_platform;
 
+    // TODO: Likely messed up some numbers
     let mut points = vec![];
     let mut last_point = Point::new(from.x, current.y);
     let double_jump_offset = double_jump_threshold / 2 + DOUBLE_JUMP_EXTRA_OFFSET;
@@ -262,7 +263,7 @@ fn points_from(
             let can_double_jump_last_point = if is_ltr {
                 current.xs.end - last_point.x > double_jump_threshold
             } else {
-                last_point.x - current.xs.start + 1 > double_jump_threshold
+                last_point.x - current.xs.start >= double_jump_threshold
             };
             // Ignore initial point as it has the same platform as the current
             let can_double_jump_last_point = can_double_jump_last_point && points.len() > 1;
@@ -270,8 +271,8 @@ fn points_from(
             // Check if the two platforms are close enough to just do a walk and jump
             let (offset, hint) = if enable_hint
                 && !can_double_jump_last_point
-                && start_max - end_min <= WALK_AND_JUMP_THRESHOLD
-                && (current.y - next.y).abs() <= jump_threshold
+                && start_max - end_min - 1 < WALK_AND_JUMP_THRESHOLD
+                && (current.y - next.y).abs() < jump_threshold
             {
                 (JUMP_OFFSET, MovementHint::WalkAndJump)
             } else {
@@ -310,7 +311,7 @@ fn find_platform(
         .filter(|platform| platform.xs.contains(&point.x))
         .min_by_key(|platform| (platform.y - point.y).abs())
         .filter(|platform| {
-            jump_threshold.is_none() || (platform.y - point.y).abs() <= jump_threshold.unwrap()
+            jump_threshold.is_none() || (platform.y - point.y).abs() < jump_threshold.unwrap()
         })
         .copied()
 }
@@ -318,7 +319,7 @@ fn find_platform(
 #[inline]
 fn weight_score(current: Platform, neighbor: Platform, vertical_threshold: i32) -> u32 {
     let y_distance = (current.y - neighbor.y).abs();
-    if y_distance <= vertical_threshold {
+    if y_distance < vertical_threshold {
         y_distance as u32
     } else {
         u32::MAX
@@ -340,16 +341,16 @@ fn platforms_reachable(
 ) -> bool {
     let diff = from.y - to.y;
     if !ranges_overlap(from.xs, to.xs) {
-        if diff >= 0 || diff.abs() <= jump_threshold {
+        if diff >= 0 || diff.abs() < jump_threshold {
             return max(from.xs.start, to.xs.start) - min(from.xs.end, to.xs.end)
-                <= double_jump_threshold;
+                < double_jump_threshold;
         }
         return false;
     }
     if from.xs.is_empty() || to.xs.is_empty() {
         return false;
     }
-    diff >= 0 || diff.abs() <= grappling_threshold
+    diff >= 0 || diff.abs() < grappling_threshold
 }
 
 #[inline]
@@ -440,13 +441,13 @@ mod tests {
     fn find_points_with_multi_hop_path() {
         let platforms = [
             Platform::new(0..50, 50),
-            Platform::new(0..50, 91),
-            Platform::new(0..50, 132),
+            Platform::new(0..50, 90),
+            Platform::new(0..50, 130),
         ];
         let platforms = make_platforms_with_neighbors(&platforms);
 
         let from = Point::new(10, 50);
-        let to = Point::new(20, 132);
+        let to = Point::new(20, 131);
 
         let points = find_points_with(&platforms, from, to, true, 25, 7, 41).unwrap();
 
@@ -457,8 +458,8 @@ mod tests {
             "Expected ascending y values in multi-hop: {ys:?}",
         );
 
-        assert_eq!(points.first().unwrap().0.y, 91);
-        assert_eq!(points.last().unwrap().0.y, 132);
+        assert_eq!(points.first().unwrap().0.y, 90);
+        assert_eq!(points.last().unwrap().0.y, 130);
     }
 
     #[test]

@@ -4,7 +4,7 @@ use platforms::windows::KeyKind;
 
 use super::{
     Player, PlayerAction, PlayerActionAutoMob, PlayerActionKey, PlayerActionMove, PlayerState,
-    actions::on_action_state_mut,
+    actions::{PlayerActionPingPong, on_action_state_mut, on_ping_pong_double_jump_action},
     double_jump::DoubleJumping,
     moving::{Moving, find_intermediate_points},
     use_key::UseKey,
@@ -151,6 +151,11 @@ fn on_player_action(
             }
             Some((Player::Idle, true))
         }
+        PlayerAction::PingPong(PlayerActionPingPong {
+            bound, direction, ..
+        }) => Some(on_ping_pong_double_jump_action(
+            context, cur_pos, bound, direction,
+        )),
     }
 }
 
