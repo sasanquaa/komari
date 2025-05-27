@@ -151,9 +151,10 @@ fn on_player_action(
             }
             Some((Player::Idle, true))
         }
-        PlayerAction::PingPong(PlayerActionPingPong { direction, .. }) => Some((
-            on_ping_pong_double_jump_action(context, cur_pos, direction),
-            false,
+        PlayerAction::PingPong(PlayerActionPingPong {
+            bound, direction, ..
+        }) => Some(on_ping_pong_double_jump_action(
+            context, cur_pos, bound, direction,
         )),
     }
 }

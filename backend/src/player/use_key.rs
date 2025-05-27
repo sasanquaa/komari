@@ -333,16 +333,16 @@ pub fn update_use_key_context(
                 }
                 Some((next, is_terminal))
             }
-            PlayerAction::PingPong(PlayerActionPingPong { direction, .. }) => {
+            PlayerAction::PingPong(PlayerActionPingPong {
+                bound, direction, ..
+            }) => {
                 if matches!(next, Player::Idle) {
                     state.clear_unstucking(true);
-                    Some((
-                        on_ping_pong_double_jump_action(
-                            context,
-                            state.last_known_pos.unwrap(),
-                            direction,
-                        ),
-                        false,
+                    Some(on_ping_pong_double_jump_action(
+                        context,
+                        state.last_known_pos.unwrap(),
+                        bound,
+                        direction,
                     ))
                 } else {
                     None

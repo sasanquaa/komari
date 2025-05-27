@@ -153,12 +153,12 @@ pub fn update_up_jumping_context(
                         }
                         Some((Player::UseKey(UseKey::from_action(action)), false))
                     }
-                    PlayerAction::PingPong(PlayerActionPingPong { direction, .. }) => {
+                    PlayerAction::PingPong(PlayerActionPingPong {
+                        bound, direction, ..
+                    }) => {
                         if moving.completed && rand::random_bool(0.1) {
-                            let _ = context.keys.send_up(KeyKind::Up);
-                            Some((
-                                on_ping_pong_double_jump_action(context, cur_pos, direction),
-                                false,
+                            Some(on_ping_pong_double_jump_action(
+                                context, cur_pos, bound, direction,
                             ))
                         } else {
                             None

@@ -88,9 +88,8 @@ pub fn update_grappling_context(
                         bound, direction, ..
                     }) => {
                         if cur_pos.y >= bound.y && rand::random_bool(0.1) {
-                            Some((
-                                on_ping_pong_double_jump_action(context, cur_pos, direction),
-                                false,
+                            Some(on_ping_pong_double_jump_action(
+                                context, cur_pos, bound, direction,
                             ))
                         } else {
                             None

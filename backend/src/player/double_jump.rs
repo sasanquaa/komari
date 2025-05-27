@@ -1,16 +1,14 @@
 use std::cmp::Ordering;
 
 use log::debug;
-use opencv::core::Point;
+use opencv::core::{Point, Rect};
 use platforms::windows::KeyKind;
 
 use super::{
-    Player, PlayerAction, PlayerActionKey, PlayerState,
-    actions::{
-        PlayerActionPingPong, on_action_state, on_auto_mob_use_key_action,
-        on_ping_pong_use_key_action,
-    },
+    PingPongDirection, Player, PlayerAction, PlayerActionKey, PlayerState,
+    actions::{PlayerActionPingPong, on_action_state, on_auto_mob_use_key_action},
     moving::Moving,
+    timeout::update_with_timeout,
     use_key::UseKey,
 };
 use crate::{
@@ -40,6 +38,12 @@ const USE_KEY_Y_THRESHOLD: i32 = 10;
 /// Note: Even in auto mob, also use the non-auto mob threshold.
 const TIMEOUT: u32 = MOVE_TIMEOUT * 2;
 
+/// Number of ticks to wait after a double jump.
+///
+/// A heuristic to mostly avoid mid-air jump keys sending. The current approach of using velocity
+/// does not send much keys after double jumped, but only few are sent mid-air.
+const COOLDOWN_TIMEOUT: u32 = MOVE_TIMEOUT;
+
 /// Minimum x distance from the destination required to transition to [`Player::Grappling`].
 const GRAPPLING_THRESHOLD: i32 = 4;
 
@@ -63,6 +67,8 @@ pub struct DoubleJumping {
     pub forced: bool,
     /// Whether to wait for the player is about to become stationary before sending jump keys.
     require_near_stationary: bool,
+    /// Timeout for between double jump cooldown.
+    cooldown_timeout: Timeout,
 }
 
 impl DoubleJumping {
@@ -71,6 +77,7 @@ impl DoubleJumping {
             moving,
             forced,
             require_near_stationary: require_stationary,
+            cooldown_timeout: Timeout::default(),
         }
     }
 
@@ -138,6 +145,8 @@ pub fn update_double_jumping_context(
             let _ = context.keys.send_up(KeyKind::Left);
         }),
         |mut moving| {
+            let mut double_jumping = double_jumping;
+
             if !moving.completed {
                 if !double_jumping.forced || state.config.teleport_key.is_some() {
                     let option = match x_direction.cmp(&0) {
@@ -167,10 +176,20 @@ pub fn update_double_jumping_context(
                     && x_distance >= state.double_jump_threshold(is_intermediate);
                 let can_press = double_jumping.forced && state.velocity.0 <= X_VELOCITY_THRESHOLD;
                 if can_continue || can_press {
-                    if state.velocity.0 <= X_VELOCITY_THRESHOLD {
+                    if !double_jumping.cooldown_timeout.started
+                        && state.velocity.0 <= X_VELOCITY_THRESHOLD
+                    {
                         let _ = context
                             .keys
                             .send(state.config.teleport_key.unwrap_or(state.config.jump_key));
+                    } else {
+                        double_jumping.cooldown_timeout = update_with_timeout(
+                            double_jumping.cooldown_timeout,
+                            COOLDOWN_TIMEOUT,
+                            |timeout| timeout,
+                            Timeout::default,
+                            |timeout| timeout,
+                        );
                     }
                 } else {
                     let _ = context.keys.send_up(KeyKind::Right);
@@ -184,12 +203,11 @@ pub fn update_double_jumping_context(
                 |state, action| {
                     on_player_action(
                         context,
-                        cur_pos,
-                        double_jumping.forced,
+                        state,
                         action,
                         moving,
-                        state.velocity.0,
-                        state.config.grappling_key.is_some(),
+                        double_jumping.forced,
+                        state.velocity.0 > X_VELOCITY_THRESHOLD,
                     )
                 },
                 || {
@@ -225,13 +243,13 @@ pub fn update_double_jumping_context(
 /// it will try to transition to [`Player::UseKey`] when the player is close enough.
 fn on_player_action(
     context: &Context,
-    cur_pos: Point,
-    forced: bool,
+    state: &PlayerState,
     action: PlayerAction,
     moving: Moving,
-    x_velocity: f32,
-    has_grapping: bool,
+    forced: bool,
+    double_jumped_or_flying: bool,
 ) -> Option<(Player, bool)> {
+    let cur_pos = state.last_known_pos.unwrap();
     let (x_distance, _) = moving.x_distance_direction_from(false, cur_pos);
     let (y_distance, _) = moving.y_distance_direction_from(false, cur_pos);
 
@@ -244,8 +262,8 @@ fn on_player_action(
             cur_pos,
             bound,
             direction,
-            x_velocity > X_VELOCITY_THRESHOLD,
-            has_grapping,
+            double_jumped_or_flying,
+            state.config.grappling_key.is_some(),
         ),
         PlayerAction::AutoMob(_) => {
             on_auto_mob_use_key_action(context, action, moving.pos, x_distance, y_distance)
@@ -278,6 +296,75 @@ fn on_player_action(
     }
 }
 
+/// Handles ping pong action during double jump.
+///
+/// This function checks for specific conditions to decide whether to:
+/// - Transition to [`Player::Idle`] when player hits horizontal bounds
+/// - If the player has double jumped or already flying:
+///   - Transition to [`Player::Falling`] or [`Player::UpJumping`] with a chance to simulate vertical movement
+///   - Transition to [`Player::UseKey`] otherwise
+#[inline]
+fn on_ping_pong_use_key_action(
+    context: &Context,
+    action: PlayerAction,
+    cur_pos: Point,
+    bound: Rect,
+    direction: PingPongDirection,
+    double_jumped: bool,
+    has_grappling: bool,
+) -> Option<(Player, bool)> {
+    let hit_x_bound_edge = match direction {
+        PingPongDirection::Left => cur_pos.x < bound.x,
+        PingPongDirection::Right => cur_pos.x > bound.x + bound.width,
+    };
+    if hit_x_bound_edge {
+        return Some((Player::Idle, true));
+    }
+    if !double_jumped {
+        return None;
+    }
+
+    let _ = context.keys.send_up(KeyKind::Left);
+    let _ = context.keys.send_up(KeyKind::Right);
+    let bound_y_max = bound.y + bound.height;
+    let bound_y_mid = bound_y_max / 2;
+
+    let upward_bias = cur_pos.y < bound_y_mid;
+    let downward_bias = cur_pos.y > bound_y_mid;
+
+    let chance = rand::random_range(0.1..0.2);
+    let should_upward = upward_bias && rand::random_bool(chance);
+    let should_downward = downward_bias && rand::random_bool(chance);
+
+    if cur_pos.y < bound.y || should_upward {
+        let moving = Moving::new(
+            cur_pos,
+            Point::new(cur_pos.x, bound.y + bound.height),
+            false,
+            None,
+        );
+        let next = if has_grappling {
+            Player::Grappling(moving)
+        } else {
+            Player::UpJumping(moving)
+        };
+        return Some((next, false));
+    }
+
+    if cur_pos.y > bound_y_max || should_downward {
+        return Some((
+            Player::Falling(
+                Moving::new(cur_pos, Point::new(cur_pos.x, bound.y), false, None),
+                cur_pos,
+                true,
+            ),
+            false,
+        ));
+    }
+
+    Some((Player::UseKey(UseKey::from_action(action)), false))
+}
+
 /// Gets the mage teleport direction when the player is already at destination.
 fn get_mage_teleport_direction(
     state: &PlayerState,
@@ -303,15 +390,19 @@ fn get_mage_teleport_direction(
 
 #[cfg(test)]
 mod tests {
-    use opencv::core::Point;
+    use std::assert_matches::assert_matches;
+
+    use anyhow::Ok;
+    use opencv::core::{Point, Rect};
     use platforms::windows::KeyKind;
 
-    use super::update_double_jumping_context;
+    use super::{on_ping_pong_use_key_action, update_double_jumping_context};
     use crate::{
         ActionKeyDirection,
         bridge::MockKeySender,
         context::Context,
         player::{
+            PingPongDirection, Player, PlayerAction, PlayerActionPingPong,
             double_jump::DoubleJumping, moving::Moving, state::PlayerState, timeout::Timeout,
         },
     };
@@ -389,6 +480,113 @@ mod tests {
         let context = Context::new(Some(keys), None);
 
         update_double_jumping_context(&context, &mut state, jumping);
+    }
+
+    #[test]
+    fn ping_pong_hits_left_bound_transitions_to_idle() {
+        let cur_pos = Point::new(10, 100);
+        let bound = Rect::new(20, 90, 40, 20); // left = 20
+        let action = PlayerAction::PingPong(PlayerActionPingPong {
+            bound,
+            direction: PingPongDirection::Left,
+            ..Default::default()
+        });
+
+        let context = Context::new(None, None);
+        let result = on_ping_pong_use_key_action(
+            &context,
+            action,
+            cur_pos,
+            bound,
+            PingPongDirection::Left,
+            true,
+            false,
+        );
+        assert_matches!(result, Some((Player::Idle, true)));
+    }
+
+    #[test]
+    fn ping_pong_before_double_jump_returns_none() {
+        let cur_pos = Point::new(30, 100);
+        let bound = Rect::new(20, 90, 40, 20);
+        let action = PlayerAction::PingPong(PlayerActionPingPong {
+            bound,
+            direction: PingPongDirection::Right,
+            ..Default::default()
+        });
+
+        let context = Context::new(None, None);
+        let result = on_ping_pong_use_key_action(
+            &context,
+            action,
+            cur_pos,
+            bound,
+            PingPongDirection::Right,
+            false, // hasn't double jumped
+            true,
+        );
+        assert_matches!(result, None);
+    }
+
+    #[test]
+    fn ping_pong_transition_to_upjumping_or_grappling() {
+        let cur_pos = Point::new(30, 79); // below y
+        let bound = Rect::new(20, 80, 40, 20);
+        let action = PlayerAction::PingPong(PlayerActionPingPong {
+            bound,
+            direction: PingPongDirection::Right,
+            ..Default::default()
+        });
+
+        let mut keys = MockKeySender::new();
+        keys.expect_send_up().returning(|_| Ok(()));
+        let context = Context::new(Some(keys), None);
+        let result = on_ping_pong_use_key_action(
+            &context,
+            action,
+            cur_pos,
+            bound,
+            PingPongDirection::Right,
+            true,
+            false, // no grappling
+        );
+        assert_matches!(result, Some((Player::UpJumping(_), false)));
+
+        let result_with_grappling = on_ping_pong_use_key_action(
+            &context,
+            action,
+            cur_pos,
+            bound,
+            PingPongDirection::Right,
+            true,
+            true,
+        );
+        assert_matches!(result_with_grappling, Some((Player::Grappling(_), false)));
+    }
+
+    #[test]
+    fn ping_pong_transition_to_falling() {
+        let cur_pos = Point::new(30, 101); // above y
+        let bound = Rect::new(20, 80, 40, 20);
+        let action = PlayerAction::PingPong(PlayerActionPingPong {
+            bound,
+            direction: PingPongDirection::Right,
+            ..Default::default()
+        });
+
+        let mut keys = MockKeySender::new();
+        keys.expect_send_up().returning(|_| Ok(()));
+        let context = Context::new(Some(keys), None);
+        let result = on_ping_pong_use_key_action(
+            &context,
+            action,
+            cur_pos,
+            bound,
+            PingPongDirection::Right,
+            true,
+            false,
+        );
+        matches!(result, Some((Player::Falling(_, _, true), false)));
     }
 
     // TODO: Add tests for player action

@@ -2,7 +2,7 @@ use opencv::core::{Point, Rect};
 use platforms::windows::KeyKind;
 use strum::Display;
 
-use super::{Player, PlayerState, moving::Moving, use_key::UseKey};
+use super::{Player, PlayerState, use_key::UseKey};
 use crate::{
     Action, ActionKey, ActionKeyDirection, ActionKeyWith, ActionMove, KeyBinding, Position,
     context::{Context, MS_PER_TICK},
@@ -114,6 +114,7 @@ impl std::fmt::Display for PlayerActionAutoMob {
 ///
 /// This action forces the player to always stay inside the bound.
 #[derive(Clone, Copy, Debug)]
+#[cfg_attr(test, derive(Default))]
 pub struct PlayerActionPingPong {
     pub key: KeyBinding,
     pub count: u32,
@@ -130,6 +131,13 @@ pub struct PlayerActionPingPong {
 pub enum PingPongDirection {
     Left,
     Right,
+}
+
+#[cfg(test)]
+impl Default for PingPongDirection {
+    fn default() -> Self {
+        Self::Left
+    }
 }
 
 /// Represents an action the [`Rotator`] can use.
@@ -161,77 +169,31 @@ impl From<Action> for PlayerAction {
 pub fn on_ping_pong_double_jump_action(
     context: &Context,
     cur_pos: Point,
+    bound: Rect,
     direction: PingPongDirection,
-) -> Player {
+) -> (Player, bool) {
+    let hit_x_bound_edge = match direction {
+        PingPongDirection::Left => cur_pos.x < bound.x,
+        PingPongDirection::Right => cur_pos.x > bound.x + bound.width,
+    };
+    if hit_x_bound_edge {
+        return (Player::Idle, true);
+    }
+
+    let _ = context.keys.send_up(KeyKind::Down);
+    let _ = context.keys.send_up(KeyKind::Up);
+    let _ = context.keys.send_up(KeyKind::Left);
+    let _ = context.keys.send_up(KeyKind::Right);
     let minimap_width = match context.minimap {
         Minimap::Idle(idle) => idle.bbox.width,
         _ => unreachable!(),
     };
     let y = cur_pos.y; // y doesn't matter in ping pong
-
-    match direction {
+    let moving = match direction {
         PingPongDirection::Left => Player::Moving(Point::new(0, y), false, None),
         PingPongDirection::Right => Player::Moving(Point::new(minimap_width, y), false, None),
-    }
-}
-
-/// Checks transitioning to [`Player::UseKey`], [`Player::Idle`], [`Player::Falling`],
-/// [`Player::Grappling`] or [`Player::UpJumping`] in [`PlayerAction::PingPong`].
-#[inline]
-pub fn on_ping_pong_use_key_action(
-    context: &Context,
-    action: PlayerAction,
-    cur_pos: Point,
-    bound: Rect,
-    direction: PingPongDirection,
-    flying_or_double_jumped: bool,
-    has_grappling: bool,
-) -> Option<(Player, bool)> {
-    if flying_or_double_jumped {
-        let hit_x_bound_edge = match direction {
-            PingPongDirection::Left => cur_pos.x < bound.x,
-            PingPongDirection::Right => cur_pos.x > bound.x + bound.width,
-        };
-        if hit_x_bound_edge {
-            return Some((Player::Idle, true));
-        }
-
-        let bound_y_mid = (bound.y + bound.height) / 2;
-        if cur_pos.y < bound.y || ((cur_pos.y < bound_y_mid) && rand::random_bool(0.1)) {
-            let moving = Moving::new(
-                cur_pos,
-                Point::new(cur_pos.x, bound.y + bound.height),
-                false,
-                None,
-            );
-            let next = if has_grappling {
-                Player::Grappling(moving)
-            } else {
-                Player::UpJumping(moving)
-            };
-
-            clear_keys(context);
-            return Some((next, false));
-        }
-
-        let bound_y_max = bound.y + bound.height;
-        if cur_pos.y > bound_y_max || (cur_pos.y > bound_y_mid && rand::random_bool(0.1)) {
-            clear_keys(context);
-            return Some((
-                Player::Falling(
-                    Moving::new(cur_pos, Point::new(cur_pos.x, bound.y), false, None),
-                    cur_pos,
-                    true,
-                ),
-                false,
-            ));
-        }
-
-        clear_keys(context);
-        Some((Player::UseKey(UseKey::from_action(action)), false))
-    } else {
-        None
-    }
+    };
+    (moving, false)
 }
 
 /// Checks proximity in [`PlayerAction::AutoMob`] for transitioning to [`Player::UseKey`].
@@ -246,7 +208,10 @@ pub fn on_auto_mob_use_key_action(
     y_distance: i32,
 ) -> Option<(Player, bool)> {
     if x_distance <= AUTO_MOB_USE_KEY_X_THRESHOLD && y_distance <= AUTO_MOB_USE_KEY_Y_THRESHOLD {
-        clear_keys(context);
+        let _ = context.keys.send_up(KeyKind::Down);
+        let _ = context.keys.send_up(KeyKind::Up);
+        let _ = context.keys.send_up(KeyKind::Left);
+        let _ = context.keys.send_up(KeyKind::Right);
         Some((
             Player::UseKey(UseKey::from_action_pos(action, Some(cur_pos))),
             false,
@@ -254,13 +219,6 @@ pub fn on_auto_mob_use_key_action(
     } else {
         None
     }
-}
-
-fn clear_keys(context: &Context) {
-    let _ = context.keys.send_up(KeyKind::Down);
-    let _ = context.keys.send_up(KeyKind::Up);
-    let _ = context.keys.send_up(KeyKind::Left);
-    let _ = context.keys.send_up(KeyKind::Right);
 }
 
 /// Callbacks for when there is a normal or priority [`PlayerAction`].
