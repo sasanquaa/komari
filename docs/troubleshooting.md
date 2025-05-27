@@ -46,4 +46,15 @@ points `x` distance should be less than `25`.
 - If you are any other class with up jump skill such as Explorer Warriors, Blaster,... set this key to that skill
 
 ## Missing installation
-If you use the bot on a newly installed Windows, make sure [Visual C++ Redistributable 2015-2022](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist#visual-studio-2015-2017-2019-and-2022) is installed.
+If you use the bot on a newly installed Windows, make sure [Visual C++ Redistributable 2015-2022](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist#visual-studio-2015-2017-2019-and-2022) and [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2?form=MA13LH) are installed.
+
+## Unstucking state
+Unstucking state is a state that helps the bot from being stuck by UI dialog, undetectable player position, rope, etc..
+However, this state can also transition due to wrong setup. This state can be caused by the following main reason:
+- The bot successfully detects the minimap but failed to detect the player and thinks the player might be inside the edges
+- The bot tries to perform action that requires movement but the player did not move after a while
+- When using remote control app:
+  - Usually the Num Lock key can cause the bot to send `4826` instead of arrow keys in the `Default Input Method` and bot will keep moving in one direction caused by pressing `Jump key` without arrow keys
+  - Using the bot with through remote control requires precise game window size on the host (the PC that runs the bot), check the remote control documentation for more details
+
+

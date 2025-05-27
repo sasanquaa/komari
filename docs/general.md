@@ -1,12 +1,14 @@
 - [Download](#download)
 - [Concepts](#concepts)
   - [Map](#map)
+  - [Movement](#movement)
   - [Configuration](#configuration)
   - [Action](#action)
   - [Condition](#condition)
   - [Linked Key & Linked Action](#linked-key--linked-action)
   - [Rotation Modes](#rotation-modes)
   - [Auto-mobbing](#auto-mobbing)
+  - [Ping Pong](#ping-pong)
   - [Platforms Pathing](#platforms-pathing)
   - [Capture Modes](#capture-modes)
 - [Video guides](#video-guides)
@@ -31,6 +33,14 @@ the order of one action to another depending on rotation mode.
 
 ![Map](https://github.com/sasanquaa/komari/blob/master/.github/images/map.png?raw=true)
 
+#### Movement
+Bot default movement without platforms pathing is really simple:
+1. Moves horizontally first to match `x` of a destination
+2. Then performs fall/up jump/grapple to match `y` of a destination
+
+If `x` is close enough to a destination (`close enough` currently means distance than `25`, subject to change), the bot will walk instead 
+of double jump.
+
 #### Configuration
 - Configuration is used to change key bindings, set up buffs,...
 - Configuration can be created for use with different character(s) through preset
@@ -40,12 +50,7 @@ the order of one action to another depending on rotation mode.
   - `Buffs`: For automatic buffs configuration
   - `Fixed Actions`: Actions that are shared across all maps, useful for buffs or one-time skills
 
-For supported buffs in the configuration, the bot relies on detecting buffs on the top-right corner. And the bot
-movement depends heavily on the skill `Rope Lift` to move around platforms, so make sure you set a key for it.
-
-![Rope Lift](https://github.com/sasanquaa/komari/blob/master/.github/images/ropelift.png?raw=true)
-
-![Configuration](https://github.com/sasanquaa/komari/blob/master/.github/images/configuration.png?raw=true)
+For supported buffs in the configuration, the bot relies on detecting buffs on the top-right corner. From v0.12, `Rope Lift` skill can now be disabled. If not provided, the bot will just try to up jump.
 
 ![Buffs](https://github.com/sasanquaa/komari/blob/master/.github/images/buffs.png?raw=true)
 
@@ -141,7 +146,8 @@ Linked action cannot be overriden by any other type of actions once it has start
 Rotation mode specifies how to run the actions and affects **only** `Any` condition actions. There are three modes:
 - `StartToEnd` - Runs actions from start to end in the order added and repeats
 - `StartToEndThenReverse` - Runs actions from start to end in the order added and reverses (end to start)
-- `AutoMobbing` - All added actions are ignored and, instead, detects a random mob within bounds to hit
+- `AutoMobbing` - All added normal actions are ignored and, instead, detects a random mob within bounds to hit
+- `PingPong` - All added normal actions are ignored and, instead, double jumps and uses key until hitting the bound edges
 
 For other conditions actions:
 - `EveryMillis` actions run out of order
@@ -158,6 +164,16 @@ Auto-mobbing is feature to hit random mobs detected on screen. It can be enabled
   - Try to detect "gaps" between platforms to ignore invalid mob positions
 
 ![Auto Mobbing](https://github.com/sasanquaa/komari/blob/master/.github/images/automobbing.png?raw=true)
+
+#### Ping Pong
+Added in v0.12:
+- All added `Any` condition actions are ignored but still possible to use other conditions similar to `AutoMobbing`
+- Player double jumps and uses key until hitting the bound edges, then reverses in the other direction
+- Forces the player to always try and stay inside the bound
+- If already inside bound:
+  - Has 10% chance to grapple/up jump if below bound mid `y`
+  - Has 10% chance to fall down if above bound mid `y`
+- Simpler than `AutoMobbing`, can achieve higher mob count and useful for class that mostly just double jumps and spams attack (e.g. Night Walker)
 
 #### Platforms Pathing
 Platforms pathing is currently only supported for Auto Mobbing and Rune Solving. This feature exists to help
@@ -183,6 +199,8 @@ There are three capture modes, the first two are similar to what you see in OBS:
   - **When using this capture mode, key inputs will also be affected:**
     - **Make sure the window on top of the capture area is focused by clicking it for key inputs to work**
     - For example, if you have Notepad on top of the game and focused, it will send input to the Notepad instead of the game
+
+You can also directly select which window to capture via `Capture Handle`.
 
 ## Video guides
 1. [Basic operations](https://youtu.be/8X2CKS7bnHY?si=3yPmVPaMsFEyDD8c)
