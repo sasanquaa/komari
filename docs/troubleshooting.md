@@ -4,6 +4,7 @@
 - [Preventing double jump(s)](#preventing-double-jumps)
 - [Mage up jump](#mage-up-jump)
 - [Installation](#installation)
+- [Unstucking state](#unstucking-state)
 
 ## Wrong map detection
 Wrong map detection can happen when:
