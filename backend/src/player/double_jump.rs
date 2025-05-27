@@ -314,8 +314,10 @@ fn on_ping_pong_use_key_action(
     has_grappling: bool,
 ) -> Option<(Player, bool)> {
     let hit_x_bound_edge = match direction {
-        PingPongDirection::Left => cur_pos.x < bound.x,
-        PingPongDirection::Right => cur_pos.x > bound.x + bound.width,
+        PingPongDirection::Left => (cur_pos.x - bound.x).abs() <= DOUBLE_JUMP_THRESHOLD,
+        PingPongDirection::Right => {
+            (cur_pos.x - bound.x - bound.width).abs() <= DOUBLE_JUMP_THRESHOLD
+        }
     };
     if hit_x_bound_edge {
         return Some((Player::Idle, true));
@@ -332,9 +334,8 @@ fn on_ping_pong_use_key_action(
     let upward_bias = cur_pos.y < bound_y_mid;
     let downward_bias = cur_pos.y > bound_y_mid;
 
-    let chance = rand::random_range(0.1..0.2);
-    let should_upward = upward_bias && rand::random_bool(chance);
-    let should_downward = downward_bias && rand::random_bool(chance);
+    let should_upward = upward_bias && rand::random_bool(0.15);
+    let should_downward = downward_bias && rand::random_bool(0.1);
 
     if cur_pos.y < bound.y || should_upward {
         let moving = Moving::new(

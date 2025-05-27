@@ -87,7 +87,7 @@ pub fn update_grappling_context(
                     PlayerAction::PingPong(PlayerActionPingPong {
                         bound, direction, ..
                     }) => {
-                        if cur_pos.y >= bound.y && rand::random_bool(0.1) {
+                        if cur_pos.y >= bound.y && rand::random_bool(0.2) {
                             Some(on_ping_pong_double_jump_action(
                                 context, cur_pos, bound, direction,
                             ))

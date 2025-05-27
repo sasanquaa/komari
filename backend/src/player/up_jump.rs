@@ -156,7 +156,7 @@ pub fn update_up_jumping_context(
                     PlayerAction::PingPong(PlayerActionPingPong {
                         bound, direction, ..
                     }) => {
-                        if moving.completed && rand::random_bool(0.1) {
+                        if moving.completed && rand::random_bool(0.2) {
                             Some(on_ping_pong_double_jump_action(
                                 context, cur_pos, bound, direction,
                             ))

@@ -2,7 +2,7 @@ use opencv::core::{Point, Rect};
 use platforms::windows::KeyKind;
 use strum::Display;
 
-use super::{Player, PlayerState, use_key::UseKey};
+use super::{DOUBLE_JUMP_THRESHOLD, Player, PlayerState, use_key::UseKey};
 use crate::{
     Action, ActionKey, ActionKeyDirection, ActionKeyWith, ActionMove, KeyBinding, Position,
     context::{Context, MS_PER_TICK},
@@ -109,8 +109,8 @@ impl std::fmt::Display for PlayerActionAutoMob {
 /// Represents a ping pong action.
 ///
 /// This is a type of action that moves in one direction and spams a fixed key. Once the player hits
-/// the edge determined by [`Self::bound`], that is when the action completed. The [`Rotator`]
-/// then rotates the next action in the reverse direction.
+/// either edges determined by [`Self::bound`] or close enough, the action is completed.
+/// The [`Rotator`] then rotates the next action in the reverse direction.
 ///
 /// This action forces the player to always stay inside the bound.
 #[derive(Clone, Copy, Debug)]
@@ -173,8 +173,10 @@ pub fn on_ping_pong_double_jump_action(
     direction: PingPongDirection,
 ) -> (Player, bool) {
     let hit_x_bound_edge = match direction {
-        PingPongDirection::Left => cur_pos.x < bound.x,
-        PingPongDirection::Right => cur_pos.x > bound.x + bound.width,
+        PingPongDirection::Left => (cur_pos.x - bound.x).abs() <= DOUBLE_JUMP_THRESHOLD,
+        PingPongDirection::Right => {
+            (cur_pos.x - bound.x - bound.width).abs() <= DOUBLE_JUMP_THRESHOLD
+        }
     };
     if hit_x_bound_edge {
         return (Player::Idle, true);
