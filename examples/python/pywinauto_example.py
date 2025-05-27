@@ -21,22 +21,21 @@ class KeyInput(KeyInputServicer):
         if self.window.has_keyboard_focus():
             key = self.keys_map[request.key]
             if len(key) == 1:
-                keyboard.send_keys(self.keys_map[request.key], pause=0)
+                keyboard.send_keys(key, pause=0, vk_packet=False)
             else:
-                keyboard.send_keys(
-                    "{" + self.keys_map[request.key] + "}", pause=0)
+                keyboard.send_keys("{" + key + "}", pause=0, vk_packet=False)
         return KeyResponse()
 
     def SendUp(self, request: KeyRequest, context):
         if self.window.has_keyboard_focus():
             keyboard.send_keys(
-                "{" + self.keys_map[request.key] + " up}", pause=0)
+                "{" + self.keys_map[request.key] + " up}", pause=0, vk_packet=False)
         return KeyResponse()
 
     def SendDown(self, request: KeyRequest, context):
         if self.window.has_keyboard_focus():
             keyboard.send_keys(
-                "{" + self.keys_map[request.key] + " down}", pause=0)
+                "{" + self.keys_map[request.key] + " down}", pause=0, vk_packet=False)
         return KeyResponse()
 
 
