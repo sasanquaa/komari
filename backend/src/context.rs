@@ -22,7 +22,7 @@ use crate::{
     Action, RequestHandler,
     bridge::{DefaultKeySender, ImageCapture, ImageCaptureKind, KeySender, KeySenderMethod},
     buff::{Buff, BuffKind, BuffState},
-    database::{CaptureMode, InputMethod, KeyBinding},
+    database::{CaptureMode, InputMethod, KeyBinding, query_seeds, upsert_seeds},
     detect::{CachedDetector, Detector},
     mat::OwnedMat,
     minimap::{Minimap, MinimapState},
@@ -30,26 +30,44 @@ use crate::{
     player::{Player, PlayerState},
     query_configs, query_settings,
     request_handler::{DefaultRequestHandler, config_buffs},
+    rng::Rng,
     rotator::Rotator,
     skill::{Skill, SkillKind, SkillState},
 };
 #[cfg(test)]
 use crate::{Settings, bridge::MockKeySender, detect::MockDetector};
 
-const FPS: u32 = 30;
-pub const MS_PER_TICK: u64 = 1000 / FPS as u64;
+/// Number of mean and standard deviation pairs to generate for sampling input delay.
+const MEAN_STD_PAIRS_COUNT: usize = 100;
 
-/// Represents a control flow after a context update
+/// Base mean in milliseconds to generate a pair from.
+const BASE_MEAN_MS_DELAY: f32 = 85.0;
+
+/// Base standard deviation in milliseconds to generate a pair from.
+const BASE_STD_MS_DELAY: f32 = 30.0;
+
+/// The rate at which generated standard deviation will revert to the base [`BASE_STD_MS_DELAY`]
+/// over time.
+const MEAN_STD_REVERSION_RATE: f32 = 0.05;
+
+/// The rate at which generated mean will revert to the base [`BASE_MEAN_MS_DELAY`] over time.
+const MEAN_STD_VOLATILITY: f32 = 0.1;
+
+const FPS: u32 = 30;
+pub const MS_PER_TICK: u64 = MS_PER_TICK_F32 as u64;
+pub const MS_PER_TICK_F32: f32 = 1000.0 / FPS as f32;
+
+/// A control flow to use after a contextual state update.
 pub enum ControlFlow<T> {
-    /// The context is updated immediately
+    /// The contextual state is updated immediately.
     Immediate(T),
-    /// The context is updated in the next tick
+    /// The contextual state is updated in the next tick.
     Next(T),
 }
 
-/// Represents a context-based state
+/// Represents a contextual state.
 pub trait Contextual {
-    /// Represents a state that is persistent through each `update` tick.
+    /// The inner state that is persistent through each [`Contextual::update`] tick.
     type Persistent = ();
 
     /// Updates the contextual state.
@@ -57,27 +75,39 @@ pub trait Contextual {
     /// This is basically a state machine.
     ///
     /// Updating is performed on each tick and the behavior whether to continue
-    /// updating in the same tick or next is decided by `ControlFlow`. The state
+    /// updating in the same tick or next is decided by [`ControlFlow`]. The state
     /// can transition or stay the same.
     fn update(self, context: &Context, persistent: &mut Self::Persistent) -> ControlFlow<Self>
     where
         Self: Sized;
 }
 
-/// A struct that stores the game information
+/// A struct that stores the game information.
 #[derive(Debug)]
 pub struct Context {
     /// The `MapleStory` class game handle.
     pub handle: Handle,
+    /// A struct to send key inputs.
     pub keys: Box<dyn KeySender>,
+    /// A struct for sending notifications through web hook.
     pub notification: DiscordNotification,
+    /// A struct to detect game information.
+    ///
+    /// This is [`None`] when no frame as ever been captured.
     pub detector: Option<Box<dyn Detector>>,
+    /// The minimap contextual state.
     pub minimap: Minimap,
+    /// The player contextual state.
     pub player: Player,
+    /// The skill contextual states.
     pub skills: [Skill; SkillKind::COUNT],
+    /// The buff contextual states.
     pub buffs: [Buff; BuffKind::COUNT],
+    /// Whether the bot is halting.
     pub halting: bool,
     /// The game current tick.
+    ///
+    /// This is increased on each update tick.
     pub tick: u64,
 }
 
@@ -155,6 +185,22 @@ fn update_loop() {
     let mut buffs = config_buffs(&config);
     let settings = query_settings(); // Override by UI
 
+    let mut seeds = query_seeds(); // Fixed, unchanged
+    let mut rng = Rng::new(seeds.input_seed);
+    if seeds.input_mean_std_pairs.len() != MEAN_STD_PAIRS_COUNT {
+        seeds.input_mean_std_pairs.clear();
+        seeds
+            .input_mean_std_pairs
+            .extend(rng.random_mean_std_pairs::<MEAN_STD_PAIRS_COUNT>(
+                BASE_MEAN_MS_DELAY,
+                BASE_STD_MS_DELAY,
+                MS_PER_TICK_F32,
+                MEAN_STD_REVERSION_RATE,
+                MEAN_STD_VOLATILITY,
+            ));
+        upsert_seeds(&mut seeds).unwrap();
+    }
+
     let key_sender_method = if let InputMethod::Rpc = settings.input_method {
         KeySenderMethod::Rpc(settings.input_method_rpc_server_url.clone())
     } else {
@@ -166,7 +212,7 @@ fn update_loop() {
             CaptureMode::BitBltArea => KeySenderMethod::Default(handle, KeyInputKind::Foreground),
         }
     };
-    let mut keys = DefaultKeySender::new(key_sender_method);
+    let mut keys = DefaultKeySender::new(key_sender_method, seeds);
     let key_sender = broadcast::channel::<KeyBinding>(1).0; // Callback to UI
     let mut key_receiver = KeyReceiver::new(handle, KeyInputKind::Fixed);
 
@@ -235,6 +281,14 @@ fn update_loop() {
             // Rotating action must always be done last
             rotator.rotate_action(&context, &mut player_state);
         }
+        // TODO: Maybe should not downcast but really don't want to public update_input_delay
+        // method
+        context
+            .keys
+            .as_any_mut()
+            .downcast_mut::<DefaultKeySender>()
+            .unwrap()
+            .update_input_delay();
 
         // Poll requests, keys and update scheduled notifications frames
         let mut settings_borrow_mut = settings.borrow_mut();

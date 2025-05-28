@@ -52,6 +52,39 @@ trait Identifiable {
     fn set_id(&mut self, id: i64);
 }
 
+macro_rules! impl_identifiable {
+    ($type:ty) => {
+        impl Identifiable for $type {
+            fn id(&self) -> Option<i64> {
+                self.id
+            }
+
+            fn set_id(&mut self, id: i64) {
+                self.id = Some(id);
+            }
+        }
+    };
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Seeds {
+    pub id: Option<i64>,
+    pub input_seed: [u8; 32],
+    pub input_mean_std_pairs: Vec<(f32, f32)>,
+}
+
+impl Default for Seeds {
+    fn default() -> Self {
+        Self {
+            id: None,
+            input_seed: rand::random(),
+            input_mean_std_pairs: Vec::new(),
+        }
+    }
+}
+
+impl_identifiable!(Seeds);
+
 #[derive(
     Clone, Copy, PartialEq, Default, Debug, Serialize, Deserialize, EnumIter, Display, EnumString,
 )]
@@ -118,15 +151,7 @@ impl Default for Settings {
     }
 }
 
-impl Identifiable for Settings {
-    fn id(&self) -> Option<i64> {
-        self.id
-    }
-
-    fn set_id(&mut self, id: i64) {
-        self.id = Some(id);
-    }
-}
+impl_identifiable!(Settings);
 
 fn enable_rune_solving_default() -> bool {
     true
@@ -403,15 +428,7 @@ pub enum RotationMode {
     PingPong(PingPong),
 }
 
-impl Identifiable for Configuration {
-    fn id(&self) -> Option<i64> {
-        self.id
-    }
-
-    fn set_id(&mut self, id: i64) {
-        self.id = Some(id)
-    }
-}
+impl_identifiable!(Configuration);
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
@@ -433,15 +450,7 @@ pub struct Minimap {
     pub actions: HashMap<String, Vec<Action>>,
 }
 
-impl Identifiable for Minimap {
-    fn id(&self) -> Option<i64> {
-        self.id
-    }
-
-    fn set_id(&mut self, id: i64) {
-        self.id = Some(id)
-    }
-}
+impl_identifiable!(Minimap);
 
 #[derive(Clone, Copy, PartialEq, Debug, Default, Serialize, Deserialize)]
 pub struct Platform {
@@ -828,13 +837,32 @@ impl From<KeyKind> for KeyBinding {
     }
 }
 
-pub fn query_settings() -> Settings {
-    let mut settings = query_from_table("settings").unwrap().into_iter().next();
-    if settings.is_none() {
-        settings = Some(Settings::default());
-        upsert_settings(settings.as_mut().unwrap()).unwrap();
+pub fn query_seeds() -> Seeds {
+    let mut seeds = query_from_table::<Seeds>("seeds")
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap_or_default();
+    if seeds.id.is_none() {
+        upsert_seeds(&mut seeds).unwrap();
     }
-    settings.unwrap()
+    seeds
+}
+
+pub fn upsert_seeds(seeds: &mut Seeds) -> Result<()> {
+    upsert_to_table("seeds", seeds)
+}
+
+pub fn query_settings() -> Settings {
+    let mut settings = query_from_table::<Settings>("settings")
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap_or_default();
+    if settings.id.is_none() {
+        upsert_settings(&mut settings).unwrap();
+    }
+    settings
 }
 
 pub fn upsert_settings(settings: &mut Settings) -> Result<()> {

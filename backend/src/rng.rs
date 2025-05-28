@@ -1,11 +1,6 @@
 use rand::{SeedableRng, rngs::StdRng};
 use rand_distr::{Distribution, Normal};
 
-use crate::array::Array;
-
-const SPEED_OF_REVERSION: f32 = 0.2;
-const VOLATILITY: f32 = 0.15;
-
 pub type RngSeed = [u8; 32];
 
 #[derive(Debug)]
@@ -20,7 +15,16 @@ impl Rng {
         }
     }
 
-    /// Samples a random tick count from `mean_ms`, `std_ms` and `tick_ms`.
+    /// Retrieves the inner `StdRng` used by this `Rng`.
+    pub fn inner(&mut self) -> &mut StdRng {
+        &mut self.inner
+    }
+
+    /// Samples a random tick count.
+    ///
+    /// The random tick count is sampled from a normal distribution with mean `mean_ms` and
+    /// standard deviation `std_ms`. These two paramters are in milliseconds. The sampled
+    /// milliseconds is then divided by `tick_ms` to get the tick count.
     pub fn random_tick_count(&mut self, mean_ms: f32, std_ms: f32, tick_ms: f32) -> u32 {
         debug_assert!(std_ms > 0.0 && tick_ms > 0.0);
 
@@ -29,24 +33,28 @@ impl Rng {
         (ms / tick_ms) as u32
     }
 
-    /// Generates `N` pairs of mean and standard deviation from `base_mean`, `base_std` and
-    /// `delta_time`.
-    pub fn random_mu_std_pairs<const N: usize>(
+    /// Generates `N` pairs of mean and standard deviation from `base_mean` and `base_std` using
+    /// Ornstein-Uhlenbeck process.
+    pub fn random_mean_std_pairs<const N: usize>(
         &mut self,
         base_mean: f32,
         base_std: f32,
         delta_time: f32,
-    ) -> Array<(f32, f32), N> {
+        reversion_rate: f32,
+        volatility: f32,
+    ) -> Vec<(f32, f32)> {
+        // I do not have enough authority to speak on the math. It seems cool and work so good
+        // enough for me. Consult ChatGPT, DeepSeek, Claude, ... senseis for more details.
         debug_assert!(N > 1 && delta_time > 0.0 && base_std > 0.0);
 
         let normal = Normal::new(0.0, 1.0).unwrap();
-        let speed_mul_delta_time = SPEED_OF_REVERSION * delta_time;
-        let volatility_mul_delta_time_sqrt = VOLATILITY * f32::sqrt(delta_time);
-        let mut array = Array::new();
-        array.push((base_mean, base_std));
+        let speed_mul_delta_time = reversion_rate * delta_time;
+        let volatility_mul_delta_time_sqrt = volatility * f32::sqrt(delta_time);
+        let mut vec = Vec::with_capacity(N);
+        vec.push((base_mean, base_std));
 
         for i in 1..N {
-            let (prev_mean, prev_std) = array[i - 1];
+            let (prev_mean, prev_std) = vec[i - 1];
 
             let next_mean_normal_sample = normal.sample(&mut self.inner);
             let next_mean = prev_mean
@@ -59,9 +67,9 @@ impl Rng {
                 + volatility_mul_delta_time_sqrt * next_std_normal_sample)
                 .abs();
 
-            array.push((next_mean, next_std));
+            vec.push((next_mean, next_std));
         }
-        array
+        vec
     }
 }
 
@@ -84,16 +92,15 @@ mod tests {
     #[test]
     fn random_mu_std_pairs_seeded() {
         let mut rng = Rng::new(SEED);
-        let pairs = rng.random_mu_std_pairs::<3>(85.0, 30.0, 1000.0 / 30.0);
-        println!("{pairs:?}");
+        let pairs = rng.random_mean_std_pairs::<3>(85.0, 30.0, 1000.0 / 30.0, 0.05, 0.1);
 
         assert!(pairs[0].0 - 85.0 < 0.01);
         assert!(pairs[0].1 - 30.0 < 0.01);
 
-        assert!(pairs[1].0 - 83.99979 < 0.01);
-        assert!(pairs[1].1 - 28.149803 < 0.01);
+        assert!(pairs[1].0 - 84.33319 < 0.01);
+        assert!(pairs[1].1 - 28.766535 < 0.01);
 
-        assert!(pairs[2].0 - 91.042534 < 0.01);
-        assert!(pairs[2].1 - 41.771946 < 0.01);
+        assert!(pairs[2].0 - 85.69431 < 0.01);
+        assert!(pairs[2].1 - 31.680643 < 0.01);
     }
 }

@@ -124,7 +124,7 @@ pub struct Keys {
     key_down: RefCell<BitVec>,
 }
 
-#[derive(PartialEq, Eq, Clone, Copy, Default, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Default, Hash, Debug)]
 pub enum KeyKind {
     #[default]
     A,
@@ -266,7 +266,7 @@ impl Keys {
     #[inline]
     fn send_input(&self, kind: KeyKind, is_down: bool) -> Result<(), Error> {
         let handle = self.get_handle()?;
-        if !is_foreground(handle, self.key_input_kind) {
+        if is_down && !is_foreground(handle, self.key_input_kind) {
             return Err(Error::KeyNotSent);
         }
         let key = kind.into();

@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::{Error, Ok, bail};
 use bit_vec::BitVec;
 use input::key_input_client::KeyInputClient;
@@ -5,6 +7,7 @@ use input::{Key, KeyRequest};
 use platforms::windows::KeyKind;
 use tokio::runtime::Handle;
 use tokio::task::block_in_place;
+use tokio::time::timeout;
 use tonic::Request;
 use tonic::transport::{Channel, Endpoint};
 
@@ -27,7 +30,9 @@ impl KeysService {
         D::Error: std::error::Error + Send + Sync + 'static,
     {
         let endpoint = TryInto::<Endpoint>::try_into(dest.as_ref().to_string())?;
-        let client = block_future(async move { KeyInputClient::connect(endpoint).await })?;
+        let client = block_future(async move {
+            timeout(Duration::from_secs(3), KeyInputClient::connect(endpoint)).await
+        })??;
         Ok(Self {
             client,
             url: dest.as_ref().to_string(),
