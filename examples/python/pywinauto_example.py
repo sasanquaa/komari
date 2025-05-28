@@ -33,10 +33,10 @@ class KeyInput(KeyInputServicer):
             key = self.keys_map[request.key]
             # This is key down sleep milliseconds. It is generated automatically by the bot using the
             # above seed. You should use this delay and `time.sleep(delay)` on key down.
-            key_down_ms = request.down_ms
+            key_down = request.down_ms / 1000.0
 
             keyboard.send_keys(
-                "{" + key + " down}", pause=key_down_ms, vk_packet=False)
+                "{" + key + " down}", pause=key_down, vk_packet=False)
             keyboard.send_keys(
                 "{" + key + " up}", pause=0, vk_packet=False)
 
