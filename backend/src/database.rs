@@ -36,6 +36,10 @@ static CONNECTION: LazyLock<Mutex<Connection>> = LazyLock::new(|| {
             id INTEGER PRIMARY KEY,
             data TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS seeds (
+            id INTEGER PRIMARY KEY,
+            data TEXT NOT NULL
+        );
         "#,
     )
     .unwrap();
