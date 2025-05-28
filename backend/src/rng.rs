@@ -30,7 +30,7 @@ impl Rng {
 
         let normal = Normal::new(mean_ms, std_ms).unwrap();
         let ms = normal.sample(&mut self.inner);
-        (ms / tick_ms) as u32
+        (ms / tick_ms).round() as u32
     }
 
     /// Generates `N` pairs of mean and standard deviation from `base_mean` and `base_std` using
@@ -86,7 +86,7 @@ mod tests {
     fn random_tick_count_seeded() {
         let mut rng = Rng::new(SEED);
         let count = rng.random_tick_count(83.99979, 28.149803, 1000.0 / 30.0);
-        assert_eq!(count, 1);
+        assert_eq!(count, 2);
     }
 
     #[test]
