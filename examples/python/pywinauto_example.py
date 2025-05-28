@@ -132,9 +132,10 @@ if __name__ == "__main__":
         Key.Space: 'SPACE',
 
         # Modifier Keys
-        Key.Ctrl: '^',   # control (can also be '{VK_CONTROL}' if needed)
-        Key.Shift: '+',  # shift (can also be '{VK_SHIFT}')
-        Key.Alt: '%',    # alt (can also be '{VK_MENU}')
+        # control (can also be '{VK_CONTROL}' if needed)
+        Key.Ctrl: 'VK_CONTROL',
+        Key.Shift: 'VK_SHIFT',  # shift (can also be '{VK_SHIFT}')
+        Key.Alt: 'VK_MENU',    # alt (can also be '{VK_MENU}')
 
         # Punctuation & Special Characters
         Key.Tilde: '`',

@@ -198,6 +198,7 @@ impl KeySender for DefaultKeySender {
                         && borrow.url() == url
                     {
                         borrow.reset();
+                        borrow.init(self.delay_rng.borrow().seed());
                         return;
                     }
                 }
@@ -281,7 +282,7 @@ fn to_key_sender_kind_from(method: KeySenderMethod, seed: &[u8]) -> KeySenderKin
         KeySenderMethod::Rpc(url) => {
             let mut service = KeysService::connect(url);
             if let Ok(ref mut service) = service {
-                let _ = service.init(seed);
+                service.init(seed);
             }
             KeySenderKind::Rpc(service.ok().map(RefCell::new))
         }

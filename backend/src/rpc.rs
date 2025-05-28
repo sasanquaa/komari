@@ -57,15 +57,15 @@ impl KeysService {
         self.key_down.clear();
     }
 
-    pub fn init(&mut self, seed: &[u8]) -> Result<(), Error> {
-        Ok(block_future(async move {
-            self.client
+    pub fn init(&mut self, seed: &[u8]) {
+        block_future(async move {
+            let _ = self
+                .client
                 .init(KeyInitRequest {
                     seed: seed.to_vec(),
                 })
-                .await?;
-            Ok(())
-        })?)
+                .await;
+        });
     }
 
     pub fn send(&mut self, key: KeyKind, down_ms: f32) -> Result<(), Error> {
