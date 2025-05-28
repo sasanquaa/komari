@@ -29,6 +29,7 @@ mod network;
 mod pathing;
 mod player;
 mod request_handler;
+mod rng;
 mod rotator;
 mod rpc;
 mod skill;

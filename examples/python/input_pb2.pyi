@@ -148,12 +148,44 @@ Esc: Key
 Shift: Key
 Alt: Key
 
+class KeyInitRequest(_message.Message):
+    __slots__ = ("seed",)
+    SEED_FIELD_NUMBER: _ClassVar[int]
+    seed: bytes
+    def __init__(self, seed: _Optional[bytes] = ...) -> None: ...
+
+class KeyInitResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
 class KeyRequest(_message.Message):
+    __slots__ = ("key", "down_ms")
+    KEY_FIELD_NUMBER: _ClassVar[int]
+    DOWN_MS_FIELD_NUMBER: _ClassVar[int]
+    key: Key
+    down_ms: float
+    def __init__(self, key: _Optional[_Union[Key, str]] = ..., down_ms: _Optional[float] = ...) -> None: ...
+
+class KeyResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class KeyDownRequest(_message.Message):
     __slots__ = ("key",)
     KEY_FIELD_NUMBER: _ClassVar[int]
     key: Key
     def __init__(self, key: _Optional[_Union[Key, str]] = ...) -> None: ...
 
-class KeyResponse(_message.Message):
+class KeyDownResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class KeyUpRequest(_message.Message):
+    __slots__ = ("key",)
+    KEY_FIELD_NUMBER: _ClassVar[int]
+    key: Key
+    def __init__(self, key: _Optional[_Union[Key, str]] = ...) -> None: ...
+
+class KeyUpResponse(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...

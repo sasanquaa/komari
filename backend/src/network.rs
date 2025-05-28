@@ -236,7 +236,11 @@ impl DiscordNotification {
     }
 
     pub fn update_scheduled_frames(&self, frame: impl Fn() -> Option<Vec<u8>>) {
-        for item in self.scheduled.lock().unwrap().iter_mut() {
+        let mut scheduled = self.scheduled.lock().unwrap();
+        if scheduled.is_empty() {
+            return;
+        }
+        for item in scheduled.iter_mut() {
             let elapsed_secs = item.instant.elapsed().as_secs() as u32;
             for (item_frame, deadline) in item.frames.iter_mut() {
                 if elapsed_secs <= *deadline {

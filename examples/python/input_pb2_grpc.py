@@ -34,6 +34,11 @@ class KeyInputStub(object):
         Args:
             channel: A grpc.Channel.
         """
+        self.Init = channel.unary_unary(
+                '/input.KeyInput/Init',
+                request_serializer=input__pb2.KeyInitRequest.SerializeToString,
+                response_deserializer=input__pb2.KeyInitResponse.FromString,
+                _registered_method=True)
         self.Send = channel.unary_unary(
                 '/input.KeyInput/Send',
                 request_serializer=input__pb2.KeyRequest.SerializeToString,
@@ -41,18 +46,24 @@ class KeyInputStub(object):
                 _registered_method=True)
         self.SendUp = channel.unary_unary(
                 '/input.KeyInput/SendUp',
-                request_serializer=input__pb2.KeyRequest.SerializeToString,
-                response_deserializer=input__pb2.KeyResponse.FromString,
+                request_serializer=input__pb2.KeyUpRequest.SerializeToString,
+                response_deserializer=input__pb2.KeyDownResponse.FromString,
                 _registered_method=True)
         self.SendDown = channel.unary_unary(
                 '/input.KeyInput/SendDown',
-                request_serializer=input__pb2.KeyRequest.SerializeToString,
-                response_deserializer=input__pb2.KeyResponse.FromString,
+                request_serializer=input__pb2.KeyDownRequest.SerializeToString,
+                response_deserializer=input__pb2.KeyDownResponse.FromString,
                 _registered_method=True)
 
 
 class KeyInputServicer(object):
     """Missing associated documentation comment in .proto file."""
+
+    def Init(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
 
     def Send(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -75,6 +86,11 @@ class KeyInputServicer(object):
 
 def add_KeyInputServicer_to_server(servicer, server):
     rpc_method_handlers = {
+            'Init': grpc.unary_unary_rpc_method_handler(
+                    servicer.Init,
+                    request_deserializer=input__pb2.KeyInitRequest.FromString,
+                    response_serializer=input__pb2.KeyInitResponse.SerializeToString,
+            ),
             'Send': grpc.unary_unary_rpc_method_handler(
                     servicer.Send,
                     request_deserializer=input__pb2.KeyRequest.FromString,
@@ -82,13 +98,13 @@ def add_KeyInputServicer_to_server(servicer, server):
             ),
             'SendUp': grpc.unary_unary_rpc_method_handler(
                     servicer.SendUp,
-                    request_deserializer=input__pb2.KeyRequest.FromString,
-                    response_serializer=input__pb2.KeyResponse.SerializeToString,
+                    request_deserializer=input__pb2.KeyUpRequest.FromString,
+                    response_serializer=input__pb2.KeyDownResponse.SerializeToString,
             ),
             'SendDown': grpc.unary_unary_rpc_method_handler(
                     servicer.SendDown,
-                    request_deserializer=input__pb2.KeyRequest.FromString,
-                    response_serializer=input__pb2.KeyResponse.SerializeToString,
+                    request_deserializer=input__pb2.KeyDownRequest.FromString,
+                    response_serializer=input__pb2.KeyDownResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -100,6 +116,33 @@ def add_KeyInputServicer_to_server(servicer, server):
  # This class is part of an EXPERIMENTAL API.
 class KeyInput(object):
     """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def Init(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/input.KeyInput/Init',
+            input__pb2.KeyInitRequest.SerializeToString,
+            input__pb2.KeyInitResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
 
     @staticmethod
     def Send(request,
@@ -143,8 +186,8 @@ class KeyInput(object):
             request,
             target,
             '/input.KeyInput/SendUp',
-            input__pb2.KeyRequest.SerializeToString,
-            input__pb2.KeyResponse.FromString,
+            input__pb2.KeyUpRequest.SerializeToString,
+            input__pb2.KeyDownResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -170,8 +213,8 @@ class KeyInput(object):
             request,
             target,
             '/input.KeyInput/SendDown',
-            input__pb2.KeyRequest.SerializeToString,
-            input__pb2.KeyResponse.FromString,
+            input__pb2.KeyDownRequest.SerializeToString,
+            input__pb2.KeyDownResponse.FromString,
             options,
             channel_credentials,
             insecure,

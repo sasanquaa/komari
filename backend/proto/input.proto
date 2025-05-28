@@ -76,13 +76,34 @@ enum Key {
 }
 
 service KeyInput {
+  rpc Init (KeyInitRequest) returns (KeyInitResponse);
   rpc Send (KeyRequest) returns (KeyResponse);
-  rpc SendUp (KeyRequest) returns (KeyResponse);
-  rpc SendDown (KeyRequest) returns (KeyResponse);
+  rpc SendUp (KeyUpRequest) returns (KeyDownResponse);
+  rpc SendDown (KeyDownRequest) returns (KeyDownResponse);
 }
+
+message KeyInitRequest {
+  bytes seed = 1;
+}
+
+message KeyInitResponse {} // Empty for now
 
 message KeyRequest {
   Key key = 1;
+  float down_ms = 2;
 }
 
 message KeyResponse {} // Empty for now
+
+message KeyDownRequest {
+  Key key = 1;
+}
+
+message KeyDownResponse {} // Empty for now
+
+message KeyUpRequest {
+  Key key = 1;
+}
+
+message KeyUpResponse {} // Empty for now
+                       
