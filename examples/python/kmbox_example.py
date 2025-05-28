@@ -7,13 +7,8 @@ from concurrent import futures
 # The two imports below is generated from:
 # python -m grpc_tools.protoc --python_out=. --pyi_out=. --grpc_python_out=. -I../../backend/proto ../..
 # /backend/proto/input.proto
-from input_pb2 import Key, KeyRequest, KeyResponse
+from input_pb2 import Key, KeyRequest, KeyResponse, KeyDownRequest, KeyDownResponse, KeyUpRequest, KeyUpResponse, KeyInitRequest, KeyInitResponse
 from input_pb2_grpc import KeyInputServicer, add_KeyInputServicer_to_server
-
-
-def random_key_delay():
-    # Random delay between 0.045-0.08 seconds
-    return 0.05 * (0.9 + 0.6 * random())
 
 
 class KeyInput(KeyInputServicer):
@@ -21,19 +16,36 @@ class KeyInput(KeyInputServicer):
         super().__init__()
         self.keys_map = keys_map
 
+    # This is the init function that is called each time the bot connects to your service.
+    def Init(self, request: KeyInitRequest, context):
+        # This is a seed generated automatically by the bot for the first time the bot is run.
+        # The seed is saved in the database and reused again later.
+        # If you do not wish to use the bot provided delay for key down press, you can use this
+        # seed for generating delay timing. The seed is a 32 bytes array.
+        # self.seed = request.seed
+
+        return KeyInitResponse()
+
     def Send(self, request: KeyRequest, context):
-        kmNet.keypress(self.keys_map.get(request.key), random_key_delay())
+        # This `key` is an enum representing the key the bot want your customized input to send.
+        # You should map this to the key supported by your customized input method.
+        key = self.keys_map[request.key]
+        # This is key down sleep milliseconds. It is generated automatically by the bot using the
+        # above seed. You should use this delay and `time.sleep(delay)` on key down.
+        key_down_ms = request.down_ms
+
+        kmNet.keydown(key)
+        time.sleep(key_down_ms)
+        kmNet.keyup(key)
         return KeyResponse()
 
-    def SendUp(self, request: KeyRequest, context):
+    def SendUp(self, request: KeyUpRequest, context):
         kmNet.keyup(self.keys_map[request.key])
-        time.sleep(random_key_delay())
-        return KeyResponse()
+        return KeyUpResponse()
 
-    def SendDown(self, request: KeyRequest, context):
+    def SendDown(self, request: KeyDownRequest, context):
         kmNet.keydown(self.keys_map[request.key])
-        time.sleep(random_key_delay())
-        return KeyResponse()
+        return KeyDownResponse()
 
 
 if __name__ == "__main__":

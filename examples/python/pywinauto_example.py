@@ -1,20 +1,14 @@
 import pywinauto
 import grpc
 
-from random import random
 from concurrent import futures
 from pywinauto import WindowSpecification, keyboard
 from pywinauto.application import Application
 # The two imports below is generated from:
 # python -m grpc_tools.protoc --python_out=. --pyi_out=. --grpc_python_out=. -I../../backend/proto ../..
 # /backend/proto/input.proto
-from input_pb2 import Key, KeyRequest, KeyResponse
+from input_pb2 import Key, KeyRequest, KeyResponse, KeyDownRequest, KeyDownResponse, KeyUpRequest, KeyUpResponse, KeyInitRequest, KeyInitResponse
 from input_pb2_grpc import KeyInputServicer, add_KeyInputServicer_to_server
-
-
-def random_key_delay():
-    # Random delay between 0.045-0.08 seconds
-    return 0.05 * (0.9 + 0.6 * random())
 
 
 class KeyInput(KeyInputServicer):
@@ -23,28 +17,42 @@ class KeyInput(KeyInputServicer):
         self.window = window
         self.keys_map = keys_map
 
+    def Init(self, request: KeyInitRequest, context):
+        # This is a seed generated automatically by the bot for the first time the bot is run.
+        # The seed is saved in the database and reused again later.
+        # If you do not wish to use the bot provided delay for key down press, you can use this
+        # seed for generating delay timing. The seed is a 32 bytes array.
+        # self.seed = request.seed
+
+        return KeyInitResponse()
+
     def Send(self, request: KeyRequest, context):
         if self.window.has_keyboard_focus():
+            # This `key` is an enum representing the key the bot want your customized input to send.
+            # You should map this to the key supported by your customized input method.
             key = self.keys_map[request.key]
-            if len(key) == 1:
-                keyboard.send_keys(
-                    key, pause=random_key_delay(), vk_packet=False)
-            else:
-                keyboard.send_keys(
-                    "{" + key + "}", pause=random_key_delay(), vk_packet=False)
+            # This is key down sleep milliseconds. It is generated automatically by the bot using the
+            # above seed. You should use this delay and `time.sleep(delay)` on key down.
+            key_down_ms = request.down_ms
+
+            keyboard.send_keys(
+                "{" + key + " down}", pause=key_down_ms, vk_packet=False)
+            keyboard.send_keys(
+                "{" + key + " up}", pause=0, vk_packet=False)
+
         return KeyResponse()
 
-    def SendUp(self, request: KeyRequest, context):
+    def SendUp(self, request: KeyUpRequest, context):
         if self.window.has_keyboard_focus():
             keyboard.send_keys(
-                "{" + self.keys_map[request.key] + " up}", pause=random_key_delay(), vk_packet=False)
-        return KeyResponse()
+                "{" + self.keys_map[request.key] + " up}", pause=0, vk_packet=False)
+        return KeyUpResponse()
 
-    def SendDown(self, request: KeyRequest, context):
+    def SendDown(self, request: KeyDownRequest, context):
         if self.window.has_keyboard_focus():
             keyboard.send_keys(
-                "{" + self.keys_map[request.key] + " down}", pause=random_key_delay(), vk_packet=False)
-        return KeyResponse()
+                "{" + self.keys_map[request.key] + " down}", pause=0, vk_packet=False)
+        return KeyDownResponse()
 
 
 if __name__ == "__main__":
