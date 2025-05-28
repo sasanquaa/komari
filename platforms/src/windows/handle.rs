@@ -5,7 +5,7 @@ use windows::Win32::{
     Graphics::Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute},
     UI::WindowsAndMessaging::{
         EnumWindows, GWL_EXSTYLE, GWL_STYLE, GetClassNameW, GetWindowLongPtrW, GetWindowTextW,
-        IsWindowVisible, WS_DISABLED, WS_EX_TOOLWINDOW,
+        IsWindowVisible, WS_DISABLED, WS_EX_TOOLWINDOW, WS_POPUP,
     },
 };
 
@@ -27,12 +27,12 @@ impl HandleCell {
     pub fn as_inner(&self) -> Option<HWND> {
         match self.handle.kind {
             HandleKind::Fixed(_) => self.handle.query_handle(),
-            HandleKind::Dynamic(class) => {
+            HandleKind::Dynamic(class, is_popup) => {
                 if self.inner.get().is_none() {
                     self.inner.set(self.handle.query_handle());
                 }
                 let handle_inner = self.inner.get()?;
-                if is_class_matched(handle_inner, class) {
+                if is_class_matched(handle_inner, class, is_popup) {
                     return Some(handle_inner);
                 }
                 self.inner.set(None);
@@ -45,7 +45,7 @@ impl HandleCell {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum HandleKind {
     Fixed(HWND),
-    Dynamic(&'static str),
+    Dynamic(&'static str, bool),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -54,9 +54,16 @@ pub struct Handle {
 }
 
 impl Handle {
-    pub fn new(class: &'static str) -> Self {
+    /// Creates a new `Handle` with `class`.
+    ///
+    /// If `is_popup` is true, multiple `Handle`s matching `class` will prioritize one with
+    /// `WS_POPUP` style.
+    ///
+    /// TODO: is_popup is adhoc for finding MapleStory external chat box, should have a better
+    /// way to filter in case there is a need for that
+    pub fn new(class: &'static str, is_popup: bool) -> Self {
         Self {
-            kind: HandleKind::Dynamic(class),
+            kind: HandleKind::Dynamic(class, is_popup),
         }
     }
 
@@ -69,15 +76,16 @@ impl Handle {
     fn query_handle(&self) -> Option<HWND> {
         match self.kind {
             HandleKind::Fixed(handle) => Some(handle),
-            HandleKind::Dynamic(class) => {
+            HandleKind::Dynamic(class, is_popup) => {
                 struct Params {
                     class: &'static str,
+                    is_popup: bool,
                     handle_out: *mut HWND,
                 }
 
                 unsafe extern "system" fn callback(handle: HWND, params: LPARAM) -> BOOL {
                     let params = unsafe { ptr::read::<Params>(params.0 as *const _) };
-                    if is_class_matched(handle, params.class) {
+                    if is_class_matched(handle, params.class, params.is_popup) {
                         unsafe { ptr::write(params.handle_out, handle) };
                         false.into()
                     } else {
@@ -88,6 +96,7 @@ impl Handle {
                 let mut handle = HWND::default();
                 let params = Params {
                     class,
+                    is_popup,
                     handle_out: &raw mut handle,
                 };
                 let _ = unsafe { EnumWindows(Some(callback), LPARAM(&raw const params as isize)) };
@@ -141,14 +150,22 @@ pub fn query_capture_handles() -> Vec<(String, Handle)> {
 }
 
 #[inline]
-fn is_class_matched(handle: HWND, class: &'static str) -> bool {
+fn is_class_matched(handle: HWND, class: &'static str, is_popup: bool) -> bool {
     let mut buf = [0u16; 256];
     let count = unsafe { GetClassNameW(handle, &mut buf) as usize };
     if count == 0 {
         return false;
     }
-    OsString::from_wide(&buf[..count])
+
+    let class_match = OsString::from_wide(&buf[..count])
         .to_str()
         .map(|s| s.starts_with(class))
-        .unwrap_or(false)
+        .unwrap_or(false);
+    if !class_match {
+        return false;
+    }
+
+    let style = unsafe { GetWindowLongPtrW(handle, GWL_STYLE) } as u32;
+    let has_style = (style & WS_POPUP.0) != 0;
+    is_popup == has_style
 }
