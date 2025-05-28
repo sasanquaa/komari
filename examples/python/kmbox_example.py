@@ -1,6 +1,8 @@
 import kmNet
 import grpc
+import time
 
+from random import random
 from concurrent import futures
 # The two imports below is generated from:
 # python -m grpc_tools.protoc --python_out=. --pyi_out=. --grpc_python_out=. -I../../backend/proto ../..
@@ -9,21 +11,28 @@ from input_pb2 import Key, KeyRequest, KeyResponse
 from input_pb2_grpc import KeyInputServicer, add_KeyInputServicer_to_server
 
 
+def random_key_delay():
+    # Random delay between 0.045-0.08 seconds
+    return 0.05 * (0.9 + 0.6 * random())
+
+
 class KeyInput(KeyInputServicer):
     def __init__(self, keys_map: dict[Key, int]) -> None:
         super().__init__()
         self.keys_map = keys_map
 
     def Send(self, request: KeyRequest, context):
-        kmNet.keypress(self.keys_map[request.key], 0)
+        kmNet.keypress(self.keys_map.get(request.key), random_key_delay())
         return KeyResponse()
 
     def SendUp(self, request: KeyRequest, context):
         kmNet.keyup(self.keys_map[request.key])
+        time.sleep(random_key_delay())
         return KeyResponse()
 
     def SendDown(self, request: KeyRequest, context):
         kmNet.keydown(self.keys_map[request.key])
+        time.sleep(random_key_delay())
         return KeyResponse()
 
 

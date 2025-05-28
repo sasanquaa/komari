@@ -1,6 +1,7 @@
 import pywinauto
 import grpc
 
+from random import random
 from concurrent import futures
 from pywinauto import WindowSpecification, keyboard
 from pywinauto.application import Application
@@ -9,6 +10,11 @@ from pywinauto.application import Application
 # /backend/proto/input.proto
 from input_pb2 import Key, KeyRequest, KeyResponse
 from input_pb2_grpc import KeyInputServicer, add_KeyInputServicer_to_server
+
+
+def random_key_delay():
+    # Random delay between 0.045-0.08 seconds
+    return 0.05 * (0.9 + 0.6 * random())
 
 
 class KeyInput(KeyInputServicer):
@@ -21,21 +27,23 @@ class KeyInput(KeyInputServicer):
         if self.window.has_keyboard_focus():
             key = self.keys_map[request.key]
             if len(key) == 1:
-                keyboard.send_keys(key, pause=0, vk_packet=False)
+                keyboard.send_keys(
+                    key, pause=random_key_delay(), vk_packet=False)
             else:
-                keyboard.send_keys("{" + key + "}", pause=0, vk_packet=False)
+                keyboard.send_keys(
+                    "{" + key + "}", pause=random_key_delay(), vk_packet=False)
         return KeyResponse()
 
     def SendUp(self, request: KeyRequest, context):
         if self.window.has_keyboard_focus():
             keyboard.send_keys(
-                "{" + self.keys_map[request.key] + " up}", pause=0, vk_packet=False)
+                "{" + self.keys_map[request.key] + " up}", pause=random_key_delay(), vk_packet=False)
         return KeyResponse()
 
     def SendDown(self, request: KeyRequest, context):
         if self.window.has_keyboard_focus():
             keyboard.send_keys(
-                "{" + self.keys_map[request.key] + " down}", pause=0, vk_packet=False)
+                "{" + self.keys_map[request.key] + " down}", pause=random_key_delay(), vk_packet=False)
         return KeyResponse()
 
 
