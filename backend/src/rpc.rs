@@ -3,7 +3,7 @@ use std::time::Duration;
 use anyhow::{Error, Ok, bail};
 use bit_vec::BitVec;
 use input::key_input_client::KeyInputClient;
-use input::{Key, KeyRequest};
+use input::{Key, KeyDownRequest, KeyInitRequest, KeyRequest, KeyUpRequest};
 use platforms::windows::KeyKind;
 use tokio::runtime::Handle;
 use tokio::task::block_in_place;
@@ -49,7 +49,7 @@ impl KeysService {
             if Key::try_from(i as i32).is_ok() {
                 let _ = block_future(async {
                     self.client
-                        .send_up(Request::new(KeyRequest { key: i as i32 }))
+                        .send_up(Request::new(KeyUpRequest { key: i as i32 }))
                         .await
                 });
             }
@@ -57,11 +57,27 @@ impl KeysService {
         self.key_down.clear();
     }
 
-    pub fn send(&mut self, key: KeyKind) -> Result<(), Error> {
+    pub fn init(&mut self, seed: &[u8]) -> Result<(), Error> {
         Ok(block_future(async move {
-            self.client.send(to_request(key)).await?;
-            self.key_down
-                .set(i32::from(from_key_kind(key)) as usize, false);
+            self.client
+                .init(KeyInitRequest {
+                    seed: seed.to_vec(),
+                })
+                .await?;
+            Ok(())
+        })?)
+    }
+
+    pub fn send(&mut self, key: KeyKind, down_ms: f32) -> Result<(), Error> {
+        Ok(block_future(async move {
+            let kind = from_key_kind(key);
+            let request = Request::new(KeyRequest {
+                key: kind.into(),
+                down_ms,
+            });
+
+            self.client.send(request).await?;
+            self.key_down.set(i32::from(kind) as usize, false);
             Ok(())
         })?)
     }
@@ -71,9 +87,11 @@ impl KeysService {
             bail!("key not sent");
         }
         Ok(block_future(async move {
-            self.client.send_up(to_request(key)).await?;
-            self.key_down
-                .set(i32::from(from_key_kind(key)) as usize, false);
+            let kind = from_key_kind(key);
+            let request = Request::new(KeyUpRequest { key: kind.into() });
+
+            self.client.send_up(request).await?;
+            self.key_down.set(i32::from(kind) as usize, false);
             Ok(())
         })?)
     }
@@ -83,9 +101,11 @@ impl KeysService {
             bail!("key not sent");
         }
         Ok(block_future(async move {
-            self.client.send_down(to_request(key)).await?;
-            self.key_down
-                .set(i32::from(from_key_kind(key)) as usize, true);
+            let kind = from_key_kind(key);
+            let request = Request::new(KeyDownRequest { key: kind.into() });
+
+            self.client.send_down(request).await?;
+            self.key_down.set(i32::from(kind) as usize, true);
             Ok(())
         })?)
     }
@@ -102,13 +122,6 @@ impl KeysService {
 #[inline]
 fn block_future<F: Future>(f: F) -> F::Output {
     block_in_place(|| Handle::current().block_on(f))
-}
-
-#[inline]
-fn to_request(key: KeyKind) -> Request<KeyRequest> {
-    Request::new(KeyRequest {
-        key: from_key_kind(key).into(),
-    })
 }
 
 #[inline]

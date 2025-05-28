@@ -6,12 +6,14 @@ pub type RngSeed = [u8; 32];
 #[derive(Debug)]
 pub struct Rng {
     inner: StdRng,
+    seed: RngSeed,
 }
 
 impl Rng {
     pub fn new(seed: RngSeed) -> Self {
         Self {
             inner: StdRng::from_seed(seed),
+            seed,
         }
     }
 
@@ -20,17 +22,28 @@ impl Rng {
         &mut self.inner
     }
 
-    /// Samples a random tick count.
+    /// Retrieves the `RngSeed` used by this `Rng`.
+    pub fn seed(&self) -> &RngSeed {
+        &self.seed
+    }
+
+    /// Samples a random `(delay, tick count)` pair.
     ///
-    /// The random tick count is sampled from a normal distribution with mean `mean_ms` and
+    /// The delay is sampled from a normal distribution with mean `mean_ms` and
     /// standard deviation `std_ms`. These two paramters are in milliseconds. The sampled
-    /// milliseconds is then divided by `tick_ms` to get the tick count.
-    pub fn random_tick_count(&mut self, mean_ms: f32, std_ms: f32, tick_ms: f32) -> u32 {
+    /// delay milliseconds is then divided by `tick_ms` and rounded to get the tick count.
+    pub fn random_delay_tick_count(
+        &mut self,
+        mean_ms: f32,
+        std_ms: f32,
+        tick_ms: f32,
+    ) -> (f32, u32) {
         debug_assert!(std_ms > 0.0 && tick_ms > 0.0);
 
         let normal = Normal::new(mean_ms, std_ms).unwrap();
         let ms = normal.sample(&mut self.inner);
-        (ms / tick_ms).round() as u32
+        let tick_count = (ms / tick_ms).round() as u32;
+        (ms, tick_count)
     }
 
     /// Generates `N` pairs of mean and standard deviation from `base_mean` and `base_std` using
@@ -85,7 +98,7 @@ mod tests {
     #[test]
     fn random_tick_count_seeded() {
         let mut rng = Rng::new(SEED);
-        let count = rng.random_tick_count(83.99979, 28.149803, 1000.0 / 30.0);
+        let (_, count) = rng.random_delay_tick_count(83.99979, 28.149803, 1000.0 / 30.0);
         assert_eq!(count, 2);
     }
 

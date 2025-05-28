@@ -66,7 +66,7 @@ enum InputDelay {
 impl DefaultKeySender {
     pub fn new(method: KeySenderMethod, seeds: Seeds) -> Self {
         Self {
-            kind: to_key_sender_kind_from(method),
+            kind: to_key_sender_kind_from(method, &seeds.input_seed),
             delay_rng: RefCell::new(Rng::new(seeds.input_seed)),
             delay_mean_std_pairs: seeds.input_mean_std_pairs,
             delay_map: RefCell::new(HashMap::new()),
@@ -78,7 +78,8 @@ impl DefaultKeySender {
         match &self.kind {
             KeySenderKind::Rpc(service) => {
                 if let Some(cell) = service {
-                    cell.borrow_mut().send(kind)?;
+                    cell.borrow_mut()
+                        .send(kind, self.random_input_delay_tick_count().0)?;
                 }
                 Ok(())
             }
@@ -149,13 +150,7 @@ impl DefaultKeySender {
             return InputDelay::AlreadyTracked;
         }
 
-        let mut rng = self.delay_rng.borrow_mut();
-        let (mean, std) = self
-            .delay_mean_std_pairs
-            .choose(rng.inner())
-            .copied()
-            .unwrap();
-        let delay_tick_count = rng.random_tick_count(mean, std, MS_PER_TICK_F32);
+        let (_, delay_tick_count) = self.random_input_delay_tick_count();
         if delay_tick_count > 0 {
             let _ = map.insert(kind, delay_tick_count);
             InputDelay::Tracked
@@ -180,6 +175,16 @@ impl DefaultKeySender {
             *delay != 0
         });
     }
+
+    fn random_input_delay_tick_count(&self) -> (f32, u32) {
+        let mut rng = self.delay_rng.borrow_mut();
+        let (mean, std) = self
+            .delay_mean_std_pairs
+            .choose(rng.inner())
+            .copied()
+            .unwrap();
+        rng.random_delay_tick_count(mean, std, MS_PER_TICK_F32)
+    }
 }
 
 impl KeySender for DefaultKeySender {
@@ -199,7 +204,7 @@ impl KeySender for DefaultKeySender {
             }
             KeySenderMethod::Default(_, _) => (),
         }
-        self.kind = to_key_sender_kind_from(method);
+        self.kind = to_key_sender_kind_from(method, self.delay_rng.borrow().seed());
     }
 
     fn send(&self, kind: KeyKind) -> Result<()> {
@@ -271,10 +276,14 @@ impl ImageCapture {
 }
 
 #[inline]
-fn to_key_sender_kind_from(method: KeySenderMethod) -> KeySenderKind {
+fn to_key_sender_kind_from(method: KeySenderMethod, seed: &[u8]) -> KeySenderKind {
     match method {
         KeySenderMethod::Rpc(url) => {
-            KeySenderKind::Rpc(KeysService::connect(url).map(RefCell::new).ok())
+            let mut service = KeysService::connect(url);
+            if let Ok(ref mut service) = service {
+                let _ = service.init(seed);
+            }
+            KeySenderKind::Rpc(service.ok().map(RefCell::new))
         }
         KeySenderMethod::Default(handle, kind) => KeySenderKind::Default(Keys::new(handle, kind)),
     }
