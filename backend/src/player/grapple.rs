@@ -19,10 +19,10 @@ pub const GRAPPLING_THRESHOLD: i32 = 24;
 pub const GRAPPLING_MAX_THRESHOLD: i32 = 41;
 
 /// Timeout for grappling.
-const TIMEOUT: u32 = MOVE_TIMEOUT * 10;
+const TIMEOUT: u32 = MOVE_TIMEOUT * 8;
 
 /// Timeout after stopping grappling.
-const STOPPING_TIMEOUT: u32 = MOVE_TIMEOUT * 2;
+const STOPPING_TIMEOUT: u32 = MOVE_TIMEOUT + 3;
 
 /// Maximum y distance allowed to stop grpapling.
 const STOPPING_THRESHOLD: i32 = 4;
