@@ -47,12 +47,11 @@ pub fn update_up_jumping_context(
         }
         if let Minimap::Idle(idle) = context.minimap {
             for portal in idle.portals {
-                if portal.x <= cur_pos.x
-                    && cur_pos.x < portal.x + portal.width
-                    && portal.y >= cur_pos.y
-                    && portal.y - portal.height < cur_pos.y
-                {
-                    debug!(target: "player", "abort action due to potential map moving");
+                let x_range = portal.x..(portal.x + portal.width);
+                let y_range = portal.y..(portal.y + portal.height);
+
+                if x_range.contains(&cur_pos.x) && y_range.contains(&cur_pos.y) {
+                    debug!(target: "player", "abort action due to potential map moving by portal {portal:?}");
                     state.clear_action_completed();
                     return Player::Idle;
                 }

@@ -52,7 +52,7 @@ struct Anchors {
 
 #[derive(Clone, Copy, Debug)]
 #[cfg_attr(test, derive(Default))]
-struct Threshold<T> {
+pub struct Threshold<T> {
     value: Option<T>,
     fail_count: u32,
     max_fail_count: u32,
@@ -66,45 +66,51 @@ impl<T> Threshold<T> {
             max_fail_count,
         }
     }
+
+    #[cfg(test)]
+    pub fn set_value(&mut self, value: T) {
+        self.value = Some(value);
+    }
+
+    pub fn value(&self) -> Option<&T> {
+        self.value.as_ref()
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
 #[cfg_attr(test, derive(Default))]
 pub struct MinimapIdle {
-    /// The two anchors top left and bottom right of the minimap
+    /// Two anchors top left and bottom right of the minimap.
     ///
-    /// They are just two fixed pixels
+    /// They are just two fixed pixels used to know if the the minimap has moved or some other UI
+    /// overlapping the minimap.
     anchors: Anchors,
     /// The bounding box of the minimap.
     pub bbox: Rect,
-    /// Whether the UI is being partially overlapped
+    /// Whether minimap UI is being partially overlapped.
     ///
     /// It is partially overlapped by other UIs if one of the anchor mismatches.
     pub partially_overlapping: bool,
-    /// The rune position
-    pub rune: Option<Point>,
-    /// Rune detection fail count from having a rune
-    ///
-    /// If fail count reaches a threshold, rune is considered no longer on the minimap
-    rune_fail_count: u32,
-    /// Whether there is an elite boss
+    /// The rune position.
+    pub rune: Threshold<Point>,
+    /// Whether there is an elite boss.
     ///
     /// This does not belong to minimap though...
     pub has_elite_boss: bool,
-    /// Whether there is a guildie
+    /// Whether there is a guildie.
     has_guildie_player: Threshold<bool>,
-    /// Whether there is a stranger
+    /// Whether there is a stranger.
     has_stranger_player: Threshold<bool>,
-    /// Whether there is a friend
+    /// Whether there is a friend.
     has_friend_player: Threshold<bool>,
-    /// The portal positions
+    /// The portal positions.
     ///
     /// Praying each night that there won't be more than 16 portals...
     /// Initially, it is only 8 until it crashes at Henesys with 10 portals smh
     pub portals: Array<Rect, 16>,
-    /// The user provided platforms
+    /// The user provided platforms.
     pub platforms: Array<PlatformWithNeighbors, MAX_PLATFORMS_COUNT>,
-    /// The largest rectangle containing all the platforms
+    /// The largest rectangle containing all the platforms.
     pub platforms_bound: Option<Rect>,
 }
 
@@ -161,8 +167,7 @@ fn update_detecting_context(context: &Context, state: &mut MinimapState) -> Mini
         anchors,
         bbox,
         partially_overlapping: false,
-        rune: None,
-        rune_fail_count: 0,
+        rune: Threshold::new(3),
         has_elite_boss: false,
         has_guildie_player: Threshold::new(2),
         has_stranger_player: Threshold::new(2),
@@ -186,7 +191,6 @@ fn update_idle_context(
         anchors,
         bbox,
         rune,
-        rune_fail_count,
         has_elite_boss,
         has_guildie_player,
         has_stranger_player,
@@ -211,8 +215,7 @@ fn update_idle_context(
     }
 
     let partially_overlapping = (tl_match && !br_match) || (!tl_match && br_match);
-    let (rune, rune_fail_count) =
-        update_rune_task(context, &mut state.rune_task, bbox, rune, rune_fail_count);
+    let rune = update_rune_task(context, &mut state.rune_task, bbox, rune);
     let has_elite_boss =
         update_elite_boss_task(context, &mut state.has_elite_boss_task, has_elite_boss);
     let has_guildie_player = update_other_player_task(
@@ -250,7 +253,6 @@ fn update_idle_context(
     Some(Minimap::Idle(MinimapIdle {
         partially_overlapping,
         rune,
-        rune_fail_count,
         has_elite_boss,
         has_guildie_player,
         has_stranger_player,
@@ -278,43 +280,24 @@ fn update_rune_task(
     context: &Context,
     task: &mut Option<Task<Result<Point>>>,
     minimap: Rect,
-    rune: Option<Point>,
-    rune_fail_count: u32,
-) -> (Option<Point>, u32) {
-    const MAX_RUNE_FAIL_COUNT: u32 = 3;
-
-    let was_none = rune.is_none();
-    let update = if matches!(context.player, Player::SolvingRune(_)) && rune.is_some() {
-        Update::Pending
-    } else {
-        update_detection_task(context, 10000, task, move |detector| {
-            detector
-                .detect_minimap_rune(minimap)
-                .map(|rune| center_of_bbox(rune, minimap))
-        })
-    };
-    match update {
-        Update::Ok(rune) => {
-            if was_none && !context.halting {
-                let _ = context
-                    .notification
-                    .schedule_notification(NotificationKind::RuneAppear);
-            }
-            (Some(rune), 0)
-        }
-        Update::Err(_) => {
-            if !was_none {
-                if rune_fail_count >= MAX_RUNE_FAIL_COUNT {
-                    (None, 0)
-                } else {
-                    (rune, rune_fail_count + 1)
-                }
-            } else {
-                (rune, rune_fail_count)
-            }
-        }
-        Update::Pending => (rune, rune_fail_count),
+    rune: Threshold<Point>,
+) -> Threshold<Point> {
+    let was_none = rune.value.is_none();
+    if matches!(context.player, Player::SolvingRune(_)) && !was_none {
+        return rune;
     }
+
+    let rune = update_threshold_detection(context, 10000, rune, task, move |detector| {
+        detector
+            .detect_minimap_rune(minimap)
+            .map(|rune| center_of_bbox(rune, minimap))
+    });
+    if was_none && rune.value.is_some() && !context.halting {
+        let _ = context
+            .notification
+            .schedule_notification(NotificationKind::RuneAppear);
+    }
+    rune
 }
 
 #[inline]
@@ -371,14 +354,14 @@ fn update_portals_task(
     minimap: Rect,
 ) -> Array<Rect, 16> {
     let update = update_detection_task(context, 5000, task, move |detector| {
-        detector.detect_minimap_portals(minimap)
+        Ok(detector.detect_minimap_portals(minimap))
     });
     match update {
         Update::Ok(vec) if portals.len() < vec.len() => {
             Array::from_iter(vec.into_iter().map(|portal| {
                 Rect::new(
                     portal.x,
-                    minimap.height - portal.y,
+                    minimap.height - portal.br().y,
                     portal.width,
                     portal.height,
                 )
@@ -429,6 +412,7 @@ where
     match update {
         Update::Ok(value) => {
             threshold.value = Some(value);
+            threshold.fail_count = 0;
         }
         Update::Err(_) => {
             if threshold.value.is_some() {
@@ -568,7 +552,7 @@ mod tests {
                 assert_eq!(idle.bbox, bbox);
                 assert!(!idle.partially_overlapping);
                 assert_eq!(state.data, None);
-                assert_eq!(idle.rune, None);
+                assert_eq!(idle.rune.value, None);
                 assert!(!idle.has_elite_boss);
             }
             _ => unreachable!(),
@@ -584,8 +568,7 @@ mod tests {
             anchors,
             bbox,
             partially_overlapping: false,
-            rune: None,
-            rune_fail_count: 0,
+            rune: Threshold::new(3),
             has_elite_boss: false,
             has_guildie_player: Threshold::default(),
             has_stranger_player: Threshold::default(),
@@ -599,7 +582,7 @@ mod tests {
         assert_matches!(minimap, Minimap::Idle(_));
         match minimap {
             Minimap::Idle(idle) => {
-                assert_eq!(idle.rune, Some(center_of_bbox(rune_bbox, bbox)));
+                assert_eq!(idle.rune.value, Some(center_of_bbox(rune_bbox, bbox)));
             }
             _ => unreachable!(),
         }
