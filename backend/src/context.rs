@@ -22,7 +22,7 @@ use crate::{
     Action, RequestHandler,
     bridge::{DefaultKeySender, ImageCapture, ImageCaptureKind, KeySender, KeySenderMethod},
     buff::{Buff, BuffKind, BuffState},
-    database::{CaptureMode, InputMethod, KeyBinding, query_seeds, upsert_seeds},
+    database::{CaptureMode, InputMethod, KeyBinding, query_seeds},
     detect::{CachedDetector, Detector},
     mat::OwnedMat,
     minimap::{Minimap, MinimapState},
@@ -30,28 +30,11 @@ use crate::{
     player::{Player, PlayerState},
     query_configs, query_settings,
     request_handler::{DefaultRequestHandler, config_buffs},
-    rng::Rng,
     rotator::Rotator,
     skill::{Skill, SkillKind, SkillState},
 };
 #[cfg(test)]
 use crate::{Settings, bridge::MockKeySender, detect::MockDetector};
-
-/// Number of mean and standard deviation pairs to generate for sampling input delay.
-const MEAN_STD_PAIRS_COUNT: usize = 100;
-
-/// Base mean in milliseconds to generate a pair from.
-const BASE_MEAN_MS_DELAY: f32 = 85.0;
-
-/// Base standard deviation in milliseconds to generate a pair from.
-const BASE_STD_MS_DELAY: f32 = 30.0;
-
-/// The rate at which generated standard deviation will revert to the base [`BASE_STD_MS_DELAY`]
-/// over time.
-const MEAN_STD_REVERSION_RATE: f32 = 0.05;
-
-/// The rate at which generated mean will revert to the base [`BASE_MEAN_MS_DELAY`] over time.
-const MEAN_STD_VOLATILITY: f32 = 0.1;
 
 const FPS: u32 = 30;
 pub const MS_PER_TICK: u64 = MS_PER_TICK_F32 as u64;
@@ -184,22 +167,7 @@ fn update_loop() {
     let mut config = query_configs().unwrap().into_iter().next().unwrap(); // Override by UI
     let mut buffs = config_buffs(&config);
     let settings = query_settings(); // Override by UI
-
-    let mut seeds = query_seeds(); // Fixed, unchanged
-    let mut rng = Rng::new(seeds.input_seed);
-    if seeds.input_mean_std_pairs.len() != MEAN_STD_PAIRS_COUNT {
-        seeds.input_mean_std_pairs.clear();
-        seeds
-            .input_mean_std_pairs
-            .extend(rng.random_mean_std_pairs::<MEAN_STD_PAIRS_COUNT>(
-                BASE_MEAN_MS_DELAY,
-                BASE_STD_MS_DELAY,
-                MS_PER_TICK_F32,
-                MEAN_STD_REVERSION_RATE,
-                MEAN_STD_VOLATILITY,
-            ));
-        upsert_seeds(&mut seeds).unwrap();
-    }
+    let seeds = query_seeds(); // Fixed, unchanged
 
     let key_sender_method = if let InputMethod::Rpc = settings.input_method {
         KeySenderMethod::Rpc(settings.input_method_rpc_server_url.clone())
@@ -288,7 +256,7 @@ fn update_loop() {
             .as_any_mut()
             .downcast_mut::<DefaultKeySender>()
             .unwrap()
-            .update_input_delay();
+            .update_input_delay(context.tick);
 
         // Poll requests, keys and update scheduled notifications frames
         let mut settings_borrow_mut = settings.borrow_mut();

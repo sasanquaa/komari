@@ -70,7 +70,6 @@ macro_rules! impl_identifiable {
 pub struct Seeds {
     pub id: Option<i64>,
     pub input_seed: [u8; 32],
-    pub input_mean_std_pairs: Vec<(f32, f32)>,
 }
 
 impl Default for Seeds {
@@ -78,7 +77,6 @@ impl Default for Seeds {
         Self {
             id: None,
             input_seed: rand::random(),
-            input_mean_std_pairs: Vec::new(),
         }
     }
 }
@@ -844,13 +842,9 @@ pub fn query_seeds() -> Seeds {
         .next()
         .unwrap_or_default();
     if seeds.id.is_none() {
-        upsert_seeds(&mut seeds).unwrap();
+        upsert_to_table("seeds", &mut seeds).unwrap();
     }
     seeds
-}
-
-pub fn upsert_seeds(seeds: &mut Seeds) -> Result<()> {
-    upsert_to_table("seeds", seeds)
 }
 
 pub fn query_settings() -> Settings {
