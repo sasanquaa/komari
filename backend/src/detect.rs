@@ -124,7 +124,7 @@ pub trait Detector: 'static + Send + DynClone + Debug {
     /// Detects the portals from the given `minimap` rectangle.
     ///
     /// Returns `Rect` relative to `minimap` coordinate.
-    fn detect_minimap_portals(&self, minimap: Rect) -> Result<Vec<Rect>>;
+    fn detect_minimap_portals(&self, minimap: Rect) -> Vec<Rect>;
 
     /// Detects the rune from the given `minimap` rectangle.
     ///
@@ -177,7 +177,7 @@ mock! {
         fn detect_esc_settings(&self) -> bool;
         fn detect_elite_boss_bar(&self) -> bool;
         fn detect_minimap(&self, border_threshold: u8) -> Result<Rect>;
-        fn detect_minimap_portals(&self, minimap: Rect) -> Result<Vec<Rect>>;
+        fn detect_minimap_portals(&self, minimap: Rect) -> Vec<Rect>;
         fn detect_minimap_rune(&self, minimap: Rect) -> Result<Rect>;
         fn detect_player(&self, minimap: Rect) -> Result<Rect>;
         fn detect_player_kind(&self, minimap: Rect, kind: OtherPlayerKind) -> bool;
@@ -258,8 +258,8 @@ impl Detector for CachedDetector {
         detect_minimap(&*self.mat, border_threshold)
     }
 
-    fn detect_minimap_portals(&self, minimap: Rect) -> Result<Vec<Rect>> {
-        let minimap_color = to_bgr(&self.mat.roi(minimap)?);
+    fn detect_minimap_portals(&self, minimap: Rect) -> Vec<Rect> {
+        let minimap_color = to_bgr(&self.mat.roi(minimap).unwrap());
         detect_minimap_portals(minimap_color)
     }
 
@@ -637,44 +637,26 @@ fn detect_minimap(mat: &impl MatTraitConst, border_threshold: u8) -> Result<Rect
     Ok(bbox + contour_bbox.tl())
 }
 
-fn detect_minimap_portals<T: MatTraitConst + ToInputArray>(minimap: T) -> Result<Vec<Rect>> {
+fn detect_minimap_portals<T: MatTraitConst + ToInputArray>(minimap: T) -> Vec<Rect> {
     /// TODO: Support default ratio
     static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
         imgcodecs::imdecode(include_bytes!(env!("PORTAL_TEMPLATE")), IMREAD_COLOR).unwrap()
     });
 
-    let template = &*TEMPLATE;
-    let mut result = Mat::default();
-    let mut points = Vector::<Point>::new();
-    match_template(
-        &minimap,
-        template,
-        &mut result,
-        TM_CCOEFF_NORMED,
-        &no_array(),
-    )
-    .unwrap();
-    // SAFETY: threshold can be called inplace
-    unsafe {
-        result.modify_inplace(|mat, mat_mut| {
-            threshold(mat, mat_mut, 0.8, 1.0, THRESH_BINARY).unwrap();
-        });
-    }
-    find_non_zero(&result, &mut points).unwrap();
-    let portals = points
+    detect_template_multiple(&minimap, &*TEMPLATE, no_array(), Point::default(), 16, 0.75)
         .into_iter()
-        .map(|point| {
+        .filter_map(|result| result.ok())
+        .map(|(bbox, _)| {
             let size = 5;
-            let x = (point.x - size).max(0);
-            let xd = point.x - x;
-            let y = (point.y - size).max(0);
-            let yd = point.y - y;
-            let width = template.cols() + xd * 2 + (size - xd);
-            let height = template.rows() + yd * 2 + (size - yd);
+            let x = (bbox.x - size).max(0);
+            let xd = bbox.x - x;
+            let y = (bbox.y - size).max(0);
+            let yd = bbox.y - y;
+            let width = TEMPLATE.cols() + xd * 2 + (size - xd - 1);
+            let height = TEMPLATE.rows() + yd * 2 + (size - yd - 1);
             Rect::new(x, y, width, height)
         })
-        .collect::<Vec<_>>();
-    Ok(portals)
+        .collect::<Vec<_>>()
 }
 
 fn detect_minimap_rune(minimap: &impl ToInputArray) -> Result<Rect> {

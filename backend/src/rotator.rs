@@ -752,7 +752,7 @@ fn solve_rune_priority_action() -> PriorityAction {
                 return false;
             }
             if let Minimap::Idle(idle) = context.minimap {
-                return idle.rune.is_some()
+                return idle.rune.value().is_some()
                     && matches!(context.buffs[BuffKind::Rune], Buff::NoBuff);
             }
             false
@@ -984,7 +984,7 @@ mod tests {
         let mut rotator = Rotator::default();
         let mut player = PlayerState::default();
         let mut minimap = MinimapIdle::default();
-        minimap.rune = Some(Point::default());
+        minimap.rune.set_value(Point::default());
         let mut context = Context::new(None, None);
         context.minimap = Minimap::Idle(minimap);
         context.buffs[BuffKind::Rune] = Buff::NoBuff;
