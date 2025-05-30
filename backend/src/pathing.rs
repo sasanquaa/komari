@@ -253,6 +253,7 @@ fn points_from(
                 points.push((Point::new(last_point.x, next.y), MovementHint::Infer));
             } else {
                 // Outside intersection range, add 2 points to move inside and then up or down
+                // TODO: Replace rand with Rng
                 let x = rand::random_range(start_max..end_min);
                 points.push((Point::new(x, current.y), MovementHint::Infer));
                 points.push((Point::new(x, next.y), MovementHint::Infer));

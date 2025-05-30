@@ -30,6 +30,7 @@ use crate::{
     player::{Player, PlayerState},
     query_configs, query_settings,
     request_handler::{DefaultRequestHandler, config_buffs},
+    rng::Rng,
     rotator::Rotator,
     skill::{Skill, SkillKind, SkillState},
 };
@@ -72,6 +73,7 @@ pub struct Context {
     pub handle: Handle,
     /// A struct to send key inputs.
     pub keys: Box<dyn KeySender>,
+    pub rng: Rng,
     /// A struct for sending notifications through web hook.
     pub notification: DiscordNotification,
     /// A struct to detect game information.
@@ -100,6 +102,7 @@ impl Context {
         Context {
             handle: Handle::new(""),
             keys: Box::new(keys.unwrap_or_default()),
+            rng: Rng::new(rand::random()),
             notification: DiscordNotification::new(Rc::new(RefCell::new(Settings::default()))),
             detector: detector.map(|detector| Box::new(detector) as Box<dyn Detector>),
             minimap: Minimap::Detecting,
@@ -168,6 +171,7 @@ fn update_loop() {
     let mut buffs = config_buffs(&config);
     let settings = query_settings(); // Override by UI
     let seeds = query_seeds(); // Fixed, unchanged
+    let rng = Rng::new(seeds.seed); // Create one for Context
 
     let key_sender_method = if let InputMethod::Rpc = settings.input_method {
         KeySenderMethod::Rpc(settings.input_method_rpc_server_url.clone())
@@ -199,6 +203,7 @@ fn update_loop() {
     let mut context = Context {
         handle,
         keys: Box::new(keys),
+        rng,
         notification: DiscordNotification::new(settings.clone()),
         detector: None,
         minimap: Minimap::Detecting,

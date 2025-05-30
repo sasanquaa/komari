@@ -1,13 +1,15 @@
 use opencv::core::Point;
 use platforms::windows::KeyKind;
 
-use super::{Player, PlayerActionKey, PlayerState, moving::Moving, use_key::UseKey};
+use super::{
+    Player, PlayerActionKey, PlayerState, actions::on_action_state, moving::Moving, use_key::UseKey,
+};
 use crate::{
     ActionKeyWith,
     context::Context,
     player::{
         MOVE_TIMEOUT, PlayerAction,
-        actions::{on_action, on_auto_mob_use_key_action},
+        actions::on_auto_mob_use_key_action,
         state::LastMovement,
         timeout::{ChangeAxis, update_moving_axis_context},
     },
@@ -92,9 +94,17 @@ pub fn update_falling_context(
                 moving = moving.timeout_current(TIMEOUT);
             }
 
-            on_action(
+            on_action_state(
                 state,
-                |action| on_player_action(context, cur_pos, action, moving),
+                |state, action| {
+                    on_player_action(
+                        context,
+                        cur_pos,
+                        action,
+                        moving,
+                        state.config.teleport_key.is_some(),
+                    )
+                },
                 || Player::Falling(moving, anchor, timeout_on_complete),
             )
         },
@@ -108,6 +118,7 @@ fn on_player_action(
     cur_pos: Point,
     action: PlayerAction,
     moving: Moving,
+    has_teleport_key: bool,
 ) -> Option<(Player, bool)> {
     let (y_distance, y_direction) = moving.y_distance_direction_from(true, cur_pos);
     match action {
@@ -128,7 +139,7 @@ fn on_player_action(
             with: ActionKeyWith::Any,
             ..
         }) => {
-            if !moving.completed || y_distance >= FALLING_TO_USE_KEY_THRESHOLD {
+            if has_teleport_key || !moving.completed || y_distance >= FALLING_TO_USE_KEY_THRESHOLD {
                 return None;
             }
             Some((Player::UseKey(UseKey::from_action(action)), false))
