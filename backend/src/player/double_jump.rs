@@ -88,6 +88,17 @@ impl DoubleJumping {
     fn moving(self, moving: Moving) -> DoubleJumping {
         DoubleJumping { moving, ..self }
     }
+
+    #[inline]
+    fn update_jump_cooldown(&mut self) {
+        self.cooldown_timeout = update_with_timeout(
+            self.cooldown_timeout,
+            COOLDOWN_TIMEOUT,
+            |timeout| timeout,
+            Timeout::default,
+            |timeout| timeout,
+        );
+    }
 }
 
 /// Updates the [`Player::DoubleJumping`] contextual state.
@@ -186,13 +197,7 @@ pub fn update_double_jumping_context(
                             .keys
                             .send(state.config.teleport_key.unwrap_or(state.config.jump_key));
                     } else {
-                        double_jumping.cooldown_timeout = update_with_timeout(
-                            double_jumping.cooldown_timeout,
-                            COOLDOWN_TIMEOUT,
-                            |timeout| timeout,
-                            Timeout::default,
-                            |timeout| timeout,
-                        );
+                        double_jumping.update_jump_cooldown();
                     }
                 } else {
                     let _ = context.keys.send_up(KeyKind::Right);
