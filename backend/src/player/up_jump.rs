@@ -157,7 +157,7 @@ pub fn update_up_jumping_context(
                     }) => {
                         if moving.completed
                             && moving.timeout.total % MOVE_TIMEOUT == 0 // Interval roll dice
-                            && rand::random_bool(0.7)
+                            && context.rng.random_bool(0.7)
                         {
                             Some(on_ping_pong_double_jump_action(
                                 context, cur_pos, bound, direction,

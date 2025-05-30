@@ -57,11 +57,11 @@ pub fn update_unstucking_context(
         timeout,
         MOVE_TIMEOUT,
         |timeout| {
-            if has_settings.unwrap_or_default() || (gamba_mode && rand::random_bool(0.5)) {
+            if has_settings.unwrap_or_default() || (gamba_mode && context.rng.random_bool(0.5)) {
                 let _ = context.keys.send(KeyKind::Esc);
             }
             let to_right = match (gamba_mode, pos) {
-                (true, _) => rand::random_bool(0.5),
+                (true, _) => context.rng.random_bool(0.5),
                 (_, Some(Point { y, .. })) if y <= Y_IGNORE_THRESHOLD => {
                     return Player::Unstucking(timeout, has_settings, gamba_mode);
                 }

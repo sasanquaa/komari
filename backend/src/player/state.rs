@@ -536,11 +536,11 @@ impl PlayerState {
         }
         point.map(|(_, point)| point).or_else(|| {
             // Flip a coin, use platform as pathing point
-            if !platforms.is_empty() && rand::random_bool(0.5) {
-                let platform = platforms[rand::random_range(0..platforms.len())];
+            if !platforms.is_empty() && context.rng.random_bool(0.5) {
+                let platform = platforms[context.rng.random_range(0..platforms.len())];
                 let xs = platform.xs();
                 let y = platform.y();
-                let x = rand::random_range(xs.start..xs.end);
+                let x = context.rng.random_range(xs.start..xs.end);
                 debug!(target: "player", "auto mob pathing point from platform {x}, {y}");
                 return Some(Point::new(x, y));
             }

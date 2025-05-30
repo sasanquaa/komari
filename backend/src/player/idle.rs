@@ -9,7 +9,9 @@ use super::{
     moving::{Moving, find_intermediate_points},
     use_key::UseKey,
 };
-use crate::{ActionKeyDirection, ActionKeyWith, Position, context::Context, minimap::Minimap};
+use crate::{
+    ActionKeyDirection, ActionKeyWith, Position, context::Context, minimap::Minimap, rng::Rng,
+};
 
 /// Updates [`Player::Idle`] contextual state
 ///
@@ -74,7 +76,7 @@ fn on_player_action(
             Some((next, false))
         }
         PlayerAction::Move(PlayerActionMove { position, .. }) => {
-            let x = get_x_destination(position);
+            let x = get_x_destination(&context.rng, position);
             debug!(target: "player", "handling move: {} {}", x, position.y);
             Some((
                 Player::Moving(Point::new(x, position.y), position.allow_adjusting, None),
@@ -85,7 +87,7 @@ fn on_player_action(
             position: Some(position),
             ..
         }) => {
-            let x = get_x_destination(position);
+            let x = get_x_destination(&context.rng, position);
             debug!(target: "player", "handling move: {} {}", x, position.y);
             Some((
                 Player::Moving(Point::new(x, position.y), position.allow_adjusting, None),
@@ -159,8 +161,8 @@ fn on_player_action(
     }
 }
 
-fn get_x_destination(position: Position) -> i32 {
+fn get_x_destination(rng: &Rng, position: Position) -> i32 {
     let x_min = position.x.saturating_sub(position.x_random_range).max(0);
     let x_max = position.x.saturating_add(position.x_random_range + 1);
-    rand::random_range(x_min..x_max)
+    rng.random_range(x_min..x_max)
 }

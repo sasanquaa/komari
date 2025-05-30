@@ -83,12 +83,14 @@ impl UseKey {
                     wait_before_use_ticks.saturating_sub(wait_before_use_ticks_random_range);
                 let wait_before_max =
                     wait_before_use_ticks.saturating_add(wait_before_use_ticks_random_range + 1);
+                // TODO: Replace rand with Rng
                 let wait_before = rand::random_range(wait_before_min..wait_before_max);
 
                 let wait_after_min =
                     wait_after_use_ticks.saturating_sub(wait_after_use_ticks_random_range);
                 let wait_after_max =
                     wait_after_use_ticks.saturating_add(wait_after_use_ticks_random_range + 1);
+                // TODO: Replace rand with Rng
                 let wait_after = rand::random_range(wait_after_min..wait_after_max);
 
                 Self {

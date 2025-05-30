@@ -69,14 +69,14 @@ macro_rules! impl_identifiable {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Seeds {
     pub id: Option<i64>,
-    pub input_seed: [u8; 32],
+    pub seed: [u8; 32],
 }
 
 impl Default for Seeds {
     fn default() -> Self {
         Self {
             id: None,
-            input_seed: rand::random(),
+            seed: rand::random(),
         }
     }
 }

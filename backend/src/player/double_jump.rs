@@ -334,8 +334,14 @@ fn on_ping_pong_use_key_action(
     let upward_bias = cur_pos.y < bound_y_mid;
     let downward_bias = cur_pos.y > bound_y_mid;
 
-    let should_upward = upward_bias && rand::random_bool(0.1);
-    let should_downward = downward_bias && rand::random_bool(0.1);
+    let should_upward = upward_bias
+        && context
+            .rng
+            .random_perlin_bool(cur_pos.x, cur_pos.y, context.tick, 0.1);
+    let should_downward = downward_bias
+        && context
+            .rng
+            .random_perlin_bool(cur_pos.x, cur_pos.y, context.tick + 100, 0.1);
 
     if cur_pos.y < bound.y || should_upward {
         let moving = Moving::new(

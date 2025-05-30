@@ -64,7 +64,7 @@ pub trait KeySender: Debug {
 #[derive(Debug)]
 pub struct DefaultKeySender {
     kind: KeySenderKind,
-    delay_rng: RefCell<Rng>,
+    delay_rng: Rng,
     delay_mean_std_pair: (f32, f32),
     delay_map: RefCell<HashMap<KeyKind, u32>>,
 }
@@ -78,8 +78,8 @@ enum InputDelay {
 impl DefaultKeySender {
     pub fn new(method: KeySenderMethod, seeds: Seeds) -> Self {
         Self {
-            kind: to_key_sender_kind_from(method, &seeds.input_seed),
-            delay_rng: RefCell::new(Rng::new(seeds.input_seed)),
+            kind: to_key_sender_kind_from(method, &seeds.seed),
+            delay_rng: Rng::new(seeds.seed),
             delay_mean_std_pair: (BASE_MEAN_MS_DELAY, BASE_STD_MS_DELAY),
             delay_map: RefCell::new(HashMap::new()),
         }
@@ -178,7 +178,7 @@ impl DefaultKeySender {
 
         if game_tick > 0 && game_tick % UPDATE_MEAN_STD_PAIR_INTERVAL == 0 {
             let (mean, std) = self.delay_mean_std_pair;
-            self.delay_mean_std_pair = self.delay_rng.borrow_mut().random_mean_std_pair(
+            self.delay_mean_std_pair = self.delay_rng.random_mean_std_pair(
                 BASE_MEAN_MS_DELAY,
                 mean,
                 BASE_STD_MS_DELAY,
@@ -192,7 +192,6 @@ impl DefaultKeySender {
         if map.is_empty() {
             return;
         }
-
         map.retain(|kind, delay| {
             *delay = delay.saturating_sub(1);
             if *delay == 0 {
@@ -205,7 +204,6 @@ impl DefaultKeySender {
     fn random_input_delay_tick_count(&self) -> (f32, u32) {
         let (mean, std) = self.delay_mean_std_pair;
         self.delay_rng
-            .borrow_mut()
             .random_delay_tick_count(mean, std, MS_PER_TICK_F32, 80.0, 120.0)
     }
 }
@@ -221,14 +219,14 @@ impl KeySender for DefaultKeySender {
                         && borrow.url() == url
                     {
                         borrow.reset();
-                        borrow.init(self.delay_rng.borrow().seed());
+                        borrow.init(self.delay_rng.seed());
                         return;
                     }
                 }
             }
             KeySenderMethod::Default(_, _) => (),
         }
-        self.kind = to_key_sender_kind_from(method, self.delay_rng.borrow().seed());
+        self.kind = to_key_sender_kind_from(method, self.delay_rng.seed());
     }
 
     fn send(&self, kind: KeyKind) -> Result<()> {
