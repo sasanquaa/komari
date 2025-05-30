@@ -24,7 +24,7 @@ const TIMEOUT: u32 = MOVE_TIMEOUT * 8;
 /// Timeout after stopping grappling.
 const STOPPING_TIMEOUT: u32 = MOVE_TIMEOUT + 3;
 
-/// Maximum y distance allowed to stop grpapling.
+/// Maximum y distance allowed to stop grappling.
 const STOPPING_THRESHOLD: i32 = 4;
 
 /// Updates the [`Player::Grappling`] contextual state.
@@ -45,7 +45,7 @@ pub fn update_grappling_context(
     let cur_pos = state.last_known_pos.unwrap();
     let key = state.config.grappling_key.unwrap(); // Cannot transition if None
     let x_changed = cur_pos.x != moving.pos.x;
-    let (y_distance, y_direction) = moving.y_distance_direction_from(true, moving.pos);
+    let (y_distance, y_direction) = moving.y_distance_direction_from(true, cur_pos);
 
     update_moving_axis_context(
         moving,

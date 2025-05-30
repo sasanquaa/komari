@@ -15,17 +15,17 @@ use crate::rng::Rng;
 use crate::{CaptureMode, context::MS_PER_TICK, rpc::KeysService};
 
 /// Base mean in milliseconds to generate a pair from.
-pub const BASE_MEAN_MS_DELAY: f32 = 100.0;
+const BASE_MEAN_MS_DELAY: f32 = 100.0;
 
 /// Base standard deviation in milliseconds to generate a pair from.
-pub const BASE_STD_MS_DELAY: f32 = 20.0;
+const BASE_STD_MS_DELAY: f32 = 20.0;
 
 /// The rate at which generated standard deviation will revert to the base [`BASE_STD_MS_DELAY`]
 /// over time.
-pub const MEAN_STD_REVERSION_RATE: f32 = 0.2;
+const MEAN_STD_REVERSION_RATE: f32 = 0.2;
 
 /// The rate at which generated mean will revert to the base [`BASE_MEAN_MS_DELAY`] over time.
-pub const MEAN_STD_VOLATILITY: f32 = 3.0;
+const MEAN_STD_VOLATILITY: f32 = 3.0;
 
 /// The input method to use for the key sender.
 ///
