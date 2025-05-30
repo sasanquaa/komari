@@ -88,8 +88,12 @@ pub fn update_grappling_context(
                         bound, direction, ..
                     }) => {
                         if cur_pos.y >= bound.y
-                            && moving.timeout.total % MOVE_TIMEOUT == 0 // Interval roll dice
-                            && context.rng.random_bool(0.7)
+                            && context.rng.random_perlin_bool(
+                                cur_pos.x,
+                                cur_pos.y,
+                                context.tick,
+                                0.7,
+                            )
                         {
                             Some(on_ping_pong_double_jump_action(
                                 context, cur_pos, bound, direction,

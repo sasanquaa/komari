@@ -59,6 +59,9 @@ const Y_NEAR_STATIONARY_VELOCITY_THRESHOLD: f32 = 0.4;
 /// Minimium y distance required to perform a fall and then double jump.
 const FALLING_THRESHOLD: i32 = 8;
 
+/// Minimum y distance required from the middle y of ping pong bound to allow randomization.
+const PING_PONG_IGNORE_RANDOMIZE_Y_THRESHOLD: i32 = 12;
+
 #[derive(Copy, Clone, Debug)]
 pub struct DoubleJumping {
     moving: Moving,
@@ -331,17 +334,17 @@ fn on_ping_pong_use_key_action(
     let bound_y_max = bound.y + bound.height;
     let bound_y_mid = bound_y_max / 2;
 
-    let upward_bias = cur_pos.y < bound_y_mid;
-    let downward_bias = cur_pos.y > bound_y_mid;
-
+    let allow_randomize = (cur_pos.y - bound_y_mid).abs() >= PING_PONG_IGNORE_RANDOMIZE_Y_THRESHOLD;
+    let upward_bias = allow_randomize && cur_pos.y < bound_y_mid;
+    let downward_bias = allow_randomize && cur_pos.y > bound_y_mid;
     let should_upward = upward_bias
         && context
             .rng
-            .random_perlin_bool(cur_pos.x, cur_pos.y, context.tick, 0.1);
+            .random_perlin_bool(cur_pos.x, cur_pos.y, context.tick, 0.35);
     let should_downward = downward_bias
         && context
             .rng
-            .random_perlin_bool(cur_pos.x, cur_pos.y, context.tick + 100, 0.1);
+            .random_perlin_bool(cur_pos.x, cur_pos.y, context.tick + 100, 0.25);
 
     if cur_pos.y < bound.y || should_upward {
         let moving = Moving::new(
