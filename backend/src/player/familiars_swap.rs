@@ -49,8 +49,8 @@ pub struct FamiliarsSwapping {
 impl Display for FamiliarsSwapping {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.stage {
-            SwappingStage::OpenMenu(_) => write!(f, "Opening Familiar Menu"),
-            SwappingStage::OpenSetup(_) => write!(f, "Opening Setup Tab"),
+            SwappingStage::OpenMenu(_) => write!(f, "Opening"),
+            SwappingStage::OpenSetup(_) => write!(f, "Opening Setup"),
             SwappingStage::FindSlots => write!(f, "Find Slots"),
             SwappingStage::FreeSlots(_, _) | SwappingStage::FreeSlot(_, _) => {
                 write!(f, "Freeing Slots")
@@ -147,6 +147,7 @@ pub fn update_familiars_swapping_context(
         SwappingStage::Completed => unreachable!(),
     };
     let next = if matches!(swapping.stage, SwappingStage::Completed) {
+        let _ = context.keys.send(KeyKind::Esc);
         Player::Idle
     } else {
         Player::FamiliarsSwapping(swapping)
@@ -164,6 +165,10 @@ fn update_open_menu(
     swapping: FamiliarsSwapping,
     timeout: Timeout,
 ) -> FamiliarsSwapping {
+    if swapping.swappable_rarities.is_empty() {
+        return swapping.stage(SwappingStage::Completed);
+    }
+
     update_with_timeout(
         timeout,
         5,
@@ -230,6 +235,9 @@ fn update_find_slots(context: &Context, mut swapping: FamiliarsSwapping) -> Fami
             for pair in vec {
                 swapping.slots.push(pair);
             }
+        } else {
+            // Weird spots with false positives
+            return swapping.stage(SwappingStage::Completed);
         }
     }
 
@@ -415,30 +423,26 @@ fn update_swapping(
         || {
             // Check free slot in timeout
             let mut swapping = swapping;
-            let swappable_range = match swapping.swappable_slots {
-                SwappableFamiliars::All => 0..FAMILIAR_SLOTS,
-                SwappableFamiliars::Last => FAMILIAR_SLOTS - 1..FAMILIAR_SLOTS,
-                SwappableFamiliars::SecondAndLast => FAMILIAR_SLOTS - 2..FAMILIAR_SLOTS,
-            };
-            for i in swappable_range {
+            for i in 0..FAMILIAR_SLOTS {
                 swapping.slots[i].1 = detector.detect_familiar_slot_is_free(swapping.slots[i].0);
             }
             if swapping.slots.iter().all(|slot| !slot.1) {
-                swapping.stage(SwappingStage::Completed)
-            } else if index < swapping.cards.len() {
+                swapping.stage(SwappingStage::Saving(Timeout::default(), None))
+            } else if index + 1 < swapping.cards.len() {
                 swapping.stage_swapping(Timeout::default(), index + 1)
             } else {
+                let _ = context.keys.send_mouse(50, 50, MouseAction::MoveOnly);
                 swapping.stage_scrolling(Timeout::default(), None)
             }
         },
         |timeout| {
-            if timeout.current == 7 {
+            if timeout.current == 5 {
                 match detector.detect_familiar_hover_level() {
                     Ok(FamiliarLevel::Level5) => {
-                        return if index < swapping.cards.len() {
-                            swapping.stage_swapping(Timeout::default(), index + 1)
+                        if index + 1 < swapping.cards.len() {
+                            return swapping.stage_swapping(Timeout::default(), index + 1);
                         } else {
-                            swapping.stage_scrolling(Timeout::default(), None)
+                            let _ = context.keys.send_mouse(50, 50, MouseAction::MoveOnly);
                         };
                     }
                     Ok(FamiliarLevel::LevelOther) => {
@@ -536,7 +540,6 @@ fn update_saving(
                 let y = button.y + button.height / 2;
                 let _ = context.keys.send_mouse(x, y, MouseAction::Click);
             }
-            let _ = context.keys.send(KeyKind::Esc);
             swapping.stage(SwappingStage::Completed)
         },
         |timeout| swapping.stage_saving(timeout, Some(save)),
