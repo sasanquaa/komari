@@ -337,7 +337,7 @@ fn on_ping_pong_use_key_action(
     let _ = context.keys.send_up(KeyKind::Left);
     let _ = context.keys.send_up(KeyKind::Right);
     let bound_y_max = bound.y + bound.height;
-    let bound_y_mid = bound_y_max / 2;
+    let bound_y_mid = bound.y + bound.height / 2;
 
     let allow_randomize = (cur_pos.y - bound_y_mid).abs() >= PING_PONG_IGNORE_RANDOMIZE_Y_THRESHOLD;
     let upward_bias = allow_randomize && cur_pos.y < bound_y_mid;

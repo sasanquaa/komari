@@ -6,7 +6,8 @@ use anyhow::Result;
 #[cfg(test)]
 use mockall::automock;
 use platforms::windows::{
-    BitBltCapture, Frame, Handle, KeyInputKind, KeyKind, Keys, WgcCapture, WindowBoxCapture,
+    BitBltCapture, Frame, Handle, KeyInputKind, KeyKind, Keys, MouseActionKind, WgcCapture,
+    WindowBoxCapture,
 };
 
 use crate::context::MS_PER_TICK_F32;
@@ -45,6 +46,13 @@ enum KeySenderKind {
     Default(Keys),
 }
 
+#[derive(Debug)]
+pub enum MouseAction {
+    MoveOnly,
+    Click,
+    Scroll,
+}
+
 /// A trait for sending keys.
 #[cfg_attr(test, automock)]
 pub trait KeySender: Debug {
@@ -52,7 +60,13 @@ pub trait KeySender: Debug {
 
     fn send(&self, kind: KeyKind) -> Result<()>;
 
-    fn send_click_to_focus(&self) -> Result<()>;
+    /// Sends mouse to `(x, y)` relative to the client coordinate (e.g. capture area) and
+    /// optionally click.
+    ///
+    /// `(0, 0)` is top-left and `(width, height)` is bottom-right.
+    ///
+    /// TODO: Unfortunate name and location...
+    fn send_mouse(&self, x: i32, y: i32, action: MouseAction) -> Result<()>;
 
     fn send_up(&self, kind: KeyKind) -> Result<()>;
 
@@ -233,11 +247,16 @@ impl KeySender for DefaultKeySender {
         self.send_inner(kind)
     }
 
-    fn send_click_to_focus(&self) -> Result<()> {
+    fn send_mouse(&self, x: i32, y: i32, action: MouseAction) -> Result<()> {
         match &self.kind {
             KeySenderKind::Rpc(_) => Ok(()),
             KeySenderKind::Default(keys) => {
-                keys.send_click_to_focus()?;
+                let action = match action {
+                    MouseAction::MoveOnly => MouseActionKind::MoveOnly,
+                    MouseAction::Click => MouseActionKind::Click,
+                    MouseAction::Scroll => MouseActionKind::Scroll,
+                };
+                keys.send_mouse(x, y, action)?;
                 Ok(())
             }
         }

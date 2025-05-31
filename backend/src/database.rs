@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     env,
     sync::{LazyLock, Mutex},
 };
@@ -92,6 +92,28 @@ pub enum InputMethod {
     Rpc,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Default, Serialize, Deserialize)]
+pub enum SwappableFamiliars {
+    #[default]
+    All,
+    Last,
+    SecondAndLast,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Default, Hash, Serialize, Deserialize)]
+pub enum FamiliarRarity {
+    #[default]
+    Rare,
+    Epic,
+}
+
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct Familiars {
+    enabled: bool,
+    swappable_familiars: SwappableFamiliars,
+    swappable_rarities: HashSet<FamiliarRarity>,
+}
+
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct Notifications {
     pub discord_webhook_url: String,
@@ -121,6 +143,8 @@ pub struct Settings {
     pub input_method_rpc_server_url: String,
     #[serde(default)]
     pub notifications: Notifications,
+    #[serde(default)]
+    pub familiars: Familiars,
     #[serde(default = "toggle_actions_key_default")]
     pub toggle_actions_key: KeyBindingConfiguration,
     #[serde(default = "platform_start_key_default")]
@@ -141,6 +165,7 @@ impl Default for Settings {
             input_method_rpc_server_url: String::default(),
             stop_on_fail_or_change_map: false,
             notifications: Notifications::default(),
+            familiars: Familiars::default(),
             toggle_actions_key: toggle_actions_key_default(),
             platform_start_key: platform_start_key_default(),
             platform_end_key: platform_end_key_default(),
@@ -207,6 +232,8 @@ pub struct Configuration {
     pub up_jump_key: Option<KeyBindingConfiguration>,
     pub interact_key: KeyBindingConfiguration,
     pub cash_shop_key: KeyBindingConfiguration,
+    #[serde(default)]
+    pub familiar_key: KeyBindingConfiguration,
     pub feed_pet_key: KeyBindingConfiguration,
     pub feed_pet_millis: u64,
     pub potion_key: KeyBindingConfiguration,
@@ -254,6 +281,7 @@ impl Default for Configuration {
             up_jump_key: None,
             interact_key: KeyBindingConfiguration::default(),
             cash_shop_key: KeyBindingConfiguration::default(),
+            familiar_key: KeyBindingConfiguration::default(),
             feed_pet_key: KeyBindingConfiguration::default(),
             feed_pet_millis: 320000,
             potion_key: KeyBindingConfiguration::default(),

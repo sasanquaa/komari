@@ -1,4 +1,4 @@
-use std::ops::Index;
+use std::ops::{Index, IndexMut};
 
 /// A fixed size array.
 #[derive(Debug)]
@@ -91,6 +91,12 @@ impl<T, const N: usize> Index<usize> for Array<T, N> {
 
     fn index(&self, index: usize) -> &Self::Output {
         self.inner[index].as_ref().unwrap()
+    }
+}
+
+impl<T, const N: usize> IndexMut<usize> for Array<T, N> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        self.inner[index].as_mut().unwrap()
     }
 }
 

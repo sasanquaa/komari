@@ -3,6 +3,7 @@ use adjust::{ADJUSTING_MEDIUM_THRESHOLD, update_adjusting_context};
 use cash_shop::{CashShop, update_cash_shop_context};
 use double_jump::{DoubleJumping, update_double_jumping_context};
 use fall::update_falling_context;
+use familiars_swap::{FamiliarsSwapping, update_familiars_swapping_context};
 use grapple::update_grappling_context;
 use idle::update_idle_context;
 use jump::update_jumping_context;
@@ -29,6 +30,7 @@ mod adjust;
 mod cash_shop;
 mod double_jump;
 mod fall;
+mod familiars_swap;
 mod grapple;
 mod idle;
 mod jump;
@@ -53,6 +55,7 @@ pub const JUMP_THRESHOLD: i32 = 7;
 
 /// The player contextual states
 #[derive(Clone, Copy, Debug, Display)]
+#[allow(clippy::large_enum_variant)] // There is only ever a single instance of Player
 pub enum Player {
     /// Detects player on the minimap
     Detecting,
@@ -83,6 +86,7 @@ pub enum Player {
     SolvingRune(SolvingRune),
     /// Enters the cash shop then exit after 10 seconds
     CashShopThenExit(Timeout, CashShop),
+    FamiliarsSwapping(FamiliarsSwapping),
 }
 
 impl Player {
@@ -106,6 +110,7 @@ impl Player {
             | Player::Unstucking(_, _, _)
             | Player::DoubleJumping(DoubleJumping { forced: true, .. })
             | Player::UseKey(_)
+            | Player::FamiliarsSwapping(_)
             | Player::Stalling(_, _) => false,
         }
     }
@@ -198,6 +203,9 @@ fn update_non_positional_context(
         Player::UseKey(use_key) => {
             (!failed_to_detect_player).then(|| update_use_key_context(context, state, use_key))
         }
+        Player::FamiliarsSwapping(swapping) => {
+            Some(update_familiars_swapping_context(context, swapping))
+        }
         Player::Unstucking(timeout, has_settings, gamba_mode) => Some(update_unstucking_context(
             context,
             state,
@@ -256,6 +264,7 @@ fn update_positional_context(
         | Player::Unstucking(_, _, _)
         | Player::Stalling(_, _)
         | Player::SolvingRune(_)
+        | Player::FamiliarsSwapping(_)
         | Player::CashShopThenExit(_, _) => unreachable!(),
     }
 }
