@@ -1,10 +1,11 @@
+use opencv::core::MatTraitConst;
 use platforms::windows::KeyKind;
 
 use super::{
     Player, PlayerState,
     timeout::{Timeout, update_with_timeout},
 };
-use crate::context::Context;
+use crate::{bridge::MouseAction, context::Context};
 
 #[derive(Clone, Copy, Debug)]
 pub enum CashShop {
@@ -48,7 +49,10 @@ pub fn update_cash_shop_context(
             } else {
                 CashShop::Exitted
             };
-            let _ = context.keys.send_click_to_focus();
+            let size = context.detector_unwrap().mat().size().unwrap();
+            let _ = context
+                .keys
+                .send_mouse(size.width / 2, size.height / 2, MouseAction::Click);
             let _ = context.keys.send(KeyKind::Esc);
             let _ = context.keys.send(KeyKind::Enter);
             Player::CashShopThenExit(timeout, next)

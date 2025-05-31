@@ -44,6 +44,7 @@ pub fn update_stalling_context(
             PlayerAction::PingPong(_)
             | PlayerAction::Key(_)
             | PlayerAction::Move(_)
+            | PlayerAction::FamiliarsSwapping(_)
             | PlayerAction::SolveRune => Some((next, matches!(next, Player::Idle))),
         },
         || next,

@@ -150,6 +150,7 @@ fn on_player_action(
         })
         | PlayerAction::PingPong(_)
         | PlayerAction::Move(_)
+        | PlayerAction::FamiliarsSwapping(_)
         | PlayerAction::SolveRune => None,
     }
 }

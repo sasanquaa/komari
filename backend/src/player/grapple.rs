@@ -102,7 +102,10 @@ pub fn update_grappling_context(
                             None
                         }
                     }
-                    PlayerAction::Key(_) | PlayerAction::Move(_) | PlayerAction::SolveRune => None,
+                    PlayerAction::FamiliarsSwapping(_)
+                    | PlayerAction::Key(_)
+                    | PlayerAction::Move(_)
+                    | PlayerAction::SolveRune => None,
                 },
                 || Player::Grappling(moving),
             )

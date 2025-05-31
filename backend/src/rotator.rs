@@ -12,14 +12,15 @@ use ordered_hash_map::OrderedHashMap;
 use rand::seq::IteratorRandom;
 
 use crate::{
-    ActionKeyDirection, ActionKeyWith, AutoMobbing, KeyBinding, Position, RotationMode,
+    ActionKeyDirection, ActionKeyWith, AutoMobbing, KeyBinding, Position, RotationMode, Settings,
+    array::Array,
     buff::{Buff, BuffKind},
     context::{Context, MS_PER_TICK},
     database::{Action, ActionCondition, ActionKey, ActionMove, PingPong},
     minimap::Minimap,
     player::{
         GRAPPLING_THRESHOLD, PingPongDirection, Player, PlayerAction, PlayerActionAutoMob,
-        PlayerActionKey, PlayerActionPingPong, PlayerState,
+        PlayerActionFamiliarsSwapping, PlayerActionKey, PlayerActionPingPong, PlayerState,
     },
     skill::{Skill, SkillKind},
     task::{Task, Update, update_detection_task},
@@ -141,7 +142,7 @@ impl Rotator {
         actions: &[Action],
         buffs: &[(BuffKind, KeyBinding)],
         potion_key: KeyBinding,
-        enable_rune_solving: bool,
+        settings: &Settings,
         reset_normal_actions_on_erda: bool,
     ) {
         debug!(target: "rotator", "preparing actions {actions:?} {buffs:?}");
@@ -189,10 +190,27 @@ impl Rotator {
             self.id_counter.fetch_add(1, Ordering::Relaxed),
             elite_boss_potion_spam_priority_action(potion_key),
         );
-        if enable_rune_solving {
+        if settings.enable_rune_solving {
             self.priority_actions.insert(
                 self.id_counter.fetch_add(1, Ordering::Relaxed),
                 solve_rune_priority_action(),
+            );
+        }
+        if settings.familiars.enable_familiars_swapping {
+            self.priority_actions.insert(
+                self.id_counter.fetch_add(1, Ordering::Relaxed),
+                priority_action(
+                    RotatorAction::Single(PlayerAction::FamiliarsSwapping(
+                        PlayerActionFamiliarsSwapping {
+                            swappable_slots: settings.familiars.swappable_familiars,
+                            swappable_rarities: Array::from_iter(
+                                settings.familiars.swappable_rarities.clone(),
+                            ),
+                        },
+                    )),
+                    ActionCondition::EveryMillis(settings.familiars.swap_check_millis),
+                    true,
+                ),
             );
         }
         for (i, key) in buffs.iter().copied() {
@@ -922,7 +940,7 @@ mod tests {
             &actions,
             &buffs,
             KeyBinding::A,
-            true,
+            &Settings::default(),
             false,
         );
         assert_eq!(rotator.priority_actions.len(), 7);

@@ -31,12 +31,15 @@ impl HandleCell {
                 if self.inner.get().is_none() {
                     self.inner.set(self.handle.query_handle());
                 }
+
                 let handle_inner = self.inner.get()?;
-                if is_class_matched(handle_inner, class) {
-                    return Some(handle_inner);
+                let class_matched = is_class_matched(handle_inner, class);
+                if class_matched {
+                    Some(handle_inner)
+                } else {
+                    self.inner.set(None);
+                    None
                 }
-                self.inner.set(None);
-                None
             }
         }
     }
@@ -66,7 +69,7 @@ impl Handle {
         }
     }
 
-    fn query_handle(&self) -> Option<HWND> {
+    pub(crate) fn query_handle(&self) -> Option<HWND> {
         match self.kind {
             HandleKind::Fixed(handle) => Some(handle),
             HandleKind::Dynamic(class) => {

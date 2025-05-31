@@ -42,6 +42,17 @@ fn main() {
     let hp_shield = dir.join("hp_shield_ideal_ratio.png");
     let hp_end = dir.join("hp_end_ideal_ratio.png");
     let spin_test = dir.join("spin_test_2");
+    let familiar_button_save = dir.join("familiar_button_save_ideal_ratio.png");
+    let familiar_button_setup = dir.join("familiar_button_setup_ideal_ratio.png");
+    let familiar_slot_free = dir.join("familiar_slot_free_ideal_ratio.png");
+    let familiar_slot_occupied = dir.join("familiar_slot_occupied_ideal_ratio.png");
+    let familiar_slot_occupied_mask = dir.join("familiar_slot_occupied_mask_ideal_ratio.png");
+    let familiar_level_5 = dir.join("familiar_level_5_ideal_ratio.png");
+    let familiar_level_5_mask = dir.join("familiar_level_5_mask_ideal_ratio.png");
+    let familiar_scrollbar = dir.join("familiar_scrollbar_ideal_ratio.png");
+    let familiar_card_rare = dir.join("familiar_card_rare_ideal_ratio.png");
+    let familiar_card_epic = dir.join("familiar_card_epic_ideal_ratio.png");
+    let familiar_card_mask = dir.join("familiar_card_mask_ideal_ratio.png");
 
     let mob_model = dir.join("mob_nms.onnx");
     let rune_model = dir.join("rune_nms.onnx");
@@ -205,6 +216,50 @@ fn main() {
     println!(
         "cargo:rustc-env=SPIN_TEST_DIR={}",
         spin_test.to_str().unwrap()
+    );
+    println!(
+        "cargo:rustc-env=FAMILIAR_BUTTON_SAVE={}",
+        familiar_button_save.to_str().unwrap()
+    );
+    println!(
+        "cargo:rustc-env=FAMILIAR_BUTTON_SETUP={}",
+        familiar_button_setup.to_str().unwrap()
+    );
+    println!(
+        "cargo:rustc-env=FAMILIAR_SLOT_FREE={}",
+        familiar_slot_free.to_str().unwrap()
+    );
+    println!(
+        "cargo:rustc-env=FAMILIAR_SLOT_OCCUPIED={}",
+        familiar_slot_occupied.to_str().unwrap()
+    );
+    println!(
+        "cargo:rustc-env=FAMILIAR_SLOT_OCCUPIED_MASK={}",
+        familiar_slot_occupied_mask.to_str().unwrap()
+    );
+    println!(
+        "cargo:rustc-env=FAMILIAR_LEVEL_5={}",
+        familiar_level_5.to_str().unwrap()
+    );
+    println!(
+        "cargo:rustc-env=FAMILIAR_LEVEL_5_MASK={}",
+        familiar_level_5_mask.to_str().unwrap()
+    );
+    println!(
+        "cargo:rustc-env=FAMILIAR_SCROLLBAR={}",
+        familiar_scrollbar.to_str().unwrap()
+    );
+    println!(
+        "cargo:rustc-env=FAMILIAR_CARD_RARE={}",
+        familiar_card_rare.to_str().unwrap()
+    );
+    println!(
+        "cargo:rustc-env=FAMILIAR_CARD_EPIC={}",
+        familiar_card_epic.to_str().unwrap()
+    );
+    println!(
+        "cargo:rustc-env=FAMILIAR_CARD_MASK={}",
+        familiar_card_mask.to_str().unwrap()
     );
 
     println!(

@@ -8,28 +8,29 @@ use bit_vec::BitVec;
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use windows::{
     Win32::{
-        Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM},
-        Graphics::Gdi::{IntersectRect, MONITOR_DEFAULTTONULL, MonitorFromWindow},
+        Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM},
+        Graphics::Gdi::{ClientToScreen, IntersectRect, MONITOR_DEFAULTTONULL, MonitorFromWindow},
         System::Threading::GetCurrentProcessId,
         UI::{
             Input::KeyboardAndMouse::{
                 INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBD_EVENT_FLAGS, KEYBDINPUT,
                 KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, MAPVK_VK_TO_VSC_EX, MOUSEEVENTF_ABSOLUTE,
-                MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE, MOUSEINPUT,
-                MapVirtualKeyW, SendInput, VIRTUAL_KEY, VK_0, VK_1, VK_2, VK_3, VK_4, VK_5, VK_6,
-                VK_7, VK_8, VK_9, VK_A, VK_B, VK_C, VK_CONTROL, VK_D, VK_DELETE, VK_DOWN, VK_E,
-                VK_END, VK_ESCAPE, VK_F, VK_F1, VK_F2, VK_F3, VK_F4, VK_F5, VK_F6, VK_F7, VK_F8,
-                VK_F9, VK_F10, VK_F11, VK_F12, VK_G, VK_H, VK_HOME, VK_I, VK_INSERT, VK_J, VK_K,
-                VK_L, VK_LEFT, VK_M, VK_MENU, VK_N, VK_NEXT, VK_O, VK_OEM_1, VK_OEM_2, VK_OEM_3,
-                VK_OEM_7, VK_OEM_COMMA, VK_OEM_PERIOD, VK_P, VK_PRIOR, VK_Q, VK_R, VK_RETURN,
-                VK_RIGHT, VK_S, VK_SHIFT, VK_SPACE, VK_T, VK_U, VK_UP, VK_V, VK_W, VK_X, VK_Y,
-                VK_Z,
+                MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_WHEEL,
+                MOUSEINPUT, MapVirtualKeyW, SendInput, VIRTUAL_KEY, VK_0, VK_1, VK_2, VK_3, VK_4,
+                VK_5, VK_6, VK_7, VK_8, VK_9, VK_A, VK_B, VK_C, VK_CONTROL, VK_D, VK_DELETE,
+                VK_DOWN, VK_E, VK_END, VK_ESCAPE, VK_F, VK_F1, VK_F2, VK_F3, VK_F4, VK_F5, VK_F6,
+                VK_F7, VK_F8, VK_F9, VK_F10, VK_F11, VK_F12, VK_G, VK_H, VK_HOME, VK_I, VK_INSERT,
+                VK_J, VK_K, VK_L, VK_LEFT, VK_M, VK_MENU, VK_N, VK_NEXT, VK_O, VK_OEM_1, VK_OEM_2,
+                VK_OEM_3, VK_OEM_7, VK_OEM_COMMA, VK_OEM_PERIOD, VK_P, VK_PRIOR, VK_Q, VK_R,
+                VK_RETURN, VK_RIGHT, VK_S, VK_SHIFT, VK_SPACE, VK_T, VK_U, VK_UP, VK_V, VK_W, VK_X,
+                VK_Y, VK_Z,
             },
             WindowsAndMessaging::{
-                CallNextHookEx, GetForegroundWindow, GetSystemMetrics, GetWindowRect,
-                GetWindowThreadProcessId, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT, LLKHF_INJECTED,
-                LLKHF_LOWER_IL_INJECTED, SM_CXSCREEN, SM_CYSCREEN, SetForegroundWindow,
-                SetWindowsHookExW, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP,
+                BringWindowToTop, CallNextHookEx, GetForegroundWindow, GetSystemMetrics,
+                GetWindowRect, GetWindowThreadProcessId, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT,
+                LLKHF_INJECTED, LLKHF_LOWER_IL_INJECTED, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
+                SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SetForegroundWindow, SetWindowsHookExW,
+                WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP,
             },
         },
     },
@@ -60,7 +61,7 @@ pub(crate) fn init() -> Owned<HHOOK> {
                 key.flags &= !LLKHF_INJECTED;
                 key.flags &= !LLKHF_LOWER_IL_INJECTED;
                 unsafe {
-                    lparam_ptr.write(key);
+                    *lparam_ptr = key;
                 }
             }
         }
@@ -122,6 +123,13 @@ pub struct Keys {
     handle: HandleCell,
     key_input_kind: KeyInputKind,
     key_down: RefCell<BitVec>,
+}
+
+#[derive(Debug)]
+pub enum MouseActionKind {
+    MoveOnly,
+    Click,
+    Scroll,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Default, Hash, Debug)]
@@ -214,15 +222,16 @@ impl Keys {
         Ok(())
     }
 
-    pub fn send_click_to_focus(&self) -> Result<(), Error> {
-        self.send_click_to_focus_inner()
-    }
-
-    // FIXME: hack for now
-    pub fn send_click_to_focus_inner(&self) -> Result<(), Error> {
+    pub fn send_mouse(&self, x: i32, y: i32, action: MouseActionKind) -> Result<(), Error> {
         let mut handle = self.get_handle()?;
+        // TODO: Force focus needed? ... Previously for cash shop
         match self.key_input_kind {
-            KeyInputKind::Fixed => unsafe { SetForegroundWindow(handle).ok()? },
+            KeyInputKind::Fixed => unsafe {
+                if !is_foreground(handle, KeyInputKind::Fixed) {
+                    SetForegroundWindow(handle).ok()?;
+                }
+                BringWindowToTop(handle)?;
+            },
             KeyInputKind::Foreground => {
                 if !is_foreground(handle, KeyInputKind::Foreground) {
                     return Err(Error::WindowNotFound);
@@ -230,24 +239,33 @@ impl Keys {
                 handle = unsafe { GetForegroundWindow() };
             }
         }
-        let x_metric = unsafe { GetSystemMetrics(SM_CXSCREEN) };
-        let y_metric = unsafe { GetSystemMetrics(SM_CYSCREEN) };
-        let mut rect = RECT::default();
-        unsafe { GetWindowRect(handle, &raw mut rect)? };
-        let dx = rect.left + (rect.right - rect.left) / 2;
-        let dx = (dx * 65536) / x_metric;
-        let dy = rect.top + (rect.bottom - rect.top) / 2;
-        let dy = (dy * 65536) / y_metric;
+
+        let (dx, dy) = client_to_absolute_coordinate_raw(handle, x, y)?;
+        let mut flags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
+        match action {
+            MouseActionKind::MoveOnly => (),
+            MouseActionKind::Click => {
+                flags |= MOUSEEVENTF_LEFTDOWN;
+                flags |= MOUSEEVENTF_LEFTUP;
+            }
+            MouseActionKind::Scroll => {
+                flags |= MOUSEEVENTF_WHEEL;
+            }
+        }
+        let data = if matches!(action, MouseActionKind::Scroll) {
+            -300
+        } else {
+            0
+        };
+
         let input = [INPUT {
             r#type: INPUT_MOUSE,
             Anonymous: INPUT_0 {
                 mi: MOUSEINPUT {
                     dx,
                     dy,
-                    dwFlags: MOUSEEVENTF_ABSOLUTE
-                        | MOUSEEVENTF_MOVE
-                        | MOUSEEVENTF_LEFTDOWN
-                        | MOUSEEVENTF_LEFTUP,
+                    dwFlags: flags,
+                    mouseData: data as u32,
                     ..MOUSEINPUT::default()
                 },
             },
@@ -445,6 +463,24 @@ impl From<KeyKind> for VIRTUAL_KEY {
             KeyKind::Alt => VK_MENU,
         }
     }
+}
+
+pub fn client_to_absolute_coordinate(handle: Handle, x: i32, y: i32) -> Result<(i32, i32), Error> {
+    client_to_absolute_coordinate_raw(handle.query_handle().ok_or(Error::WindowNotFound)?, x, y)
+}
+
+fn client_to_absolute_coordinate_raw(handle: HWND, x: i32, y: i32) -> Result<(i32, i32), Error> {
+    let mut point = POINT { x, y };
+    unsafe { ClientToScreen(handle, &raw mut point).ok()? };
+
+    let virtual_left = unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) };
+    let virtual_top = unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) };
+    let virtual_width = unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) };
+    let virtual_height = unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) };
+
+    let dx = ((point.x - virtual_left) * 65536) / virtual_width;
+    let dy = ((point.y - virtual_top) * 65536) / virtual_height;
+    Ok((dx, dy))
 }
 
 // TODO: Is this good?

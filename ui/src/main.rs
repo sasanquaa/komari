@@ -19,6 +19,7 @@ use dioxus::{
     },
     prelude::*,
 };
+use familiar::Familiars;
 use futures_util::StreamExt;
 use minimap::{Minimap, MinimapMessage};
 use notification::Notifications;
@@ -36,6 +37,7 @@ use tracing_log::LogTracer;
 
 mod action;
 mod configuration;
+mod familiar;
 mod icons;
 mod input;
 mod key;
@@ -51,6 +53,7 @@ const TAILWIND_CSS: Asset = asset!("public/tailwind.css");
 const AUTO_NUMERIC_JS: Asset = asset!("assets/autoNumeric.min.js");
 
 // TODO: Fix spaghetti UI
+// TODO: I give up on UI, it is whatever
 fn main() {
     LogTracer::init().unwrap();
     backend::init();
@@ -84,6 +87,7 @@ fn App() -> Element {
     const TAB_ACTIONS: &str = "Actions";
     const TAB_SETTINGS: &str = "Settings";
     const TAB_SETTINGS_NOTIFICATIONS: &str = "Notifications";
+    const TAB_SETTINGS_FAMILIARS: &str = "Familiars";
 
     // TODO: Move to AppMessage?
     let (minimap_tx, minimap_rx) = mpsc::channel::<MinimapMessage>(1);
@@ -184,6 +188,7 @@ fn App() -> Element {
                         TAB_ACTIONS.to_string(),
                         TAB_SETTINGS.to_string(),
                         TAB_SETTINGS_NOTIFICATIONS.to_string(),
+                        TAB_SETTINGS_FAMILIARS.to_string(),
                     ],
                     class: "py-2 px-3 font-medium text-sm focus:outline-none",
                     selected_class: "bg-white text-gray-800",
@@ -211,6 +216,9 @@ fn App() -> Element {
                     },
                     TAB_SETTINGS_NOTIFICATIONS => rsx! {
                         Notifications { app_coroutine: coroutine, settings }
+                    },
+                    TAB_SETTINGS_FAMILIARS => rsx! {
+                        Familiars { app_coroutine: coroutine, settings }
                     },
                     _ => unreachable!(),
                 }
