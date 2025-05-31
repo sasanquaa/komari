@@ -25,6 +25,7 @@ const JUMP: &str = "Jump";
 const UP_JUMP: &str = "Up Jump";
 const INTERACT: &str = "Interact";
 const CASH_SHOP: &str = "Cash Shop";
+const FAMILIAR: &str = "Familiar";
 const FEED_PET: &str = "Feed Pet";
 const POTION: &str = "Potion";
 const SAYRAM_ELIXIR: &str = "Sayram's Elixir";
@@ -215,6 +216,18 @@ fn ConfigGameKeyBindings(
                     });
                 },
                 value: Some(config_view().cash_shop_key),
+            }
+            KeyBindingConfigurationInput {
+                label: FAMILIAR,
+                label_active: active,
+                is_disabled: is_disabled(),
+                on_input: move |key: Option<KeyBindingConfiguration>| {
+                    on_config(ConfigurationData {
+                        familiar_key: key.unwrap(),
+                        ..config_view.peek().clone()
+                    });
+                },
+                value: Some(config_view().familiar_key),
             }
             KeyBindingConfigurationInput {
                 label: FEED_PET,

@@ -114,6 +114,8 @@ pub struct PlayerConfiguration {
     pub upjump_key: Option<KeyKind>,
     /// The cash shop key.
     pub cash_shop_key: KeyKind,
+    /// The familiar key.
+    pub familiar_key: KeyKind,
     /// The potion key.
     pub potion_key: KeyKind,
     /// Uses potion when health is below a percentage.

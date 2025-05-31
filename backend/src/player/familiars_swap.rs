@@ -16,13 +16,15 @@ use crate::{
     detect::{FamiliarLevel, FamiliarRank},
 };
 
+/// Number of familiar slots available.
 const FAMILIAR_SLOTS: usize = 3;
 
+/// Internal state machine representing the current stage of familiar swapping.
 #[derive(Debug, Clone, Copy)]
 enum SwappingStage {
     /// Opening the familiar menu.
     OpenMenu(Timeout),
-    /// Clicking the setup tab.
+    /// Clicking on the "Setup" tab in the familiar UI.
     OpenSetup(Timeout),
     /// Find the familiar slots.
     FindSlots,
@@ -30,19 +32,29 @@ enum SwappingStage {
     FreeSlots(usize, bool),
     /// Release a single slot.
     FreeSlot(Timeout, usize),
+    /// Find swappable familiar cards.
     FindCards,
+    /// Swapping a card into an empty slot.
     Swapping(Timeout, usize),
+    /// Scrolling the list to find more cards.
     Scrolling(Timeout, Option<Rect>),
+    /// Saving the familiar setup.
     Saving(Timeout, Option<Rect>),
     Completed,
 }
 
+/// Struct for storing familiar swapping data.
 #[derive(Debug, Clone, Copy)]
 pub struct FamiliarsSwapping {
+    /// Current stage of the familiar swapping state machine.
     stage: SwappingStage,
+    /// Detected familiar slots with free/occupied status.
     slots: Array<(Rect, bool), 3>,
+    /// Detected familiar cards and ranks.
     cards: Array<(Rect, FamiliarRank), 64>,
+    /// Indicates which familiar slots are allowed to be swapped.
     swappable_slots: SwappableFamiliars,
+    /// Only familiars with these rarities will be considered for swapping.
     swappable_rarities: Array<FamiliarRarity, 2>,
 }
 
@@ -127,7 +139,9 @@ pub fn update_familiars_swapping_context(
     swapping: FamiliarsSwapping,
 ) -> Player {
     let swapping = match swapping.stage {
-        SwappingStage::OpenMenu(timeout) => update_open_menu(context, swapping, timeout),
+        SwappingStage::OpenMenu(timeout) => {
+            update_open_menu(context, state.config.familiar_key, swapping, timeout)
+        }
         SwappingStage::OpenSetup(timeout) => open_setup(context, swapping, timeout),
         SwappingStage::FindSlots => update_find_slots(context, swapping),
         SwappingStage::FreeSlots(index, was_freeing) => {
@@ -162,6 +176,7 @@ pub fn update_familiars_swapping_context(
 
 fn update_open_menu(
     context: &Context,
+    key: KeyKind,
     swapping: FamiliarsSwapping,
     timeout: Timeout,
 ) -> FamiliarsSwapping {
@@ -182,7 +197,7 @@ fn update_open_menu(
                 swapping.stage_open_setup(Timeout::default())
             } else {
                 // Try open familiar menu until familiar setup button shows up
-                let _ = context.keys.send(KeyKind::F9);
+                let _ = context.keys.send(key);
                 swapping.stage_open_menu(timeout)
             }
         },
