@@ -299,6 +299,7 @@ fn on_player_action(
             with: ActionKeyWith::Stationary,
             ..
         })
+        | PlayerAction::FamiliarsSwapping(_)
         | PlayerAction::SolveRune
         | PlayerAction::Move { .. } => None,
     }

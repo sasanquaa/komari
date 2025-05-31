@@ -6,6 +6,7 @@ use super::{
     Player, PlayerAction, PlayerActionAutoMob, PlayerActionKey, PlayerActionMove, PlayerState,
     actions::{PlayerActionPingPong, on_action_state_mut, on_ping_pong_double_jump_action},
     double_jump::DoubleJumping,
+    familiars_swap::FamiliarsSwapping,
     moving::{Moving, find_intermediate_points},
     use_key::UseKey,
 };
@@ -157,6 +158,13 @@ fn on_player_action(
             bound, direction, ..
         }) => Some(on_ping_pong_double_jump_action(
             context, cur_pos, bound, direction,
+        )),
+        PlayerAction::FamiliarsSwapping(swapping) => Some((
+            Player::FamiliarsSwapping(FamiliarsSwapping::new(
+                swapping.swappable_slots,
+                swapping.swappable_rarities,
+            )),
+            false,
         )),
     }
 }

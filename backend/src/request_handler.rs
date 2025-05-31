@@ -130,7 +130,7 @@ impl DefaultRequestHandler<'_> {
                 .as_slice(),
             self.buffs,
             self.config.potion_key.key,
-            self.settings.enable_rune_solving,
+            self.settings,
             reset_on_erda,
         );
     }

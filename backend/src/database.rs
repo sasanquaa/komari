@@ -92,7 +92,9 @@ pub enum InputMethod {
     Rpc,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, PartialEq, Default, Debug, Serialize, Deserialize, EnumIter, Display, EnumString,
+)]
 pub enum SwappableFamiliars {
     #[default]
     All,
@@ -107,11 +109,28 @@ pub enum FamiliarRarity {
     Epic,
 }
 
-#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Familiars {
-    enabled: bool,
-    swappable_familiars: SwappableFamiliars,
-    swappable_rarities: HashSet<FamiliarRarity>,
+    pub enable_familiars_swapping: bool,
+    #[serde(default = "familiars_swap_check_millis")]
+    pub swap_check_millis: u64,
+    pub swappable_familiars: SwappableFamiliars,
+    pub swappable_rarities: HashSet<FamiliarRarity>,
+}
+
+impl Default for Familiars {
+    fn default() -> Self {
+        Self {
+            enable_familiars_swapping: false,
+            swap_check_millis: familiars_swap_check_millis(),
+            swappable_familiars: SwappableFamiliars::default(),
+            swappable_rarities: HashSet::default(),
+        }
+    }
+}
+
+fn familiars_swap_check_millis() -> u64 {
+    300000
 }
 
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]

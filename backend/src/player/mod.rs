@@ -45,9 +45,9 @@ mod use_key;
 
 pub use {
     actions::PingPongDirection, actions::PlayerAction, actions::PlayerActionAutoMob,
-    actions::PlayerActionKey, actions::PlayerActionMove, actions::PlayerActionPingPong,
-    double_jump::DOUBLE_JUMP_THRESHOLD, grapple::GRAPPLING_MAX_THRESHOLD,
-    grapple::GRAPPLING_THRESHOLD, state::PlayerState,
+    actions::PlayerActionFamiliarsSwapping, actions::PlayerActionKey, actions::PlayerActionMove,
+    actions::PlayerActionPingPong, double_jump::DOUBLE_JUMP_THRESHOLD,
+    grapple::GRAPPLING_MAX_THRESHOLD, grapple::GRAPPLING_THRESHOLD, state::PlayerState,
 };
 
 /// Minimum y distance from the destination required to perform a jump
@@ -86,6 +86,7 @@ pub enum Player {
     SolvingRune(SolvingRune),
     /// Enters the cash shop then exit after 10 seconds
     CashShopThenExit(Timeout, CashShop),
+    #[strum(to_string = "FamiliarsSwapping({0})")]
     FamiliarsSwapping(FamiliarsSwapping),
 }
 
@@ -204,7 +205,7 @@ fn update_non_positional_context(
             (!failed_to_detect_player).then(|| update_use_key_context(context, state, use_key))
         }
         Player::FamiliarsSwapping(swapping) => {
-            Some(update_familiars_swapping_context(context, swapping))
+            Some(update_familiars_swapping_context(context, state, swapping))
         }
         Player::Unstucking(timeout, has_settings, gamba_mode) => Some(update_unstucking_context(
             context,

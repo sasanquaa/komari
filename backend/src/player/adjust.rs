@@ -178,6 +178,7 @@ fn on_player_action(
         })
         | PlayerAction::PingPong(_)
         | PlayerAction::SolveRune
+        | PlayerAction::FamiliarsSwapping(_)
         | PlayerAction::Move(_) => None,
     }
 }

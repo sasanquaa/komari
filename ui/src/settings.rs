@@ -289,7 +289,7 @@ fn SettingsInputMethodSelect(
 
 // Dupe them till hard to manage
 #[component]
-fn SettingsEnumSelect<T: 'static + Clone + PartialEq + Display + FromStr + IntoEnumIterator>(
+pub fn SettingsEnumSelect<T: 'static + Clone + PartialEq + Display + FromStr + IntoEnumIterator>(
     label: String,
     on_select: EventHandler<T>,
     disabled: bool,

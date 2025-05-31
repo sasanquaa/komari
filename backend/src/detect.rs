@@ -124,6 +124,9 @@ pub trait Detector: 'static + Send + DynClone + Debug {
     /// Detects whether to press ESC for unstucking.
     fn detect_esc_settings(&self) -> bool;
 
+    /// Detects the ok button.
+    fn detect_ok_button(&self) -> Result<Rect>;
+
     /// Detects whether there is an elite boss bar.
     fn detect_elite_boss_bar(&self) -> bool;
 
@@ -178,6 +181,9 @@ pub trait Detector: 'static + Send + DynClone + Debug {
     /// Detects the Erda Shower skill from the given BGRA `Mat` image.
     fn detect_erda_shower(&self) -> Result<Rect>;
 
+    /// Detects familiar menu save button.
+    fn detect_familiar_save_button(&self) -> Result<Rect>;
+
     /// Detects familiar menu setup button.
     fn detect_familiar_setup_button(&self) -> Result<Rect>;
 
@@ -192,8 +198,10 @@ pub trait Detector: 'static + Send + DynClone + Debug {
     /// Detects the currently mouse hovering familiar level.
     fn detect_familiar_hover_level(&self) -> Result<FamiliarLevel>;
 
+    /// Detects all the familiar cards assuming the familiar menu opened.
     fn detect_familiar_cards(&self) -> Vec<(Rect, FamiliarRank)>;
 
+    /// Detects familiar menu setup's tab scrollbar assuming familiar menu opened.
     fn detect_familiar_scrollbar(&self) -> Result<Rect>;
 }
 
@@ -205,6 +213,7 @@ mock! {
         fn mat(&self) -> &OwnedMat;
         fn detect_mobs(&self, minimap: Rect, bound: Rect, player: Point) -> Result<Vec<Point>>;
         fn detect_esc_settings(&self) -> bool;
+        fn detect_ok_button(&self) -> Result<Rect>;
         fn detect_elite_boss_bar(&self) -> bool;
         fn detect_minimap(&self, border_threshold: u8) -> Result<Rect>;
         fn detect_minimap_portals(&self, minimap: Rect) -> Vec<Rect>;
@@ -222,6 +231,7 @@ mock! {
             calibrating: ArrowsCalibrating,
         ) -> Result<ArrowsState>;
         fn detect_erda_shower(&self) -> Result<Rect>;
+        fn detect_familiar_save_button(&self) -> Result<Rect>;
         fn detect_familiar_setup_button(&self) -> Result<Rect>;
         fn detect_familiar_slots(&self) -> Vec<(Rect, bool)>;
         fn detect_familiar_slot_is_free(&self, slot: Rect) -> bool;
@@ -284,6 +294,10 @@ impl Detector for CachedDetector {
 
     fn detect_esc_settings(&self) -> bool {
         detect_esc_settings(&**self.grayscale)
+    }
+
+    fn detect_ok_button(&self) -> Result<Rect> {
+        detect_ok_button(&**self.grayscale)
     }
 
     fn detect_elite_boss_bar(&self) -> bool {
@@ -359,6 +373,10 @@ impl Detector for CachedDetector {
 
     fn detect_erda_shower(&self) -> Result<Rect> {
         detect_erda_shower(&**self.grayscale)
+    }
+
+    fn detect_familiar_save_button(&self) -> Result<Rect> {
+        detect_familiar_save_button(&to_bgr(&*self.mat))
     }
 
     fn detect_familiar_setup_button(&self) -> Result<Rect> {
@@ -491,44 +509,46 @@ fn detect_mobs(
     Ok(points)
 }
 
-fn detect_esc_settings(mat: &impl ToInputArray) -> bool {
-    /// TODO: Support default ratio
-    static ESC_SETTINGS: LazyLock<[Mat; 7]> = LazyLock::new(|| {
-        [
-            imgcodecs::imdecode(
-                include_bytes!(env!("ESC_SETTING_TEMPLATE")),
-                IMREAD_GRAYSCALE,
-            )
-            .unwrap(),
-            imgcodecs::imdecode(include_bytes!(env!("ESC_MENU_TEMPLATE")), IMREAD_GRAYSCALE)
-                .unwrap(),
-            imgcodecs::imdecode(include_bytes!(env!("ESC_EVENT_TEMPLATE")), IMREAD_GRAYSCALE)
-                .unwrap(),
-            imgcodecs::imdecode(
-                include_bytes!(env!("ESC_COMMUNITY_TEMPLATE")),
-                IMREAD_GRAYSCALE,
-            )
-            .unwrap(),
-            imgcodecs::imdecode(
-                include_bytes!(env!("ESC_CHARACTER_TEMPLATE")),
-                IMREAD_GRAYSCALE,
-            )
-            .unwrap(),
-            imgcodecs::imdecode(include_bytes!(env!("ESC_OK_TEMPLATE")), IMREAD_GRAYSCALE).unwrap(),
-            imgcodecs::imdecode(
-                include_bytes!(env!("ESC_CANCEL_TEMPLATE")),
-                IMREAD_GRAYSCALE,
-            )
-            .unwrap(),
-        ]
-    });
+/// TODO: Support default ratio
+static ESC_SETTINGS: LazyLock<[Mat; 7]> = LazyLock::new(|| {
+    [
+        imgcodecs::imdecode(
+            include_bytes!(env!("ESC_SETTING_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap(),
+        imgcodecs::imdecode(include_bytes!(env!("ESC_MENU_TEMPLATE")), IMREAD_GRAYSCALE).unwrap(),
+        imgcodecs::imdecode(include_bytes!(env!("ESC_EVENT_TEMPLATE")), IMREAD_GRAYSCALE).unwrap(),
+        imgcodecs::imdecode(
+            include_bytes!(env!("ESC_COMMUNITY_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap(),
+        imgcodecs::imdecode(
+            include_bytes!(env!("ESC_CHARACTER_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap(),
+        imgcodecs::imdecode(include_bytes!(env!("ESC_OK_TEMPLATE")), IMREAD_GRAYSCALE).unwrap(),
+        imgcodecs::imdecode(
+            include_bytes!(env!("ESC_CANCEL_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap(),
+    ]
+});
 
+fn detect_esc_settings(mat: &impl ToInputArray) -> bool {
     for template in &*ESC_SETTINGS {
-        if detect_template(mat, template, Point::default(), 0.85).is_ok() {
+        if detect_template(mat, template, Point::default(), 0.75).is_ok() {
             return true;
         }
     }
     false
+}
+
+fn detect_ok_button(mat: &impl ToInputArray) -> Result<Rect> {
+    detect_template(mat, &ESC_SETTINGS[5], Point::default(), 0.75)
 }
 
 fn detect_elite_boss_bar(mat: &impl MatTraitConst) -> bool {
@@ -1585,6 +1605,14 @@ fn detect_erda_shower(mat: &impl MatTraitConst) -> Result<Rect> {
     let crop_bbox = Rect::new(size.width - crop_x, size.height - crop_y, crop_x, crop_y);
     let skill_bar = mat.roi(crop_bbox).unwrap();
     detect_template(&skill_bar, &*ERDA_SHOWER, crop_bbox.tl(), 0.96)
+}
+
+fn detect_familiar_save_button(mat: &impl ToInputArray) -> Result<Rect> {
+    static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_BUTTON_SAVE")), IMREAD_COLOR).unwrap()
+    });
+
+    detect_template(mat, &*TEMPLATE, Point::default(), 0.75)
 }
 
 fn detect_familiar_setup_button(mat: &impl ToInputArray) -> Result<Rect> {

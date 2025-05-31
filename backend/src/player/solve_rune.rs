@@ -109,6 +109,7 @@ pub fn update_solving_rune_context(
             PlayerAction::PingPong(_)
             | PlayerAction::AutoMob(_)
             | PlayerAction::Key(_)
+            | PlayerAction::FamiliarsSwapping(_)
             | PlayerAction::Move(_) => {
                 unreachable!()
             }

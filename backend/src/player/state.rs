@@ -703,7 +703,8 @@ impl PlayerState {
 
         let x = match self.normal_action.unwrap() {
             PlayerAction::AutoMob(mob) => mob.position.x,
-            PlayerAction::PingPong(_)
+            PlayerAction::FamiliarsSwapping(_)
+            | PlayerAction::PingPong(_)
             | PlayerAction::Key(_)
             | PlayerAction::Move(_)
             | PlayerAction::SolveRune => {
