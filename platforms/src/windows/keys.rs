@@ -465,10 +465,6 @@ impl From<KeyKind> for VIRTUAL_KEY {
     }
 }
 
-pub fn client_to_absolute_coordinate(handle: Handle, x: i32, y: i32) -> Result<(i32, i32), Error> {
-    client_to_absolute_coordinate_raw(handle.query_handle().ok_or(Error::WindowNotFound)?, x, y)
-}
-
 fn client_to_absolute_coordinate_raw(handle: HWND, x: i32, y: i32) -> Result<(i32, i32), Error> {
     let mut point = POINT { x, y };
     unsafe { ClientToScreen(handle, &raw mut point).ok()? };

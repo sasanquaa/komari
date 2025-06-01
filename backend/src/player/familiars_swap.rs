@@ -28,18 +28,18 @@ enum SwappingStage {
     OpenSetup(Timeout),
     /// Find the familiar slots.
     FindSlots,
-    /// Release the slots.
+    /// Check if slot is free or occupied to release the slot.
     FreeSlots(usize, bool),
-    /// Release a single slot.
+    /// Try releasing a single slot.
     FreeSlot(Timeout, usize),
     /// Find swappable familiar cards.
     FindCards,
     /// Swapping a card into an empty slot.
     Swapping(Timeout, usize),
-    /// Scrolling the list to find more cards.
+    /// Scrolling the familiar cards list to find more cards.
     Scrolling(Timeout, Option<Rect>),
     /// Saving the familiar setup.
-    Saving(Timeout, Option<Rect>),
+    Saving(Timeout),
     Completed,
 }
 
@@ -50,8 +50,8 @@ pub struct FamiliarsSwapping {
     stage: SwappingStage,
     /// Detected familiar slots with free/occupied status.
     slots: Array<(Rect, bool), 3>,
-    /// Detected familiar cards and ranks.
-    cards: Array<(Rect, FamiliarRank), 64>,
+    /// Detected familiar cards.
+    cards: Array<Rect, 64>,
     /// Indicates which familiar slots are allowed to be swapped.
     swappable_slots: SwappableFamiliars,
     /// Only familiars with these rarities will be considered for swapping.
@@ -70,7 +70,7 @@ impl Display for FamiliarsSwapping {
             SwappingStage::FindCards => write!(f, "Finding Cards"),
             SwappingStage::Swapping(_, _) => write!(f, "Swapping"),
             SwappingStage::Scrolling(_, _) => write!(f, "Scrolling"),
-            SwappingStage::Saving(_, _) => write!(f, "Saving"),
+            SwappingStage::Saving(_) => write!(f, "Saving"),
             SwappingStage::Completed => write!(f, "Completed"),
         }
     }
@@ -128,8 +128,8 @@ impl FamiliarsSwapping {
     }
 
     #[inline]
-    fn stage_saving(self, timeout: Timeout, save: Option<Rect>) -> FamiliarsSwapping {
-        self.stage(SwappingStage::Saving(timeout, save))
+    fn stage_saving(self, timeout: Timeout) -> FamiliarsSwapping {
+        self.stage(SwappingStage::Saving(timeout))
     }
 }
 
@@ -138,27 +138,31 @@ pub fn update_familiars_swapping_context(
     state: &mut PlayerState,
     swapping: FamiliarsSwapping,
 ) -> Player {
-    let swapping = match swapping.stage {
-        SwappingStage::OpenMenu(timeout) => {
-            update_open_menu(context, state.config.familiar_key, swapping, timeout)
+    let swapping = if swapping.swappable_rarities.is_empty() {
+        swapping.stage(SwappingStage::Completed)
+    } else {
+        match swapping.stage {
+            SwappingStage::OpenMenu(timeout) => {
+                update_open_menu(context, state.config.familiar_key, swapping, timeout)
+            }
+            SwappingStage::OpenSetup(timeout) => open_setup(context, swapping, timeout),
+            SwappingStage::FindSlots => update_find_slots(context, swapping),
+            SwappingStage::FreeSlots(index, was_freeing) => {
+                update_free_slots(context, swapping, index, was_freeing)
+            }
+            SwappingStage::FreeSlot(timeout, index) => {
+                update_free_slot(context, swapping, timeout, index)
+            }
+            SwappingStage::FindCards => update_find_cards(context, swapping),
+            SwappingStage::Swapping(timeout, index) => {
+                update_swapping(context, swapping, timeout, index)
+            }
+            SwappingStage::Scrolling(timeout, scrollbar) => {
+                update_scrolling(context, swapping, timeout, scrollbar)
+            }
+            SwappingStage::Saving(timeout) => update_saving(context, swapping, timeout),
+            SwappingStage::Completed => unreachable!(),
         }
-        SwappingStage::OpenSetup(timeout) => open_setup(context, swapping, timeout),
-        SwappingStage::FindSlots => update_find_slots(context, swapping),
-        SwappingStage::FreeSlots(index, was_freeing) => {
-            update_free_slots(context, swapping, index, was_freeing)
-        }
-        SwappingStage::FreeSlot(timeout, index) => {
-            update_free_slot(context, swapping, timeout, index)
-        }
-        SwappingStage::FindCards => update_find_cards(context, swapping),
-        SwappingStage::Swapping(timeout, index) => {
-            update_swapping(context, swapping, timeout, index)
-        }
-        SwappingStage::Scrolling(timeout, scrollbar) => {
-            update_scrolling(context, swapping, timeout, scrollbar)
-        }
-        SwappingStage::Saving(timeout, save) => update_saving(context, swapping, timeout, save),
-        SwappingStage::Completed => unreachable!(),
     };
     let next = if matches!(swapping.stage, SwappingStage::Completed) {
         let _ = context.keys.send(KeyKind::Esc);
@@ -180,10 +184,6 @@ fn update_open_menu(
     swapping: FamiliarsSwapping,
     timeout: Timeout,
 ) -> FamiliarsSwapping {
-    if swapping.swappable_rarities.is_empty() {
-        return swapping.stage(SwappingStage::Completed);
-    }
-
     update_with_timeout(
         timeout,
         5,
@@ -218,10 +218,10 @@ fn open_setup(
             // Try click familiar menu setup button every one second until it becomes
             // undetectable
             if let Ok(bbox) = context.detector_unwrap().detect_familiar_setup_button() {
-                let x = bbox.x + bbox.width / 2;
-                let y = bbox.y + bbox.height / 2;
+                let (x, y) = bbox_click_point(bbox);
                 let _ = context.keys.send_mouse(x, y, MouseAction::Click);
             }
+
             swapping.stage_open_setup(timeout)
         },
         || {
@@ -270,19 +270,21 @@ fn update_free_slots(
     index: usize,
     was_freeing: bool,
 ) -> FamiliarsSwapping {
+    #[inline]
+    fn find_cards_or_complete(context: &Context, swapping: FamiliarsSwapping) -> FamiliarsSwapping {
+        if swapping.slots.iter().any(|slot| slot.1) {
+            let _ = context.keys.send_mouse(50, 50, MouseAction::MoveOnly);
+            swapping.stage(SwappingStage::FindCards)
+        } else {
+            swapping.stage(SwappingStage::Completed)
+        }
+    }
+
     let (_, is_free) = swapping.slots[index];
     match (is_free, index) {
         (true, index) if index > 0 => swapping.stage_free_slots(index - 1, false),
-        (true, 0) => {
-            if swapping.slots.iter().any(|slot| slot.1) {
-                let _ = context.keys.send_mouse(50, 50, MouseAction::MoveOnly);
-                swapping.stage(SwappingStage::FindCards)
-            } else {
-                swapping.stage(SwappingStage::Completed)
-            }
-        }
+        (true, 0) => find_cards_or_complete(context, swapping),
         (false, _) => {
-            let mut swapping = swapping;
             let can_free = match swapping.swappable_slots {
                 SwappableFamiliars::All => true,
                 SwappableFamiliars::Last => index == FAMILIAR_SLOTS - 1,
@@ -291,18 +293,15 @@ fn update_free_slots(
                 }
             };
             if !can_free {
-                return if swapping.slots.iter().any(|slot| slot.1) {
-                    let _ = context.keys.send_mouse(50, 50, MouseAction::MoveOnly);
-                    swapping.stage(SwappingStage::FindCards)
-                } else {
-                    swapping.stage(SwappingStage::Completed)
-                };
+                return find_cards_or_complete(context, swapping);
             }
 
             if was_freeing {
                 // Bail and retry as this could indicate the menu closed/overlap
-                swapping.slots = Array::new();
-                swapping.stage_open_menu(Timeout::default())
+                FamiliarsSwapping {
+                    slots: Array::new(),
+                    ..swapping.stage_open_menu(Timeout::default())
+                }
             } else {
                 swapping.stage_free_slot(Timeout::default(), index)
             }
@@ -318,70 +317,71 @@ fn update_free_slot(
     index: usize,
 ) -> FamiliarsSwapping {
     const FAMILIAR_FREE_SLOTS_TIMEOUT: u32 = 10;
-    const FAMILIAR_CHECK_FREE_TICK: u32 = 5;
-    const FAMILIAR_CHECK_LVL_5_TICK: u32 = FAMILIAR_FREE_SLOTS_TIMEOUT;
-
-    let detector = context.detector_unwrap();
-    let (bbox, _) = swapping.slots[index];
-    let bbox_x = bbox.x + bbox.width / 2;
-    let bbox_y = bbox.y + bbox.height / 2;
+    const FAMILIAR_CHECK_FREE_TICK: u32 = FAMILIAR_FREE_SLOTS_TIMEOUT;
+    const FAMILIAR_CHECK_LVL_5_TICK: u32 = 5;
 
     update_with_timeout(
         timeout,
         FAMILIAR_FREE_SLOTS_TIMEOUT,
         |timeout| {
-            // On start, send mouse to rest position for checking free slot
-            let _ = context
-                .keys
-                .send_mouse(bbox_x, bbox.y - 20, MouseAction::MoveOnly);
+            // On start, move mouse to hover over the familiar slot to check level
+            let (x, y) = bbox_click_point(swapping.slots[index].0);
+            let _ = context.keys.send_mouse(x, y, MouseAction::MoveOnly);
             swapping.stage_free_slot(timeout, index)
         },
         || swapping.stage_free_slots(index, true),
         |mut timeout| {
             let mut swapping = swapping;
+            let bbox = swapping.slots[index].0;
+            let (x, y) = bbox_click_point(bbox);
+            let detector = context.detector_unwrap();
+
             match timeout.current {
+                FAMILIAR_CHECK_LVL_5_TICK => {
+                    match detector.detect_familiar_hover_level() {
+                        Ok(FamiliarLevel::Level5) => {
+                            // Double click to free
+                            let _ = context.keys.send_mouse(x, y, MouseAction::Click);
+                            let _ = context.keys.send_mouse(x, y, MouseAction::Click);
+                            // Move mouse to rest position to check if it has been truely freed
+                            let _ = context
+                                .keys
+                                .send_mouse(x, bbox.y - 20, MouseAction::MoveOnly);
+                        }
+                        Ok(FamiliarLevel::LevelOther) => {
+                            return if index > 0 {
+                                // If current slot is already non-level-5, check next slot
+                                swapping.stage_free_slots(index - 1, false)
+                            } else if swapping.slots.iter().any(|slot| slot.1) {
+                                // If there is no more slot to check and any of them is free,
+                                // starts finding cards for swapping
+                                let _ = context.keys.send_mouse(50, 50, MouseAction::MoveOnly);
+                                swapping.stage(SwappingStage::FindCards)
+                            } else {
+                                // All of the slots are occupied and non-level-5
+                                swapping.stage(SwappingStage::Completed)
+                            };
+                        }
+                        // Could mean UI being closed
+                        Err(_) => return swapping.stage_free_slots(index, true),
+                    }
+                }
                 FAMILIAR_CHECK_FREE_TICK => {
                     if detector.detect_familiar_slot_is_free(bbox) {
                         // If familiar is free, timeout and set flag
                         timeout.current = FAMILIAR_FREE_SLOTS_TIMEOUT;
                         swapping.slots[index].1 = true;
                     } else {
-                        // This else could mean the menu is already closed, so the update here
-                        // can be wrong. But the below level check should be able to handle this
-                        // case.
+                        // After double clicking, previous slots will move forward so this loop
+                        // updates previous slot free status. But this else could also mean the menu
+                        // is already closed, so the update here can be wrong. However, resetting
+                        // the timeout below will account for this case because of familiar level
+                        // detection.
                         for i in index + 1..FAMILIAR_SLOTS {
                             swapping.slots[i].1 =
                                 detector.detect_familiar_slot_is_free(swapping.slots[i].0);
                         }
-                        // Otherwise, move mouse to hover over to familiar slot to check level.
-                        // After double clicking, the previous slot will move forward so this
-                        // account for that too.
-                        let _ = context
-                            .keys
-                            .send_mouse(bbox_x, bbox_y, MouseAction::MoveOnly);
-                    }
-                }
-                FAMILIAR_CHECK_LVL_5_TICK => {
-                    match detector.detect_familiar_hover_level() {
-                        Ok(FamiliarLevel::Level5) => {
-                            // Double click to free
-                            let _ = context.keys.send_mouse(bbox_x, bbox_y, MouseAction::Click);
-                            let _ = context.keys.send_mouse(bbox_x, bbox_y, MouseAction::Click);
-                            // Restart from start to check again
-                            timeout = Timeout::default();
-                        }
-                        Ok(FamiliarLevel::LevelOther) => {
-                            return if index > 0 {
-                                swapping.stage_free_slots(index - 1, false)
-                            } else if swapping.slots.iter().any(|slot| slot.1) {
-                                let _ = context.keys.send_mouse(50, 50, MouseAction::MoveOnly);
-                                swapping.stage(SwappingStage::FindCards)
-                            } else {
-                                swapping.stage(SwappingStage::Completed)
-                            };
-                        }
-                        // TODO: recoverable?
-                        Err(_) => return swapping.stage(SwappingStage::Completed),
+                        timeout = Timeout::default()
                     }
                 }
                 _ => (),
@@ -404,7 +404,7 @@ fn update_find_cards(context: &Context, mut swapping: FamiliarsSwapping) -> Fami
                 FamiliarRank::Epic => FamiliarRarity::Epic,
             };
             if swapping.swappable_rarities.iter().any(|r| *r == rarity) {
-                swapping.cards.push(pair);
+                swapping.cards.push(pair.0);
             }
         }
     }
@@ -423,15 +423,14 @@ fn update_swapping(
     timeout: Timeout,
     index: usize,
 ) -> FamiliarsSwapping {
-    let detector = context.detector_unwrap();
-    let (bbox, _) = swapping.cards[index];
-    let x = bbox.x + bbox.width / 2;
-    let y = bbox.y + bbox.height / 2;
+    const SWAPPING_TIMEOUT: u32 = 10;
+    const SWAPPING_DETECT_LEVEL_TICK: u32 = 5;
 
     update_with_timeout(
         timeout,
-        10,
+        SWAPPING_TIMEOUT,
         |timeout| {
+            let (x, y) = bbox_click_point(swapping.cards[index]);
             let _ = context.keys.send_mouse(x, y, MouseAction::MoveOnly);
             swapping.stage_swapping(timeout, index)
         },
@@ -439,29 +438,35 @@ fn update_swapping(
             // Check free slot in timeout
             let mut swapping = swapping;
             for i in 0..FAMILIAR_SLOTS {
-                swapping.slots[i].1 = detector.detect_familiar_slot_is_free(swapping.slots[i].0);
+                swapping.slots[i].1 = context
+                    .detector_unwrap()
+                    .detect_familiar_slot_is_free(swapping.slots[i].0);
             }
+
             if swapping.slots.iter().all(|slot| !slot.1) {
-                swapping.stage(SwappingStage::Saving(Timeout::default(), None))
+                // Save if all slots are occupied. Could also mean UI is already closed.
+                swapping.stage(SwappingStage::Saving(Timeout::default()))
             } else if index + 1 < swapping.cards.len() {
+                // At least one slot is free and there are more cards. Could mean double click
+                // failed or familiar already level 5, advances either way.
                 swapping.stage_swapping(Timeout::default(), index + 1)
             } else {
+                // Try scroll for more cards
                 let _ = context.keys.send_mouse(50, 50, MouseAction::MoveOnly);
                 swapping.stage_scrolling(Timeout::default(), None)
             }
         },
         |timeout| {
-            if timeout.current == 5 {
-                match detector.detect_familiar_hover_level() {
+            if timeout.current == SWAPPING_DETECT_LEVEL_TICK {
+                match context.detector_unwrap().detect_familiar_hover_level() {
                     Ok(FamiliarLevel::Level5) => {
-                        if index + 1 < swapping.cards.len() {
-                            return swapping.stage_swapping(Timeout::default(), index + 1);
-                        } else {
-                            let _ = context.keys.send_mouse(50, 50, MouseAction::MoveOnly);
-                        };
+                        // Move to rest position and wait for timeout
+                        let _ = context.keys.send_mouse(50, 50, MouseAction::MoveOnly);
                     }
                     Ok(FamiliarLevel::LevelOther) => {
-                        // Double click to select
+                        // Double click to select and then move to rest point
+                        let bbox = swapping.cards[index];
+                        let (x, y) = bbox_click_point(bbox);
                         let _ = context.keys.send_mouse(x, y, MouseAction::Click);
                         let _ = context.keys.send_mouse(x, y, MouseAction::Click);
                         let _ = context.keys.send_mouse(50, 50, MouseAction::MoveOnly);
@@ -470,93 +475,325 @@ fn update_swapping(
                     Err(_) => return swapping.stage(SwappingStage::Completed),
                 }
             }
+
             swapping.stage_swapping(timeout, index)
         },
     )
 }
 
+#[inline]
 fn update_scrolling(
     context: &Context,
     swapping: FamiliarsSwapping,
     timeout: Timeout,
-    mut scrollbar: Option<Rect>,
+    scrollbar: Option<Rect>,
 ) -> FamiliarsSwapping {
-    let detector = context.detector_unwrap();
-    if scrollbar.is_none() {
-        if let Ok(bar) = detector.detect_familiar_scrollbar() {
-            scrollbar = Some(bar);
-        } else {
-            // TODO: recoverable?
-            return swapping.stage(SwappingStage::Completed);
-        }
-    }
+    /// Timeout for scrolling familiar cards list.
+    const SCROLLING_TIMEOUT: u32 = 5;
 
-    let scrollbar = scrollbar.unwrap();
-    let x = scrollbar.x + scrollbar.width / 2;
-    let y = scrollbar.y + scrollbar.height / 2;
+    /// Tick to move the mouse beside scrollbar at.
+    const SCROLLING_REST_TICK: u32 = 3;
+
+    /// Y distance difference indicating the scrollbar has scrolled.
+    const SCROLLBAR_SCROLLED_THRESHOLD: i32 = 10;
 
     update_with_timeout(
         timeout,
-        5,
+        SCROLLING_TIMEOUT,
         |timeout| {
+            let Ok(scrollbar) = context.detector_unwrap().detect_familiar_scrollbar() else {
+                // TODO: recoverable?
+                return swapping.stage(SwappingStage::Completed);
+            };
+
+            let (x, y) = bbox_click_point(scrollbar);
             let _ = context.keys.send_mouse(x, y, MouseAction::Scroll);
+
             swapping.stage_scrolling(timeout, Some(scrollbar))
         },
         || {
-            let mut swapping = swapping;
-            if let Ok(bar) = detector.detect_familiar_scrollbar()
-                && (bar.y - scrollbar.y).abs() >= 10
+            if let Ok(bar) = context.detector_unwrap().detect_familiar_scrollbar()
+                && (bar.y - scrollbar.unwrap().y).abs() >= SCROLLBAR_SCROLLED_THRESHOLD
             {
-                swapping.cards = Array::new();
-                return swapping.stage(SwappingStage::FindCards);
+                return FamiliarsSwapping {
+                    cards: Array::new(), // Reset cards array
+                    ..swapping.stage(SwappingStage::FindCards)
+                };
             }
+
             // TODO: recoverable?
             swapping.stage(SwappingStage::Completed)
         },
         |timeout| {
-            if timeout.current == 3 {
+            if timeout.current == SCROLLING_REST_TICK {
+                let (x, y) = bbox_click_point(scrollbar.unwrap());
                 let _ = context.keys.send_mouse(x + 50, y, MouseAction::MoveOnly);
             }
-            swapping.stage_scrolling(timeout, Some(scrollbar))
+
+            swapping.stage_scrolling(timeout, scrollbar)
         },
     )
 }
 
+#[inline]
 fn update_saving(
     context: &Context,
     swapping: FamiliarsSwapping,
     timeout: Timeout,
-    mut save: Option<Rect>,
 ) -> FamiliarsSwapping {
-    let detector = context.detector_unwrap();
-    if save.is_none() {
-        if let Ok(button) = detector.detect_familiar_save_button() {
-            save = Some(button);
-        } else {
-            // TODO: recoverable?
-            return swapping.stage(SwappingStage::Completed);
-        }
-    }
-
-    let save = save.unwrap();
-    let x = save.x + save.width / 2;
-    let y = save.y + save.height / 2;
+    /// Timeout for saving familiars setup.
+    const SAVING_TIMEOUT: u32 = 10;
 
     update_with_timeout(
         timeout,
-        10,
+        SAVING_TIMEOUT,
         |timeout| {
+            let Ok(button) = context.detector_unwrap().detect_familiar_save_button() else {
+                // TODO: recoverable?
+                return swapping.stage(SwappingStage::Completed);
+            };
+
+            let (x, y) = bbox_click_point(button);
             let _ = context.keys.send_mouse(x, y, MouseAction::Click);
-            swapping.stage_saving(timeout, Some(save))
+
+            swapping.stage_saving(timeout)
         },
         || {
-            if let Ok(button) = detector.detect_ok_button() {
-                let x = button.x + button.width / 2;
-                let y = button.y + button.height / 2;
+            if let Ok(button) = context.detector_unwrap().detect_ok_button() {
+                let (x, y) = bbox_click_point(button);
                 let _ = context.keys.send_mouse(x, y, MouseAction::Click);
             }
+
             swapping.stage(SwappingStage::Completed)
         },
-        |timeout| swapping.stage_saving(timeout, Some(save)),
+        |timeout| swapping.stage_saving(timeout),
     )
+}
+
+#[inline]
+fn bbox_click_point(bbox: Rect) -> (i32, i32) {
+    let x = bbox.x + bbox.width / 2;
+    let y = bbox.y + bbox.height / 2;
+    (x, y)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::assert_matches::assert_matches;
+
+    use anyhow::Ok;
+
+    use super::*;
+    use crate::{array::Array, bridge::MockKeySender, detect::MockDetector};
+
+    #[test]
+    fn update_free_slots_advance_index_if_already_free() {
+        let context = Context::new(None, None);
+        let mut swapping = FamiliarsSwapping::new(SwappableFamiliars::All, Array::new());
+        let bbox = Default::default();
+        swapping.slots.push((bbox, false));
+        swapping.slots.push((bbox, true)); // Index 1 already free
+
+        let result = update_free_slots(&context, swapping, 1, false);
+        assert_matches!(result.stage, SwappingStage::FreeSlots(0, false));
+    }
+
+    #[test]
+    fn update_free_slots_move_to_find_cards() {
+        let mut keys = MockKeySender::default();
+        keys.expect_send_mouse().once().returning(|_, _, _| Ok(()));
+        let context = Context::new(Some(keys), None);
+
+        let mut swapping = FamiliarsSwapping::new(SwappableFamiliars::All, Array::new());
+        let bbox = Default::default();
+        swapping.slots.push((bbox, true));
+
+        let result = update_free_slots(&context, swapping, 0, false);
+        // At least 1 slot is free and index is 0 so move to FindCards
+        assert_matches!(result.stage, SwappingStage::FindCards);
+    }
+
+    #[test]
+    fn update_free_slots_can_free() {
+        let context = Context::new(None, None);
+        let mut swapping = FamiliarsSwapping::new(SwappableFamiliars::All, Array::new());
+        let bbox = Default::default();
+        swapping.slots.push((bbox, false));
+        // Second slot not free but can free because of SwappableFamiliars::All
+        swapping.slots.push((bbox, false));
+
+        let result = update_free_slots(&context, swapping, 1, false);
+        assert_matches!(result.stage, SwappingStage::FreeSlot(_, 1));
+    }
+
+    #[test]
+    fn update_free_slots_cannot_free() {
+        let context = Context::new(None, None);
+        let mut swapping = FamiliarsSwapping::new(SwappableFamiliars::Last, Array::new());
+        let bbox = Default::default();
+        swapping.slots.push((bbox, false));
+        // Second slot not free but also cannot free because of SwappableFamiliars::Last
+        swapping.slots.push((bbox, false));
+
+        let result = update_free_slots(&context, swapping, 1, false);
+        // Completed because there is no free slot to swap
+        assert_matches!(result.stage, SwappingStage::Completed);
+    }
+
+    #[test]
+    fn update_free_slot_detect_level_5_and_click() {
+        let mut keys = MockKeySender::default();
+        keys.expect_send_mouse()
+            .times(3)
+            .returning(|_, _, _| Ok(()));
+        let mut detector = MockDetector::default();
+        detector
+            .expect_detect_familiar_hover_level()
+            .once()
+            .returning(|| Ok(FamiliarLevel::Level5));
+        let context = Context::new(Some(keys), Some(detector));
+
+        let mut swapping = FamiliarsSwapping::new(SwappableFamiliars::All, Array::new());
+        let bbox = Default::default();
+        swapping.slots.push((bbox, false));
+
+        let timeout = Timeout {
+            current: 4, // One tick before detection
+            started: true,
+            ..Default::default()
+        };
+        let result = update_free_slot(&context, swapping, timeout, 0);
+        assert_matches!(result.stage, SwappingStage::FreeSlot(_, 0));
+    }
+
+    #[test]
+    fn update_free_slot_detect_free_and_set_flag() {
+        let mut detector = MockDetector::default();
+        detector
+            .expect_detect_familiar_slot_is_free()
+            .once()
+            .returning(|_| true);
+        let context = Context::new(None, Some(detector));
+
+        let mut swapping = FamiliarsSwapping::new(SwappableFamiliars::All, Array::new());
+        let bbox = Default::default();
+        swapping.slots.push((bbox, false));
+
+        let timeout = Timeout {
+            current: 9, // One tick before detection
+            started: true,
+            ..Default::default()
+        };
+        let result = update_free_slot(&context, swapping, timeout, 0);
+        assert!(result.slots[0].1);
+        assert_matches!(
+            result.stage,
+            SwappingStage::FreeSlot(Timeout { current: 10, .. }, 0)
+        );
+    }
+
+    #[test]
+    fn update_swapping_detect_level_5_and_move_to_rest() {
+        let mut keys = MockKeySender::default();
+        keys.expect_send_mouse().once().returning(|_, _, _| Ok(()));
+        let mut detector = MockDetector::default();
+        detector
+            .expect_detect_familiar_hover_level()
+            .once()
+            .returning(|| Ok(FamiliarLevel::Level5));
+        let context = Context::new(Some(keys), Some(detector));
+
+        let mut swapping = FamiliarsSwapping::new(SwappableFamiliars::All, Array::new());
+        let bbox = Default::default();
+        swapping.cards.push(bbox);
+
+        let timeout = Timeout {
+            current: 4,
+            started: true,
+            ..Default::default()
+        };
+        update_swapping(&context, swapping, timeout, 0);
+    }
+
+    #[test]
+    fn update_swapping_detect_level_other_double_click_and_move_to_rest() {
+        let mut keys = MockKeySender::default();
+        keys.expect_send_mouse()
+            .times(3)
+            .returning(|_, _, _| Ok(()));
+        let mut detector = MockDetector::default();
+        detector
+            .expect_detect_familiar_hover_level()
+            .once()
+            .returning(|| Ok(FamiliarLevel::LevelOther));
+        let context = Context::new(Some(keys), Some(detector));
+
+        let mut swapping = FamiliarsSwapping::new(SwappableFamiliars::All, Array::new());
+        let bbox = Default::default();
+        swapping.cards.push(bbox);
+
+        let timeout = Timeout {
+            current: 4,
+            started: true,
+            ..Default::default()
+        };
+        update_swapping(&context, swapping, timeout, 0);
+    }
+
+    #[test]
+    fn update_swapping_timeout_advance_to_next_card_if_slot_and_card_available() {
+        let mut detector = MockDetector::default();
+        detector
+            .expect_detect_familiar_slot_is_free()
+            .times(FAMILIAR_SLOTS)
+            .returning(|_| true);
+        let context = Context::new(None, Some(detector));
+
+        let mut swapping = FamiliarsSwapping::new(SwappableFamiliars::All, Array::new());
+        let bbox = Default::default();
+        swapping.cards.push(bbox);
+        swapping.cards.push(bbox);
+        for _ in 0..FAMILIAR_SLOTS {
+            swapping.slots.push((bbox, true));
+        }
+
+        let timeout = Timeout {
+            current: 10,
+            started: true,
+            ..Default::default()
+        };
+
+        let result = update_swapping(&context, swapping, timeout, 0);
+        assert_matches!(result.stage, SwappingStage::Swapping(_, 1));
+    }
+
+    #[test]
+    fn update_swapping_timeout_advance_to_scroll_if_slot_available_and_card_unavailable() {
+        let mut keys = MockKeySender::default();
+        keys.expect_send_mouse().once().returning(|_, _, _| Ok(()));
+        let mut detector = MockDetector::default();
+        detector
+            .expect_detect_familiar_slot_is_free()
+            .times(FAMILIAR_SLOTS)
+            .returning(|_| true);
+        let context = Context::new(Some(keys), Some(detector));
+
+        let mut swapping = FamiliarsSwapping::new(SwappableFamiliars::All, Array::new());
+        let bbox = Default::default();
+        swapping.cards.push(bbox);
+        for _ in 0..FAMILIAR_SLOTS {
+            swapping.slots.push((bbox, true));
+        }
+
+        let timeout = Timeout {
+            current: 10,
+            started: true,
+            ..Default::default()
+        };
+
+        let result = update_swapping(&context, swapping, timeout, 0);
+        assert_matches!(result.stage, SwappingStage::Scrolling(_, None));
+    }
+
+    // TODO: more tests
 }

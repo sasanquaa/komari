@@ -60,7 +60,7 @@ const Y_NEAR_STATIONARY_VELOCITY_THRESHOLD: f32 = 0.4;
 const FALLING_THRESHOLD: i32 = 8;
 
 /// Minimum y distance required from the middle y of ping pong bound to allow randomization.
-const PING_PONG_IGNORE_RANDOMIZE_Y_THRESHOLD: i32 = 8;
+const PING_PONG_IGNORE_RANDOMIZE_Y_THRESHOLD: i32 = 9;
 
 #[derive(Copy, Clone, Debug)]
 pub struct DoubleJumping {
@@ -346,7 +346,7 @@ fn on_ping_pong_use_key_action(
     let should_upward = upward_bias
         && context
             .rng
-            .random_perlin_bool(cur_pos.x, cur_pos.y, context.tick, 0.40);
+            .random_perlin_bool(cur_pos.x, cur_pos.y, context.tick, 0.35);
     let should_downward = downward_bias
         && context
             .rng

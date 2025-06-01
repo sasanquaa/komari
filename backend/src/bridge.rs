@@ -61,7 +61,7 @@ pub trait KeySender: Debug {
     fn send(&self, kind: KeyKind) -> Result<()>;
 
     /// Sends mouse to `(x, y)` relative to the client coordinate (e.g. capture area) and
-    /// optionally click.
+    /// perform an action.
     ///
     /// `(0, 0)` is top-left and `(width, height)` is bottom-right.
     ///

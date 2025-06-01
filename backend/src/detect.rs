@@ -107,7 +107,7 @@ pub enum FamiliarLevel {
     LevelOther,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 pub enum FamiliarRank {
     Rare,
     Epic,
