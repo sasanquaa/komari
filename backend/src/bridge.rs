@@ -13,6 +13,7 @@ use platforms::windows::{
 use crate::context::MS_PER_TICK_F32;
 use crate::database::Seeds;
 use crate::rng::Rng;
+use crate::rpc;
 use crate::{CaptureMode, context::MS_PER_TICK, rpc::KeysService};
 
 /// Base mean in milliseconds to generate a pair from.
@@ -32,7 +33,7 @@ const MEAN_STD_VOLATILITY: f32 = 3.0;
 ///
 /// This is a bridge enum between platform-specific and gRPC input options.
 pub enum KeySenderMethod {
-    Rpc(String),
+    Rpc(Handle, String),
     Default(Handle, KeyInputKind),
 }
 
@@ -42,7 +43,7 @@ pub enum KeySenderMethod {
 /// sending structure.
 #[derive(Debug)]
 enum KeySenderKind {
-    Rpc(Option<RefCell<KeysService>>),
+    Rpc(Handle, Option<RefCell<KeysService>>),
     Default(Keys),
 }
 
@@ -102,7 +103,7 @@ impl DefaultKeySender {
     #[inline]
     fn send_inner(&self, kind: KeyKind) -> Result<()> {
         match &self.kind {
-            KeySenderKind::Rpc(service) => {
+            KeySenderKind::Rpc(_, service) => {
                 if let Some(cell) = service {
                     cell.borrow_mut()
                         .send(kind, self.random_input_delay_tick_count().0)?;
@@ -123,7 +124,7 @@ impl DefaultKeySender {
     #[inline]
     fn send_up_inner(&self, kind: KeyKind, forced: bool) -> Result<()> {
         match &self.kind {
-            KeySenderKind::Rpc(service) => {
+            KeySenderKind::Rpc(_, service) => {
                 if let Some(cell) = service {
                     cell.borrow_mut().send_up(kind)?;
                 }
@@ -141,7 +142,7 @@ impl DefaultKeySender {
     #[inline]
     fn send_down_inner(&self, kind: KeyKind) -> Result<()> {
         match &self.kind {
-            KeySenderKind::Rpc(service) => {
+            KeySenderKind::Rpc(_, service) => {
                 if let Some(cell) = service {
                     cell.borrow_mut().send_down(kind)?;
                 }
@@ -225,15 +226,16 @@ impl DefaultKeySender {
 impl KeySender for DefaultKeySender {
     fn set_method(&mut self, method: KeySenderMethod) {
         match &method {
-            KeySenderMethod::Rpc(url) => {
-                if let KeySenderKind::Rpc(ref option) = self.kind {
+            KeySenderMethod::Rpc(handle, url) => {
+                if let KeySenderKind::Rpc(ref cur_handle, ref option) = self.kind {
                     let service = option.as_ref();
                     let service_borrow = service.map(|service| service.borrow_mut());
                     if let Some(mut borrow) = service_borrow
                         && borrow.url() == url
+                        && handle == cur_handle
                     {
+                        let _ = borrow.init(self.delay_rng.seed());
                         borrow.reset();
-                        borrow.init(self.delay_rng.seed());
                         return;
                     }
                 }
@@ -249,7 +251,31 @@ impl KeySender for DefaultKeySender {
 
     fn send_mouse(&self, x: i32, y: i32, action: MouseAction) -> Result<()> {
         match &self.kind {
-            KeySenderKind::Rpc(_) => Ok(()),
+            KeySenderKind::Rpc(handle, service) => {
+                if let Some(cell) = service {
+                    let mut borrow = cell.borrow_mut();
+                    let coordinates = platforms::windows::client_to_monitor_or_frame(
+                        *handle,
+                        x,
+                        y,
+                        matches!(borrow.mouse_coordinate(), rpc::Coordinate::Screen),
+                    )?;
+                    let action = match action {
+                        MouseAction::MoveOnly => rpc::MouseAction::Move,
+                        MouseAction::Click => rpc::MouseAction::Click,
+                        MouseAction::Scroll => rpc::MouseAction::ScrollDown,
+                    };
+
+                    borrow.send_mouse(
+                        coordinates.width,
+                        coordinates.height,
+                        coordinates.x,
+                        coordinates.y,
+                        action,
+                    )?;
+                }
+                Ok(())
+            }
             KeySenderKind::Default(keys) => {
                 let action = match action {
                     MouseAction::MoveOnly => MouseActionKind::MoveOnly,
@@ -319,12 +345,12 @@ impl ImageCapture {
 #[inline]
 fn to_key_sender_kind_from(method: KeySenderMethod, seed: &[u8]) -> KeySenderKind {
     match method {
-        KeySenderMethod::Rpc(url) => {
+        KeySenderMethod::Rpc(handle, url) => {
             let mut service = KeysService::connect(url);
             if let Ok(ref mut service) = service {
-                service.init(seed);
+                let _ = service.init(seed);
             }
-            KeySenderKind::Rpc(service.ok().map(RefCell::new))
+            KeySenderKind::Rpc(handle, service.ok().map(RefCell::new))
         }
         KeySenderMethod::Default(handle, kind) => KeySenderKind::Default(Keys::new(handle, kind)),
     }

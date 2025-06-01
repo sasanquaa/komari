@@ -75,8 +75,20 @@ enum Key {
     Alt = 69;
 }
 
+enum MouseAction {
+  Move = 0;
+  Click = 1;
+  ScrollDown = 2;
+}
+
+enum Coordinate {
+  Screen = 0;
+  Relative = 1;
+}
+
 service KeyInput {
   rpc Init (KeyInitRequest) returns (KeyInitResponse);
+  rpc SendMouse (MouseRequest) returns (MouseResponse);
   rpc Send (KeyRequest) returns (KeyResponse);
   rpc SendUp (KeyUpRequest) returns (KeyDownResponse);
   rpc SendDown (KeyDownRequest) returns (KeyDownResponse);
@@ -86,7 +98,19 @@ message KeyInitRequest {
   bytes seed = 1;
 }
 
-message KeyInitResponse {} // Empty for now
+message KeyInitResponse {
+  Coordinate mouse_coordinate = 1;
+} 
+
+message MouseRequest {
+  int32 width = 1;
+  int32 height = 2;
+  int32 x = 3;
+  int32 y = 4;
+  MouseAction action = 5;
+}
+
+message MouseResponse {} // Empty for now
 
 message KeyRequest {
   Key key = 1;

@@ -39,6 +39,11 @@ class KeyInputStub(object):
                 request_serializer=input__pb2.KeyInitRequest.SerializeToString,
                 response_deserializer=input__pb2.KeyInitResponse.FromString,
                 _registered_method=True)
+        self.SendMouse = channel.unary_unary(
+                '/input.KeyInput/SendMouse',
+                request_serializer=input__pb2.MouseRequest.SerializeToString,
+                response_deserializer=input__pb2.MouseResponse.FromString,
+                _registered_method=True)
         self.Send = channel.unary_unary(
                 '/input.KeyInput/Send',
                 request_serializer=input__pb2.KeyRequest.SerializeToString,
@@ -60,6 +65,12 @@ class KeyInputServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def Init(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SendMouse(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -90,6 +101,11 @@ def add_KeyInputServicer_to_server(servicer, server):
                     servicer.Init,
                     request_deserializer=input__pb2.KeyInitRequest.FromString,
                     response_serializer=input__pb2.KeyInitResponse.SerializeToString,
+            ),
+            'SendMouse': grpc.unary_unary_rpc_method_handler(
+                    servicer.SendMouse,
+                    request_deserializer=input__pb2.MouseRequest.FromString,
+                    response_serializer=input__pb2.MouseResponse.SerializeToString,
             ),
             'Send': grpc.unary_unary_rpc_method_handler(
                     servicer.Send,
@@ -134,6 +150,33 @@ class KeyInput(object):
             '/input.KeyInput/Init',
             input__pb2.KeyInitRequest.SerializeToString,
             input__pb2.KeyInitResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SendMouse(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/input.KeyInput/SendMouse',
+            input__pb2.MouseRequest.SerializeToString,
+            input__pb2.MouseResponse.FromString,
             options,
             channel_credentials,
             insecure,

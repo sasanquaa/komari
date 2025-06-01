@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    mem::{self},
+    mem::{self, size_of},
     sync::LazyLock,
 };
 
@@ -9,7 +9,10 @@ use tokio::sync::broadcast::{self, Receiver, Sender};
 use windows::{
     Win32::{
         Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM},
-        Graphics::Gdi::{ClientToScreen, IntersectRect, MONITOR_DEFAULTTONULL, MonitorFromWindow},
+        Graphics::Gdi::{
+            ClientToScreen, GetMonitorInfoW, IntersectRect, MONITOR_DEFAULTTONULL, MONITORINFO,
+            MonitorFromWindow,
+        },
         System::Threading::GetCurrentProcessId,
         UI::{
             Input::KeyboardAndMouse::{
@@ -26,11 +29,10 @@ use windows::{
                 VK_Y, VK_Z,
             },
             WindowsAndMessaging::{
-                BringWindowToTop, CallNextHookEx, GetForegroundWindow, GetSystemMetrics,
-                GetWindowRect, GetWindowThreadProcessId, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT,
-                LLKHF_INJECTED, LLKHF_LOWER_IL_INJECTED, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
-                SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SetForegroundWindow, SetWindowsHookExW,
-                WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP,
+                CallNextHookEx, GetForegroundWindow, GetSystemMetrics, GetWindowRect,
+                GetWindowThreadProcessId, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT, LLKHF_INJECTED,
+                LLKHF_LOWER_IL_INJECTED, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
+                SM_YVIRTUALSCREEN, SetWindowsHookExW, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP,
             },
         },
     },
@@ -68,6 +70,14 @@ pub(crate) fn init() -> Owned<HHOOK> {
         unsafe { CallNextHookEx(None, code, wparam, lparam) }
     }
     unsafe { Owned::new(SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_ll), None, 0).unwrap()) }
+}
+
+#[derive(Debug)]
+pub struct ConvertedCoordinates {
+    pub width: i32,
+    pub height: i32,
+    pub x: i32,
+    pub y: i32,
 }
 
 #[derive(Debug)]
@@ -224,20 +234,11 @@ impl Keys {
 
     pub fn send_mouse(&self, x: i32, y: i32, action: MouseActionKind) -> Result<(), Error> {
         let mut handle = self.get_handle()?;
-        // TODO: Force focus needed? ... Previously for cash shop
-        match self.key_input_kind {
-            KeyInputKind::Fixed => unsafe {
-                if !is_foreground(handle, KeyInputKind::Fixed) {
-                    SetForegroundWindow(handle).ok()?;
-                }
-                BringWindowToTop(handle)?;
-            },
-            KeyInputKind::Foreground => {
-                if !is_foreground(handle, KeyInputKind::Foreground) {
-                    return Err(Error::WindowNotFound);
-                }
-                handle = unsafe { GetForegroundWindow() };
-            }
+        if !is_foreground(handle, self.key_input_kind) {
+            return Err(Error::WindowNotFound);
+        }
+        if matches!(self.key_input_kind, KeyInputKind::Foreground) {
+            handle = unsafe { GetForegroundWindow() };
         }
 
         let (dx, dy) = client_to_absolute_coordinate_raw(handle, x, y)?;
@@ -463,6 +464,58 @@ impl From<KeyKind> for VIRTUAL_KEY {
             KeyKind::Alt => VK_MENU,
         }
     }
+}
+
+pub fn client_to_monitor_or_frame(
+    handle: Handle,
+    x: i32,
+    y: i32,
+    monitor_coordinate: bool,
+) -> Result<ConvertedCoordinates, Error> {
+    let handle = handle.query_handle().ok_or(Error::WindowNotFound)?;
+    let mut point = POINT { x, y };
+    unsafe { ClientToScreen(handle, &raw mut point).ok()? };
+
+    if !monitor_coordinate {
+        let mut rect = RECT::default();
+        unsafe { GetWindowRect(handle, &raw mut rect)? };
+
+        let x = point.x - rect.left;
+        let y = point.y - rect.top;
+        let width = rect.right - rect.left;
+        let height = rect.bottom - rect.top;
+
+        return Ok(ConvertedCoordinates {
+            width,
+            height,
+            x,
+            y,
+        });
+    }
+
+    // Get monitor from window
+    let monitor = unsafe { MonitorFromWindow(handle, MONITOR_DEFAULTTONULL) };
+    if monitor.is_invalid() {
+        return Err(Error::WindowNotFound);
+    }
+
+    let mut mi = MONITORINFO {
+        cbSize: size_of::<MONITORINFO>() as u32,
+        ..MONITORINFO::default()
+    };
+    unsafe { GetMonitorInfoW(monitor, &mut mi).ok()? };
+    let width = mi.rcMonitor.right - mi.rcMonitor.left;
+    let height = mi.rcMonitor.bottom - mi.rcMonitor.top;
+
+    let x = point.x - mi.rcMonitor.left;
+    let y = point.y - mi.rcMonitor.top;
+
+    Ok(ConvertedCoordinates {
+        width,
+        height,
+        x,
+        y,
+    })
 }
 
 fn client_to_absolute_coordinate_raw(handle: HWND, x: i32, y: i32) -> Result<(i32, i32), Error> {

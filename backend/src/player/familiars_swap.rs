@@ -325,8 +325,11 @@ fn update_free_slot(
         FAMILIAR_FREE_SLOTS_TIMEOUT,
         |timeout| {
             // On start, move mouse to hover over the familiar slot to check level
-            let (x, y) = bbox_click_point(swapping.slots[index].0);
-            let _ = context.keys.send_mouse(x, y, MouseAction::MoveOnly);
+            let bbox = swapping.slots[index].0;
+            let x = bbox.x + bbox.width / 2;
+            let _ = context
+                .keys
+                .send_mouse(x, bbox.y + 20, MouseAction::MoveOnly);
             swapping.stage_free_slot(timeout, index)
         },
         || swapping.stage_free_slots(index, true),
@@ -489,10 +492,10 @@ fn update_scrolling(
     scrollbar: Option<Rect>,
 ) -> FamiliarsSwapping {
     /// Timeout for scrolling familiar cards list.
-    const SCROLLING_TIMEOUT: u32 = 5;
+    const SCROLLING_TIMEOUT: u32 = 10;
 
     /// Tick to move the mouse beside scrollbar at.
-    const SCROLLING_REST_TICK: u32 = 3;
+    const SCROLLING_REST_TICK: u32 = 5;
 
     /// Y distance difference indicating the scrollbar has scrolled.
     const SCROLLBAR_SCROLLED_THRESHOLD: i32 = 10;
@@ -512,22 +515,24 @@ fn update_scrolling(
             swapping.stage_scrolling(timeout, Some(scrollbar))
         },
         || {
-            if let Ok(bar) = context.detector_unwrap().detect_familiar_scrollbar()
-                && (bar.y - scrollbar.unwrap().y).abs() >= SCROLLBAR_SCROLLED_THRESHOLD
-            {
-                return FamiliarsSwapping {
-                    cards: Array::new(), // Reset cards array
-                    ..swapping.stage(SwappingStage::FindCards)
+            if let Ok(bar) = context.detector_unwrap().detect_familiar_scrollbar() {
+                return if (bar.y - scrollbar.unwrap().y).abs() >= SCROLLBAR_SCROLLED_THRESHOLD {
+                    FamiliarsSwapping {
+                        cards: Array::new(), // Reset cards array
+                        ..swapping.stage(SwappingStage::FindCards)
+                    }
+                } else {
+                    // Try again because scrolling might have failed
+                    swapping.stage_scrolling(Timeout::default(), Some(bar))
                 };
             }
 
-            // TODO: recoverable?
             swapping.stage(SwappingStage::Completed)
         },
         |timeout| {
             if timeout.current == SCROLLING_REST_TICK {
                 let (x, y) = bbox_click_point(scrollbar.unwrap());
-                let _ = context.keys.send_mouse(x + 50, y, MouseAction::MoveOnly);
+                let _ = context.keys.send_mouse(x + 70, y, MouseAction::MoveOnly);
             }
 
             swapping.stage_scrolling(timeout, scrollbar)

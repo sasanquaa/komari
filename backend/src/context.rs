@@ -174,7 +174,7 @@ fn update_loop() {
     let rng = Rng::new(seeds.seed); // Create one for Context
 
     let key_sender_method = if let InputMethod::Rpc = settings.input_method {
-        KeySenderMethod::Rpc(settings.input_method_rpc_server_url.clone())
+        KeySenderMethod::Rpc(handle, settings.input_method_rpc_server_url.clone())
     } else {
         match settings.capture_mode {
             CaptureMode::BitBlt | CaptureMode::WindowsGraphicsCapture => {

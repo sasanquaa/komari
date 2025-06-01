@@ -3,7 +3,8 @@ use std::time::Duration;
 use anyhow::{Error, Ok, bail};
 use bit_vec::BitVec;
 use input::key_input_client::KeyInputClient;
-use input::{Key, KeyDownRequest, KeyInitRequest, KeyRequest, KeyUpRequest};
+pub use input::{Coordinate, MouseAction};
+use input::{Key, KeyDownRequest, KeyInitRequest, KeyRequest, KeyUpRequest, MouseRequest};
 use platforms::windows::KeyKind;
 use tokio::runtime::Handle;
 use tokio::task::block_in_place;
@@ -20,6 +21,7 @@ pub struct KeysService {
     client: KeyInputClient<Channel>,
     url: String,
     key_down: BitVec, // TODO: is a bit wrong good?
+    mouse_coordinate: Coordinate,
 }
 
 impl KeysService {
@@ -37,6 +39,7 @@ impl KeysService {
             client,
             url: dest.as_ref().to_string(),
             key_down: BitVec::from_elem(128, false),
+            mouse_coordinate: Coordinate::Screen,
         })
     }
 
@@ -57,17 +60,46 @@ impl KeysService {
         self.key_down.clear();
     }
 
-    pub fn init(&mut self, seed: &[u8]) {
-        block_future(async move {
-            let _ = self
-                .client
+    pub fn init(&mut self, seed: &[u8]) -> Result<(), Error> {
+        let response = block_future(async {
+            self.client
                 .init(KeyInitRequest {
                     seed: seed.to_vec(),
                 })
-                .await;
-        });
+                .await
+        })?
+        .into_inner();
+        self.mouse_coordinate = response.mouse_coordinate();
+        Ok(())
     }
 
+    pub fn mouse_coordinate(&self) -> Coordinate {
+        self.mouse_coordinate
+    }
+
+    pub fn send_mouse(
+        &mut self,
+        width: i32,
+        height: i32,
+        x: i32,
+        y: i32,
+        action: MouseAction,
+    ) -> Result<(), Error> {
+        Ok(block_future(async move {
+            self.client
+                .send_mouse(Request::new(MouseRequest {
+                    width,
+                    height,
+                    x,
+                    y,
+                    action: action.into(),
+                }))
+                .await?;
+            Ok(())
+        })?)
+    }
+
+    // TODO: Use gRPC enum instead of platforms
     pub fn send(&mut self, key: KeyKind, down_ms: f32) -> Result<(), Error> {
         Ok(block_future(async move {
             let kind = from_key_kind(key);
@@ -82,6 +114,7 @@ impl KeysService {
         })?)
     }
 
+    // TODO: Use gRPC enum instead of platforms
     pub fn send_up(&mut self, key: KeyKind) -> Result<(), Error> {
         if !self.can_send_key(key, false) {
             bail!("key not sent");
@@ -96,6 +129,7 @@ impl KeysService {
         })?)
     }
 
+    // TODO: Use gRPC enum instead of platforms
     pub fn send_down(&mut self, key: KeyKind) -> Result<(), Error> {
         if !self.can_send_key(key, true) {
             bail!("key not sent");
@@ -110,6 +144,7 @@ impl KeysService {
         })?)
     }
 
+    // TODO: Use gRPC enum instead of platforms
     #[inline]
     fn can_send_key(&self, key: KeyKind, is_down: bool) -> bool {
         let key = from_key_kind(key);
@@ -124,6 +159,7 @@ fn block_future<F: Future>(f: F) -> F::Output {
     block_in_place(|| Handle::current().block_on(f))
 }
 
+// TODO: Use gRPC enum instead of platforms
 #[inline]
 fn from_key_kind(key: KeyKind) -> Key {
     match key {
