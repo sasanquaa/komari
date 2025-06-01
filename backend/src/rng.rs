@@ -32,13 +32,20 @@ impl Rng {
         &self.seed
     }
 
+    /// Returns true if Perlin noise at the given coordinates and tick exceeds the threshold.
+    ///
+    /// `threshold` is in the range `0..1` and used as a cut-off so that values in the top portion
+    /// of the noise range will return true. For example, if `threshold` is `0.35`, then only
+    /// values in the range `0.65..1` return true. Perlin noise has a distribution similar to
+    /// a Normal distribution so `threshold` like `0.65` will more likely to return true
+    /// than `0.35`.
     #[inline]
-    pub fn random_perlin_bool(&self, x: i32, y: i32, tick: u64, probability: f64) -> bool {
+    pub fn random_perlin_bool(&self, x: i32, y: i32, tick: u64, threshold: f64) -> bool {
         let noise = self
             .perlin
             .get([x as f64 * 0.1, y as f64 * 0.1, tick as f64]);
         let norm = (noise + 1.0) / 2.0;
-        norm >= 1.0 - probability
+        norm >= 1.0 - threshold
     }
 
     #[inline]

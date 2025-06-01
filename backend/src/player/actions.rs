@@ -4,7 +4,9 @@ use strum::Display;
 
 use super::{DOUBLE_JUMP_THRESHOLD, Player, PlayerState, use_key::UseKey};
 use crate::{
-    Action, ActionKey, ActionKeyDirection, ActionKeyWith, ActionMove, KeyBinding, Position,
+    Action, ActionKey, ActionKeyDirection, ActionKeyWith, ActionMove, FamiliarRarity, KeyBinding,
+    Position, SwappableFamiliars,
+    array::Array,
     context::{Context, MS_PER_TICK},
     database::LinkKeyBinding,
     minimap::Minimap,
@@ -128,6 +130,12 @@ pub struct PlayerActionPingPong {
 }
 
 #[derive(Clone, Copy, Debug)]
+pub struct PlayerActionFamiliarsSwapping {
+    pub swappable_slots: SwappableFamiliars,
+    pub swappable_rarities: Array<FamiliarRarity, 2>,
+}
+
+#[derive(Clone, Copy, Debug)]
 pub enum PingPongDirection {
     Left,
     Right,
@@ -154,6 +162,8 @@ pub enum PlayerAction {
     AutoMob(PlayerActionAutoMob),
     /// Ping pong action provided by [`Rotator`].
     PingPong(PlayerActionPingPong),
+    /// Familiars swapping action.
+    FamiliarsSwapping(PlayerActionFamiliarsSwapping),
 }
 
 impl From<Action> for PlayerAction {
@@ -287,8 +297,8 @@ pub fn on_action_state_mut(
                 }) => {
                     state.clear_unstucking(false);
                 }
-                // Should not clear unstucking for auto-mobbing as it is pretty error prone...
-                PlayerAction::AutoMob(_)
+                PlayerAction::FamiliarsSwapping(_)
+                | PlayerAction::AutoMob(_)
                 | PlayerAction::Key(PlayerActionKey { position: None, .. }) => (),
             }
             // FIXME: clear only when has position?

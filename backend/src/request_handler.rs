@@ -130,7 +130,7 @@ impl DefaultRequestHandler<'_> {
                 .as_slice(),
             self.buffs,
             self.config.potion_key.key,
-            self.settings.enable_rune_solving,
+            self.settings,
             reset_on_erda,
         );
     }
@@ -193,6 +193,7 @@ impl RequestHandler for DefaultRequestHandler<'_> {
         self.player.config.jump_key = self.config.jump_key.key.into();
         self.player.config.upjump_key = self.config.up_jump_key.map(|key| key.key.into());
         self.player.config.cash_shop_key = self.config.cash_shop_key.key.into();
+        self.player.config.familiar_key = self.config.familiar_key.key.into();
         self.player.config.potion_key = self.config.potion_key.key.into();
         self.player.config.use_potion_below_percent =
             match (self.config.potion_key.enabled, self.config.potion_mode) {

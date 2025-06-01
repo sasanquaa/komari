@@ -138,7 +138,9 @@ impl UseKey {
                 wait_after_use_ticks: ping_pong.wait_after_ticks,
                 stage: UseKeyStage::Precondition,
             },
-            PlayerAction::SolveRune | PlayerAction::Move { .. } => {
+            PlayerAction::FamiliarsSwapping(_)
+            | PlayerAction::SolveRune
+            | PlayerAction::Move { .. } => {
                 unreachable!()
             }
         }
@@ -350,8 +352,11 @@ pub fn update_use_key_context(
                     None
                 }
             }
+
             PlayerAction::Key(_) => Some((next, matches!(next, Player::Idle))),
-            PlayerAction::Move(_) | PlayerAction::SolveRune => None,
+            PlayerAction::FamiliarsSwapping(_)
+            | PlayerAction::Move(_)
+            | PlayerAction::SolveRune => None,
         },
         || next,
     )

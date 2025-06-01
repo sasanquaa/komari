@@ -32,9 +32,9 @@ use opencv::{
         CC_STAT_AREA, CC_STAT_HEIGHT, CC_STAT_LEFT, CC_STAT_TOP, CC_STAT_WIDTH,
         CHAIN_APPROX_SIMPLE, COLOR_BGR2HSV_FULL, COLOR_BGRA2BGR, COLOR_BGRA2GRAY, COLOR_BGRA2RGB,
         INTER_CUBIC, INTER_LINEAR, MORPH_RECT, RETR_EXTERNAL, THRESH_BINARY, TM_CCOEFF_NORMED,
-        bounding_rect, connected_components_with_stats, cvt_color_def, dilate_def,
-        find_contours_def, get_structuring_element_def, match_template, min_area_rect, resize,
-        threshold,
+        TM_SQDIFF_NORMED, bounding_rect, connected_components_with_stats, cvt_color_def,
+        dilate_def, find_contours_def, get_structuring_element_def, match_template, min_area_rect,
+        resize, threshold,
     },
 };
 use ort::{
@@ -101,6 +101,18 @@ pub enum OtherPlayerKind {
     Friend,
 }
 
+#[derive(Debug)]
+pub enum FamiliarLevel {
+    Level5,
+    LevelOther,
+}
+
+#[derive(Debug)]
+pub enum FamiliarRank {
+    Rare,
+    Epic,
+}
+
 pub trait Detector: 'static + Send + DynClone + Debug {
     fn mat(&self) -> &OwnedMat;
 
@@ -111,6 +123,9 @@ pub trait Detector: 'static + Send + DynClone + Debug {
 
     /// Detects whether to press ESC for unstucking.
     fn detect_esc_settings(&self) -> bool;
+
+    /// Detects the ok button.
+    fn detect_ok_button(&self) -> Result<Rect>;
 
     /// Detects whether there is an elite boss bar.
     fn detect_elite_boss_bar(&self) -> bool;
@@ -165,6 +180,29 @@ pub trait Detector: 'static + Send + DynClone + Debug {
 
     /// Detects the Erda Shower skill from the given BGRA `Mat` image.
     fn detect_erda_shower(&self) -> Result<Rect>;
+
+    /// Detects familiar menu save button.
+    fn detect_familiar_save_button(&self) -> Result<Rect>;
+
+    /// Detects familiar menu setup button.
+    fn detect_familiar_setup_button(&self) -> Result<Rect>;
+
+    /// Detects the familiar slots assuming the familiar menu opened.
+    ///
+    /// Returns a pair of `(Rect, bool)` with `bool` of `true` indicating the slot is free.
+    fn detect_familiar_slots(&self) -> Vec<(Rect, bool)>;
+
+    /// Detects whether the familiar slot is free.
+    fn detect_familiar_slot_is_free(&self, slot: Rect) -> bool;
+
+    /// Detects the currently mouse hovering familiar level.
+    fn detect_familiar_hover_level(&self) -> Result<FamiliarLevel>;
+
+    /// Detects all the familiar cards assuming the familiar menu opened.
+    fn detect_familiar_cards(&self) -> Vec<(Rect, FamiliarRank)>;
+
+    /// Detects familiar menu setup's tab scrollbar assuming familiar menu opened.
+    fn detect_familiar_scrollbar(&self) -> Result<Rect>;
 }
 
 #[cfg(test)]
@@ -175,6 +213,7 @@ mock! {
         fn mat(&self) -> &OwnedMat;
         fn detect_mobs(&self, minimap: Rect, bound: Rect, player: Point) -> Result<Vec<Point>>;
         fn detect_esc_settings(&self) -> bool;
+        fn detect_ok_button(&self) -> Result<Rect>;
         fn detect_elite_boss_bar(&self) -> bool;
         fn detect_minimap(&self, border_threshold: u8) -> Result<Rect>;
         fn detect_minimap_portals(&self, minimap: Rect) -> Vec<Rect>;
@@ -192,6 +231,13 @@ mock! {
             calibrating: ArrowsCalibrating,
         ) -> Result<ArrowsState>;
         fn detect_erda_shower(&self) -> Result<Rect>;
+        fn detect_familiar_save_button(&self) -> Result<Rect>;
+        fn detect_familiar_setup_button(&self) -> Result<Rect>;
+        fn detect_familiar_slots(&self) -> Vec<(Rect, bool)>;
+        fn detect_familiar_slot_is_free(&self, slot: Rect) -> bool;
+        fn detect_familiar_hover_level(&self) -> Result<FamiliarLevel>;
+        fn detect_familiar_cards(&self) -> Vec<(Rect, FamiliarRank)>;
+        fn detect_familiar_scrollbar(&self) -> Result<Rect>;
     }
 
     impl Debug for Detector {
@@ -248,6 +294,10 @@ impl Detector for CachedDetector {
 
     fn detect_esc_settings(&self) -> bool {
         detect_esc_settings(&**self.grayscale)
+    }
+
+    fn detect_ok_button(&self) -> Result<Rect> {
+        detect_ok_button(&**self.grayscale)
     }
 
     fn detect_elite_boss_bar(&self) -> bool {
@@ -323,6 +373,34 @@ impl Detector for CachedDetector {
 
     fn detect_erda_shower(&self) -> Result<Rect> {
         detect_erda_shower(&**self.grayscale)
+    }
+
+    fn detect_familiar_save_button(&self) -> Result<Rect> {
+        detect_familiar_save_button(&to_bgr(&*self.mat))
+    }
+
+    fn detect_familiar_setup_button(&self) -> Result<Rect> {
+        detect_familiar_setup_button(&to_bgr(&*self.mat))
+    }
+
+    fn detect_familiar_slots(&self) -> Vec<(Rect, bool)> {
+        detect_familiar_slots(&to_bgr(&*self.mat))
+    }
+
+    fn detect_familiar_slot_is_free(&self, slot: Rect) -> bool {
+        detect_familiar_slot_is_free(&to_bgr(&self.mat.roi(slot).unwrap()))
+    }
+
+    fn detect_familiar_hover_level(&self) -> Result<FamiliarLevel> {
+        detect_familiar_hover_level(&to_bgr(&*self.mat))
+    }
+
+    fn detect_familiar_cards(&self) -> Vec<(Rect, FamiliarRank)> {
+        detect_familiar_cards(&to_bgr(&*self.mat))
+    }
+
+    fn detect_familiar_scrollbar(&self) -> Result<Rect> {
+        detect_familiar_scrollbar(&to_bgr(&*self.mat))
     }
 }
 
@@ -431,44 +509,46 @@ fn detect_mobs(
     Ok(points)
 }
 
-fn detect_esc_settings(mat: &impl ToInputArray) -> bool {
-    /// TODO: Support default ratio
-    static ESC_SETTINGS: LazyLock<[Mat; 7]> = LazyLock::new(|| {
-        [
-            imgcodecs::imdecode(
-                include_bytes!(env!("ESC_SETTING_TEMPLATE")),
-                IMREAD_GRAYSCALE,
-            )
-            .unwrap(),
-            imgcodecs::imdecode(include_bytes!(env!("ESC_MENU_TEMPLATE")), IMREAD_GRAYSCALE)
-                .unwrap(),
-            imgcodecs::imdecode(include_bytes!(env!("ESC_EVENT_TEMPLATE")), IMREAD_GRAYSCALE)
-                .unwrap(),
-            imgcodecs::imdecode(
-                include_bytes!(env!("ESC_COMMUNITY_TEMPLATE")),
-                IMREAD_GRAYSCALE,
-            )
-            .unwrap(),
-            imgcodecs::imdecode(
-                include_bytes!(env!("ESC_CHARACTER_TEMPLATE")),
-                IMREAD_GRAYSCALE,
-            )
-            .unwrap(),
-            imgcodecs::imdecode(include_bytes!(env!("ESC_OK_TEMPLATE")), IMREAD_GRAYSCALE).unwrap(),
-            imgcodecs::imdecode(
-                include_bytes!(env!("ESC_CANCEL_TEMPLATE")),
-                IMREAD_GRAYSCALE,
-            )
-            .unwrap(),
-        ]
-    });
+/// TODO: Support default ratio
+static ESC_SETTINGS: LazyLock<[Mat; 7]> = LazyLock::new(|| {
+    [
+        imgcodecs::imdecode(
+            include_bytes!(env!("ESC_SETTING_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap(),
+        imgcodecs::imdecode(include_bytes!(env!("ESC_MENU_TEMPLATE")), IMREAD_GRAYSCALE).unwrap(),
+        imgcodecs::imdecode(include_bytes!(env!("ESC_EVENT_TEMPLATE")), IMREAD_GRAYSCALE).unwrap(),
+        imgcodecs::imdecode(
+            include_bytes!(env!("ESC_COMMUNITY_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap(),
+        imgcodecs::imdecode(
+            include_bytes!(env!("ESC_CHARACTER_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap(),
+        imgcodecs::imdecode(include_bytes!(env!("ESC_OK_TEMPLATE")), IMREAD_GRAYSCALE).unwrap(),
+        imgcodecs::imdecode(
+            include_bytes!(env!("ESC_CANCEL_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap(),
+    ]
+});
 
+fn detect_esc_settings(mat: &impl ToInputArray) -> bool {
     for template in &*ESC_SETTINGS {
-        if detect_template(mat, template, Point::default(), 0.85).is_ok() {
+        if detect_template(mat, template, Point::default(), 0.75).is_ok() {
             return true;
         }
     }
     false
+}
+
+fn detect_ok_button(mat: &impl ToInputArray) -> Result<Rect> {
+    detect_template(mat, &ESC_SETTINGS[5], Point::default(), 0.75)
 }
 
 fn detect_elite_boss_bar(mat: &impl MatTraitConst) -> bool {
@@ -1525,6 +1605,160 @@ fn detect_erda_shower(mat: &impl MatTraitConst) -> Result<Rect> {
     let crop_bbox = Rect::new(size.width - crop_x, size.height - crop_y, crop_x, crop_y);
     let skill_bar = mat.roi(crop_bbox).unwrap();
     detect_template(&skill_bar, &*ERDA_SHOWER, crop_bbox.tl(), 0.96)
+}
+
+fn detect_familiar_save_button(mat: &impl ToInputArray) -> Result<Rect> {
+    static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_BUTTON_SAVE")), IMREAD_COLOR).unwrap()
+    });
+
+    detect_template(mat, &*TEMPLATE, Point::default(), 0.75)
+}
+
+fn detect_familiar_setup_button(mat: &impl ToInputArray) -> Result<Rect> {
+    static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_BUTTON_SETUP")), IMREAD_COLOR).unwrap()
+    });
+
+    detect_template(mat, &*TEMPLATE, Point::default(), 0.75)
+}
+
+static FAMILIAR_SLOT_FREE: LazyLock<Mat> = LazyLock::new(|| {
+    imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_SLOT_FREE")), IMREAD_COLOR).unwrap()
+});
+static FAMILIAR_SLOT_OCCUPIED: LazyLock<Mat> = LazyLock::new(|| {
+    imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_SLOT_OCCUPIED")), IMREAD_COLOR).unwrap()
+});
+static FAMILIAR_SLOT_OCCUPIED_MASK: LazyLock<Mat> = LazyLock::new(|| {
+    imgcodecs::imdecode(
+        include_bytes!(env!("FAMILIAR_SLOT_OCCUPIED_MASK")),
+        IMREAD_GRAYSCALE,
+    )
+    .unwrap()
+});
+
+fn detect_familiar_slots(mat: &impl ToInputArray) -> Vec<(Rect, bool)> {
+    let first = detect_template_multiple(
+        mat,
+        &*FAMILIAR_SLOT_FREE,
+        no_array(),
+        Point::default(),
+        3,
+        0.75,
+    );
+    let second = detect_template_multiple(
+        mat,
+        &*FAMILIAR_SLOT_OCCUPIED,
+        &*FAMILIAR_SLOT_OCCUPIED_MASK,
+        Point::default(),
+        3,
+        0.75,
+    );
+    let mut vec = first
+        .into_iter()
+        .filter_map(|bbox| bbox.ok().map(|(bbox, _)| (bbox, true)))
+        .chain(
+            second
+                .into_iter()
+                .filter_map(|bbox| bbox.ok().map(|(bbox, _)| (bbox, false))),
+        )
+        .collect::<Vec<_>>();
+    vec.sort_by_key(|(bbox, _)| bbox.x);
+    vec
+}
+
+fn detect_familiar_slot_is_free(mat: &impl ToInputArray) -> bool {
+    detect_template(mat, &*FAMILIAR_SLOT_FREE, Point::default(), 0.75).is_ok()
+}
+
+fn detect_familiar_hover_level<T: ToInputArray + MatTraitConst>(mat: &T) -> Result<FamiliarLevel> {
+    static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_LEVEL_5")), IMREAD_COLOR).unwrap()
+    });
+    static TEMPLATE_MASK: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(
+            include_bytes!(env!("FAMILIAR_LEVEL_5_MASK")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap()
+    });
+
+    let level_bbox = detect_template(mat, &*TEMPLATE, Point::default(), 0.75)?;
+    let level = mat.roi(level_bbox)?;
+    Ok(
+        detect_template_single(&level, &*TEMPLATE, &*TEMPLATE_MASK, Point::default(), 0.70)
+            .map(|_| FamiliarLevel::Level5)
+            .unwrap_or(FamiliarLevel::LevelOther),
+    )
+}
+
+fn detect_familiar_cards<T: MatTraitConst + ToInputArray>(mat: &T) -> Vec<(Rect, FamiliarRank)> {
+    static TEMPLATE_RARE: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_CARD_RARE")), IMREAD_COLOR).unwrap()
+    });
+    static TEMPLATE_EPIC: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_CARD_EPIC")), IMREAD_COLOR).unwrap()
+    });
+    static TEMPLATE_MASK: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_CARD_MASK")), IMREAD_GRAYSCALE).unwrap()
+    });
+
+    #[inline]
+    fn match_template_score(
+        mat: &impl ToInputArray,
+        template: &impl ToInputArray,
+        mask: &impl ToInputArray,
+    ) -> f64 {
+        let mut result = Mat::default();
+        let mut score = 0f64;
+        match_template(mat, template, &mut result, TM_SQDIFF_NORMED, mask).unwrap();
+        min_max_loc(&result, Some(&mut score), None, None, None, &no_array()).unwrap();
+        score
+    }
+
+    // The current method would match all card without distinguishing rarity
+    let cards = detect_template_multiple(
+        mat,
+        &*TEMPLATE_RARE,
+        &*TEMPLATE_MASK,
+        Point::default(),
+        64,
+        0.75,
+    )
+    .into_iter()
+    .filter_map(|result| result.ok().map(|(bbox, _)| bbox))
+    .collect::<Vec<_>>();
+
+    let mut filtered = vec![];
+    if cards.is_empty() {
+        return filtered;
+    }
+
+    for card in cards {
+        let roi = mat.roi(card).unwrap();
+        let score_rare = match_template_score(&roi, &*TEMPLATE_RARE, &*TEMPLATE_MASK);
+        let score_epic = match_template_score(&roi, &*TEMPLATE_EPIC, &*TEMPLATE_MASK);
+        // TODO: If matching all rarities, it will probably be easier since just need to
+        // pick lowest score
+        if score_rare < 0.14 && score_epic < 0.14 {
+            let rank = if score_rare < score_epic {
+                FamiliarRank::Rare
+            } else {
+                FamiliarRank::Epic
+            };
+            filtered.push((card, rank));
+        }
+    }
+
+    filtered
+}
+
+fn detect_familiar_scrollbar(mat: &impl ToInputArray) -> Result<Rect> {
+    static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_SCROLLBAR")), IMREAD_COLOR).unwrap()
+    });
+
+    detect_template(mat, &*TEMPLATE, Point::default(), 0.6)
 }
 
 /// Detects a single match from `template` with the given BGR image `Mat`.
