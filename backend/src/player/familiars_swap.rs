@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use opencv::core::Rect;
+use opencv::core::{Point, Rect};
 use platforms::windows::KeyKind;
 
 use super::{
@@ -56,6 +56,8 @@ pub struct FamiliarsSwapping {
     swappable_slots: SwappableFamiliars,
     /// Only familiars with these rarities will be considered for swapping.
     swappable_rarities: Array<FamiliarRarity, 2>,
+    /// Mouse rest point for other operations.
+    mouse_rest: Point,
 }
 
 impl Display for FamiliarsSwapping {
@@ -87,6 +89,7 @@ impl FamiliarsSwapping {
             cards: Array::new(),
             swappable_slots,
             swappable_rarities,
+            mouse_rest: Point::new(50, 50),
         }
     }
 }
@@ -188,7 +191,10 @@ fn update_open_menu(
         timeout,
         5,
         |timeout| {
-            let _ = context.keys.send_mouse(50, 50, MouseAction::MoveOnly);
+            let rest = swapping.mouse_rest;
+            let _ = context
+                .keys
+                .send_mouse(rest.x, rest.y, MouseAction::MoveOnly);
             if context
                 .detector_unwrap()
                 .detect_familiar_setup_button()
@@ -211,15 +217,20 @@ fn open_setup(
     swapping: FamiliarsSwapping,
     timeout: Timeout,
 ) -> FamiliarsSwapping {
+    const OPEN_SETUP_TIMEOUT: u32 = 5;
+
     update_with_timeout(
         timeout,
-        5,
+        OPEN_SETUP_TIMEOUT,
         |timeout| {
+            let mut swapping = swapping;
+
             // Try click familiar menu setup button every one second until it becomes
             // undetectable
             if let Ok(bbox) = context.detector_unwrap().detect_familiar_setup_button() {
                 let (x, y) = bbox_click_point(bbox);
                 let _ = context.keys.send_mouse(x, y, MouseAction::Click);
+                swapping.mouse_rest = Point::new(bbox.x, bbox.y - 100);
             }
 
             swapping.stage_open_setup(timeout)
@@ -234,7 +245,10 @@ fn open_setup(
             } else {
                 // This could also indicate familiar menu already closed. If that is the case,
                 // find slots will handle it. And send to mouse rest position for detecting slots.
-                let _ = context.keys.send_mouse(50, 50, MouseAction::MoveOnly);
+                let rest = swapping.mouse_rest;
+                let _ = context
+                    .keys
+                    .send_mouse(rest.x, rest.y, MouseAction::MoveOnly);
                 swapping.stage(SwappingStage::FindSlots)
             }
         },
@@ -273,7 +287,10 @@ fn update_free_slots(
     #[inline]
     fn find_cards_or_complete(context: &Context, swapping: FamiliarsSwapping) -> FamiliarsSwapping {
         if swapping.slots.iter().any(|slot| slot.1) {
-            let _ = context.keys.send_mouse(50, 50, MouseAction::MoveOnly);
+            let rest = swapping.mouse_rest;
+            let _ = context
+                .keys
+                .send_mouse(rest.x, rest.y, MouseAction::MoveOnly);
             swapping.stage(SwappingStage::FindCards)
         } else {
             swapping.stage(SwappingStage::Completed)
@@ -358,7 +375,11 @@ fn update_free_slot(
                             } else if swapping.slots.iter().any(|slot| slot.1) {
                                 // If there is no more slot to check and any of them is free,
                                 // starts finding cards for swapping
-                                let _ = context.keys.send_mouse(50, 50, MouseAction::MoveOnly);
+                                let rest = swapping.mouse_rest;
+                                let _ =
+                                    context
+                                        .keys
+                                        .send_mouse(rest.x, rest.y, MouseAction::MoveOnly);
                                 swapping.stage(SwappingStage::FindCards)
                             } else {
                                 // All of the slots are occupied and non-level-5
@@ -455,16 +476,23 @@ fn update_swapping(
                 swapping.stage_swapping(Timeout::default(), index + 1)
             } else {
                 // Try scroll for more cards
-                let _ = context.keys.send_mouse(50, 50, MouseAction::MoveOnly);
+                let rest = swapping.mouse_rest;
+                let _ = context
+                    .keys
+                    .send_mouse(rest.x, rest.y, MouseAction::MoveOnly);
                 swapping.stage_scrolling(Timeout::default(), None)
             }
         },
         |timeout| {
+            let rest = swapping.mouse_rest;
+
             if timeout.current == SWAPPING_DETECT_LEVEL_TICK {
                 match context.detector_unwrap().detect_familiar_hover_level() {
                     Ok(FamiliarLevel::Level5) => {
                         // Move to rest position and wait for timeout
-                        let _ = context.keys.send_mouse(50, 50, MouseAction::MoveOnly);
+                        let _ = context
+                            .keys
+                            .send_mouse(rest.x, rest.y, MouseAction::MoveOnly);
                     }
                     Ok(FamiliarLevel::LevelOther) => {
                         // Double click to select and then move to rest point
@@ -472,7 +500,9 @@ fn update_swapping(
                         let (x, y) = bbox_click_point(bbox);
                         let _ = context.keys.send_mouse(x, y, MouseAction::Click);
                         let _ = context.keys.send_mouse(x, y, MouseAction::Click);
-                        let _ = context.keys.send_mouse(50, 50, MouseAction::MoveOnly);
+                        let _ = context
+                            .keys
+                            .send_mouse(rest.x, rest.y, MouseAction::MoveOnly);
                     }
                     // TODO: recoverable?
                     Err(_) => return swapping.stage(SwappingStage::Completed),

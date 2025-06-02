@@ -75,19 +75,20 @@ class KeyInput(KeyInputServicer):
         # dy = y - position.y
 
         # Case 2: KMBox input server is in a different PC than the bot. This case can be
-        # problematic depending on your setup. For instance, if you use GF Now or
-        # Moonlight/Sunshine, when running the game, there are no "status bars" or other UI areas.
-        # Your game will always show without any kind of border/bars that might inset
-        # the actual game. But if you run your game in something like a VM, the VM can has these
-        # bars and the bot always capture the full VM app and not just the game being shown. So
+        # problematic depending on your setup. For instance, if you use GF Now, when running
+        # the game, there are no "status bars" or other non-game UI areas. Your game will always show
+        # without any kind of border/bars that might inset the actual game. But if you run your
+        # game in something like a VM or Sunshine/Moonlight, these apps can have these
+        # bars and the bot always capture the full app and not just the game being shown. So
         # you need to subtract the coordinates by some amount until it feels "correct".
         #
         # You need to use Coordinate.Relative for this case.
 
         # These are for cropping the non-game UI portion of the app the game is running in.
-        # For Moonlight/Sunshine, you can leave both values as 0. This method can be unreliable.
-        crop_left_px = 4  # Change this until it feels correct
-        crop_top_px = 74  # Change this until it feels correct
+        # For Moonlight/Sunshine, you can leave this as-is. This method can be unreliable due
+        # this reason. You can also use PowerToys Screen Ruler to measure this non-game UI area.
+        crop_left_px = 0  # Change this until it feels correct
+        crop_top_px = 30  # Change this until it feels correct
 
         game_width = 1366  # Assuming your game is 1366x768 full screen
         game_height = 768  # Assuming your game is 1366x768 full screen
