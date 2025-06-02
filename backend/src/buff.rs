@@ -38,6 +38,7 @@ impl BuffState {
             fail_count: 0,
             max_fail_count: match kind {
                 BuffKind::Rune => 1,
+                BuffKind::Familiar => 2,
                 BuffKind::WealthAcquisitionPotion
                 | BuffKind::ExpAccumulationPotion
                 | BuffKind::SayramElixir
@@ -59,6 +60,7 @@ impl BuffState {
     pub fn update_enabled_state(&mut self, config: &Configuration, settings: &Settings) {
         self.enabled = match self.kind {
             BuffKind::Rune => settings.enable_rune_solving,
+            BuffKind::Familiar => config.familiar_buff_key.enabled,
             BuffKind::SayramElixir => config.sayram_elixir_key.enabled,
             BuffKind::AureliaElixir => config.aurelia_elixir_key.enabled,
             BuffKind::ExpCouponX3 => config.exp_x3_key.enabled,
@@ -92,6 +94,7 @@ pub enum BuffKind {
     /// NOTE: Upon failing to solving rune, there is a cooldown
     /// that looks exactly like the normal rune buff
     Rune,
+    Familiar,
     SayramElixir,
     AureliaElixir,
     ExpCouponX3,

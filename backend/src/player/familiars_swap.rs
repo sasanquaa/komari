@@ -42,7 +42,7 @@ enum SwappingStage {
     Scrolling(Timeout, Option<Rect>, u32),
     /// Saving the familiar setup.
     Saving(Timeout),
-    Completed,
+    Completing(Timeout, bool),
 }
 
 /// Struct for storing familiar swapping data.
@@ -75,7 +75,7 @@ impl Display for FamiliarsSwapping {
             SwappingStage::Swapping(_, _) => write!(f, "Swapping"),
             SwappingStage::Scrolling(_, _, _) => write!(f, "Scrolling"),
             SwappingStage::Saving(_) => write!(f, "Saving"),
-            SwappingStage::Completed => write!(f, "Completed"),
+            SwappingStage::Completing(_, _) => write!(f, "Completing"),
         }
     }
 }
@@ -141,6 +141,11 @@ impl FamiliarsSwapping {
     fn stage_saving(self, timeout: Timeout) -> FamiliarsSwapping {
         self.stage(SwappingStage::Saving(timeout))
     }
+
+    #[inline]
+    fn stage_completing(self, timeout: Timeout, completed: bool) -> FamiliarsSwapping {
+        self.stage(SwappingStage::Completing(timeout, completed))
+    }
 }
 
 /// Updates [`Player::FamiliarsSwapping`] contextual state.
@@ -153,7 +158,7 @@ pub fn update_familiars_swapping_context(
     swapping: FamiliarsSwapping,
 ) -> Player {
     let swapping = if swapping.swappable_rarities.is_empty() {
-        swapping.stage(SwappingStage::Completed)
+        swapping.stage_completing(Timeout::default(), true)
     } else {
         match swapping.stage {
             SwappingStage::OpenMenu(timeout, retry_count) => update_open_menu(
@@ -181,11 +186,12 @@ pub fn update_familiars_swapping_context(
                 update_scrolling(context, swapping, timeout, scrollbar, retry_count)
             }
             SwappingStage::Saving(timeout) => update_saving(context, swapping, timeout),
-            SwappingStage::Completed => unreachable!(),
+            SwappingStage::Completing(timeout, completed) => {
+                update_completing(context, swapping, timeout, completed)
+            }
         }
     };
-    let next = if matches!(swapping.stage, SwappingStage::Completed) {
-        let _ = context.keys.send(KeyKind::Esc);
+    let next = if matches!(swapping.stage, SwappingStage::Completing(_, true)) {
         Player::Idle
     } else {
         Player::FamiliarsSwapping(swapping)
@@ -211,18 +217,13 @@ fn update_open_menu(
         |timeout| {
             let rest = swapping.mouse_rest;
             let _ = context.keys.send_mouse(rest.x, rest.y, MouseAction::Move);
-            if context
-                .detector_unwrap()
-                .detect_familiar_setup_button()
-                .is_ok()
-            {
+            if context.detector_unwrap().detect_familiar_menu_opened() {
                 swapping.stage_open_setup(Timeout::default(), 0)
             } else if retry_count + 1 < MAX_RETRY {
-                // Try open familiar menu until familiar setup button shows up
                 let _ = context.keys.send(key);
                 swapping.stage_open_menu(timeout, retry_count + 1)
             } else {
-                swapping.stage(SwappingStage::Completed)
+                swapping.stage_completing(Timeout::default(), false)
             }
         },
         || swapping.stage_open_menu(Timeout::default(), retry_count),
@@ -263,7 +264,7 @@ fn open_setup(
                 if retry_count + 1 < MAX_RETRY {
                     swapping.stage_open_setup(Timeout::default(), retry_count + 1)
                 } else {
-                    swapping.stage(SwappingStage::Completed)
+                    swapping.stage_completing(Timeout::default(), false)
                 }
             } else {
                 // This could also indicate familiar menu already closed. If that is the case,
@@ -287,7 +288,7 @@ fn update_find_slots(context: &Context, mut swapping: FamiliarsSwapping) -> Fami
             }
         } else {
             // Weird spots with false positives
-            return swapping.stage(SwappingStage::Completed);
+            return swapping.stage_completing(Timeout::default(), false);
         }
     }
 
@@ -312,7 +313,7 @@ fn update_free_slots(
             let _ = context.keys.send_mouse(rest.x, rest.y, MouseAction::Move);
             swapping.stage(SwappingStage::FindCards)
         } else {
-            swapping.stage(SwappingStage::Completed)
+            swapping.stage_completing(Timeout::default(), false)
         }
     }
 
@@ -395,7 +396,7 @@ fn update_free_slot(
                                 swapping.stage(SwappingStage::FindCards)
                             } else {
                                 // All of the slots are occupied and non-level-5
-                                swapping.stage(SwappingStage::Completed)
+                                swapping.stage_completing(Timeout::default(), false)
                             };
                         }
                         // Could mean UI being closed
@@ -511,7 +512,7 @@ fn update_swapping(
                         let _ = context.keys.send_mouse(rest.x, rest.y, MouseAction::Move);
                     }
                     // TODO: recoverable?
-                    Err(_) => return swapping.stage(SwappingStage::Completed),
+                    Err(_) => return swapping.stage_completing(Timeout::default(), false),
                 }
             }
 
@@ -543,7 +544,7 @@ fn update_scrolling(
         |timeout| {
             let Ok(scrollbar) = context.detector_unwrap().detect_familiar_scrollbar() else {
                 // TODO: recoverable?
-                return swapping.stage(SwappingStage::Completed);
+                return swapping.stage_completing(Timeout::default(), false);
             };
 
             let (x, y) = bbox_click_point(scrollbar);
@@ -569,7 +570,7 @@ fn update_scrolling(
                 }
             }
 
-            swapping.stage(SwappingStage::Completed)
+            swapping.stage_completing(Timeout::default(), false)
         },
         |timeout| {
             if timeout.current == SCROLLING_REST_TICK {
@@ -597,7 +598,7 @@ fn update_saving(
         |timeout| {
             let Ok(button) = context.detector_unwrap().detect_familiar_save_button() else {
                 // TODO: recoverable?
-                return swapping.stage(SwappingStage::Completed);
+                return swapping.stage_completing(Timeout::default(), false);
             };
 
             let (x, y) = bbox_click_point(button);
@@ -611,9 +612,31 @@ fn update_saving(
                 let _ = context.keys.send_mouse(x, y, MouseAction::Click);
             }
 
-            swapping.stage(SwappingStage::Completed)
+            swapping.stage_completing(Timeout::default(), false)
         },
         |timeout| swapping.stage_saving(timeout),
+    )
+}
+
+#[inline]
+fn update_completing(
+    context: &Context,
+    swapping: FamiliarsSwapping,
+    timeout: Timeout,
+    completed: bool,
+) -> FamiliarsSwapping {
+    update_with_timeout(
+        timeout,
+        10,
+        |timeout| {
+            let has_menu = context.detector_unwrap().detect_familiar_menu_opened();
+            if has_menu {
+                let _ = context.keys.send(KeyKind::Esc);
+            }
+            swapping.stage_completing(timeout, !has_menu)
+        },
+        || swapping.stage_completing(Timeout::default(), completed),
+        |timeout| swapping.stage_completing(timeout, completed),
     )
 }
 
@@ -683,8 +706,8 @@ mod tests {
         swapping.slots.push((bbox, false));
 
         let result = update_free_slots(&context, swapping, 1, false);
-        // Completed because there is no free slot to swap
-        assert_matches!(result.stage, SwappingStage::Completed);
+        // Completing because there is no free slot to swap
+        assert_matches!(result.stage, SwappingStage::Completing(_, _));
     }
 
     #[test]

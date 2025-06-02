@@ -206,6 +206,9 @@ pub trait Detector: 'static + Send + DynClone + Debug {
 
     /// Detects familiar menu setup's tab scrollbar assuming familiar menu opened.
     fn detect_familiar_scrollbar(&self) -> Result<Rect>;
+
+    /// Detects whether the familiar menu is opened.
+    fn detect_familiar_menu_opened(&self) -> bool;
 }
 
 #[cfg(test)]
@@ -242,6 +245,7 @@ mock! {
         fn detect_familiar_hover_level(&self) -> Result<FamiliarLevel>;
         fn detect_familiar_cards(&self) -> Vec<(Rect, FamiliarRank)>;
         fn detect_familiar_scrollbar(&self) -> Result<Rect>;
+        fn detect_familiar_menu_opened(&self) -> bool;
     }
 
     impl Debug for Detector {
@@ -359,6 +363,7 @@ impl Detector for CachedDetector {
     fn detect_player_buff(&self, kind: BuffKind) -> bool {
         let mat = match kind {
             BuffKind::Rune
+            | BuffKind::Familiar
             | BuffKind::SayramElixir
             | BuffKind::AureliaElixir
             | BuffKind::ExpCouponX3
@@ -409,6 +414,10 @@ impl Detector for CachedDetector {
 
     fn detect_familiar_scrollbar(&self) -> Result<Rect> {
         detect_familiar_scrollbar(&to_grayscale(&*self.mat, false))
+    }
+
+    fn detect_familiar_menu_opened(&self) -> bool {
+        detect_familiar_menu_opened(&**self.grayscale)
     }
 }
 
@@ -971,6 +980,13 @@ fn detect_player_buff<T: MatTraitConst + ToInputArray>(mat: &T, kind: BuffKind) 
     static RUNE_BUFF: LazyLock<Mat> = LazyLock::new(|| {
         imgcodecs::imdecode(include_bytes!(env!("RUNE_BUFF_TEMPLATE")), IMREAD_GRAYSCALE).unwrap()
     });
+    static FAMILIAR_BUFF: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(
+            include_bytes!(env!("FAMILIAR_BUFF_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap()
+    });
     static SAYRAM_ELIXIR_BUFF: LazyLock<Mat> = LazyLock::new(|| {
         imgcodecs::imdecode(
             include_bytes!(env!("SAYRAM_ELIXIR_BUFF_TEMPLATE")),
@@ -1082,6 +1098,7 @@ fn detect_player_buff<T: MatTraitConst + ToInputArray>(mat: &T, kind: BuffKind) 
         | BuffKind::WealthAcquisitionPotion
         | BuffKind::ExpAccumulationPotion => 0.7,
         BuffKind::Rune
+        | BuffKind::Familiar
         | BuffKind::SayramElixir
         | BuffKind::ExpCouponX3
         | BuffKind::BonusExpCoupon
@@ -1093,6 +1110,7 @@ fn detect_player_buff<T: MatTraitConst + ToInputArray>(mat: &T, kind: BuffKind) 
     };
     let template = match kind {
         BuffKind::Rune => &*RUNE_BUFF,
+        BuffKind::Familiar => &*FAMILIAR_BUFF,
         BuffKind::SayramElixir => &*SAYRAM_ELIXIR_BUFF,
         BuffKind::AureliaElixir => &*AURELIA_ELIXIR_BUFF,
         BuffKind::ExpCouponX3 => &*EXP_COUPON_X3_BUFF,
@@ -1780,6 +1798,14 @@ fn detect_familiar_scrollbar(mat: &impl ToInputArray) -> Result<Rect> {
     });
 
     detect_template(mat, &*TEMPLATE, Point::default(), 0.6)
+}
+
+fn detect_familiar_menu_opened(mat: &impl ToInputArray) -> bool {
+    static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_MENU")), IMREAD_GRAYSCALE).unwrap()
+    });
+
+    detect_template(mat, &*TEMPLATE, Point::default(), 0.75).is_ok()
 }
 
 /// Detects a single match from `template` with the given BGR image `Mat`.

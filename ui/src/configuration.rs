@@ -25,9 +25,10 @@ const JUMP: &str = "Jump";
 const UP_JUMP: &str = "Up Jump";
 const INTERACT: &str = "Interact";
 const CASH_SHOP: &str = "Cash Shop";
-const FAMILIAR: &str = "Familiar";
+const FAMILIAR: &str = "Familiar Menu";
 const FEED_PET: &str = "Feed Pet";
 const POTION: &str = "Potion";
+const FAMILIAR_BUFF: &str = "Familiar Skill";
 const SAYRAM_ELIXIR: &str = "Sayram's Elixir";
 const AURELIA_ELIXIR: &str = "Aurelia's Elixir";
 const EXP_X3: &str = "3x EXP Coupon";
@@ -223,11 +224,11 @@ fn ConfigGameKeyBindings(
                 is_disabled: is_disabled(),
                 on_input: move |key: Option<KeyBindingConfiguration>| {
                     on_config(ConfigurationData {
-                        familiar_key: key.unwrap(),
+                        familiar_menu_key: key.unwrap(),
                         ..config_view.peek().clone()
                     });
                 },
-                value: Some(config_view().familiar_key),
+                value: Some(config_view().familiar_menu_key),
             }
             KeyBindingConfigurationInput {
                 label: FEED_PET,
@@ -347,6 +348,19 @@ fn ConfigBuffKeyBindings(
     on_config: EventHandler<ConfigurationData>,
 ) -> Element {
     rsx! {
+        KeyBindingConfigurationInput {
+            label: FAMILIAR_BUFF,
+            label_active: active,
+            is_disabled: is_disabled(),
+            is_toggleable: true,
+            on_input: move |key: Option<KeyBindingConfiguration>| {
+                on_config(ConfigurationData {
+                    familiar_buff_key: key.unwrap(),
+                    ..config_view.peek().clone()
+                });
+            },
+            value: Some(config_view().familiar_buff_key),
+        }
         KeyBindingConfigurationInput {
             label: SAYRAM_ELIXIR,
             label_active: active,

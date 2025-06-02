@@ -54,6 +54,8 @@ fn main() {
     let familiar_card_rare = dir.join("familiar_card_rare_ideal_ratio.png");
     let familiar_card_epic = dir.join("familiar_card_epic_ideal_ratio.png");
     let familiar_card_mask = dir.join("familiar_card_mask_ideal_ratio.png");
+    let familiar_buff = dir.join("familiar_buff_ideal_ratio.png");
+    let familiar_menu = dir.join("familiar_menu_ideal_ratio.png");
 
     let mob_model = dir.join("mob_nms.onnx");
     let rune_model = dir.join("rune_nms.onnx");
@@ -265,6 +267,14 @@ fn main() {
     println!(
         "cargo:rustc-env=FAMILIAR_CARD_MASK={}",
         familiar_card_mask.to_str().unwrap()
+    );
+    println!(
+        "cargo:rustc-env=FAMILIAR_BUFF_TEMPLATE={}",
+        familiar_buff.to_str().unwrap()
+    );
+    println!(
+        "cargo:rustc-env=FAMILIAR_MENU={}",
+        familiar_menu.to_str().unwrap()
     );
 
     println!(
