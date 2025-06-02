@@ -1,6 +1,6 @@
 use std::{
     assert_matches::debug_assert_matches,
-    collections::VecDeque,
+    collections::{HashSet, VecDeque},
     sync::atomic::{AtomicU32, Ordering},
     time::Instant,
 };
@@ -12,7 +12,8 @@ use ordered_hash_map::OrderedHashMap;
 use rand::seq::IteratorRandom;
 
 use crate::{
-    ActionKeyDirection, ActionKeyWith, AutoMobbing, KeyBinding, Position, RotationMode, Settings,
+    ActionKeyDirection, ActionKeyWith, AutoMobbing, FamiliarRarity, KeyBinding, Position,
+    RotationMode, SwappableFamiliars,
     array::Array,
     buff::{Buff, BuffKind},
     context::{Context, MS_PER_TICK},
@@ -29,7 +30,17 @@ use crate::{
 const COOLDOWN_BETWEEN_QUEUE_MILLIS: u128 = 20_000;
 const COOLDOWN_BETWEEN_POTION_QUEUE_MILLIS: u128 = 2_000;
 
-type ConditionFn = Box<dyn Fn(&Context, &mut PlayerState, Option<Instant>) -> bool>;
+/// [`Condition`] evaluation result.
+enum ConditionResult {
+    /// The action will be queued.
+    Queue,
+    /// The action is skipped and evaluated again on next update.
+    Skip,
+    /// The action is skipped but `last_queued_time` is updated.
+    Ignore,
+}
+
+type ConditionFn = Box<dyn Fn(&Context, &mut PlayerState, Option<Instant>) -> ConditionResult>;
 
 /// Predicate for when a priority action can be queued
 struct Condition(ConditionFn);
@@ -136,20 +147,26 @@ pub struct Rotator {
 }
 
 impl Rotator {
+    #[allow(clippy::too_many_arguments)]
     pub fn build_actions(
         &mut self,
         mode: RotatorMode,
         actions: &[Action],
         buffs: &[(BuffKind, KeyBinding)],
         potion_key: KeyBinding,
-        settings: &Settings,
-        reset_normal_actions_on_erda: bool,
+        familiar_essence_key: KeyBinding,
+        familiar_swappable_slots: SwappableFamiliars,
+        familiar_swappable_rarities: &HashSet<FamiliarRarity>,
+        familiar_swap_check_millis: u64,
+        enable_rune_solving: bool,
+        enable_familiars_swapping: bool,
+        enable_reset_normal_actions_on_erda: bool,
     ) {
         debug!(target: "rotator", "preparing actions {actions:?} {buffs:?}");
         self.reset_queue();
         self.normal_actions.clear();
         self.normal_rotate_mode = mode;
-        self.normal_actions_reset_on_erda = reset_normal_actions_on_erda;
+        self.normal_actions_reset_on_erda = enable_reset_normal_actions_on_erda;
         self.priority_actions.clear();
 
         let mut i = 0;
@@ -190,25 +207,34 @@ impl Rotator {
             self.id_counter.fetch_add(1, Ordering::Relaxed),
             elite_boss_potion_spam_priority_action(potion_key),
         );
-        if settings.enable_rune_solving {
+        if buffs
+            .iter()
+            .any(|(buff, _)| matches!(buff, BuffKind::Familiar))
+        {
+            self.priority_actions.insert(
+                self.id_counter.fetch_add(1, Ordering::Relaxed),
+                familiar_essence_replenish_priority_action(familiar_essence_key),
+            );
+        }
+        if enable_rune_solving {
             self.priority_actions.insert(
                 self.id_counter.fetch_add(1, Ordering::Relaxed),
                 solve_rune_priority_action(),
             );
         }
-        if settings.familiars.enable_familiars_swapping {
+        if enable_familiars_swapping {
             self.priority_actions.insert(
                 self.id_counter.fetch_add(1, Ordering::Relaxed),
                 priority_action(
                     RotatorAction::Single(PlayerAction::FamiliarsSwapping(
                         PlayerActionFamiliarsSwapping {
-                            swappable_slots: settings.familiars.swappable_familiars,
+                            swappable_slots: familiar_swappable_slots,
                             swappable_rarities: Array::from_iter(
-                                settings.familiars.swappable_rarities.clone(),
+                                familiar_swappable_rarities.clone(),
                             ),
                         },
                     )),
-                    ActionCondition::EveryMillis(settings.familiars.swap_check_millis),
+                    ActionCondition::EveryMillis(familiar_swap_check_millis),
                     true,
                 ),
             );
@@ -309,11 +335,13 @@ impl Rotator {
         let has_erda_action = self.has_erda_action_queuing_or_executing(player);
         let ids = self.priority_actions.keys().copied().collect::<Vec<_>>(); // why?
         let mut did_queue_erda_action = false;
+
         for id in ids {
             // Ignores for as long as the action is a linked action that is queuing
             // or executing
             let has_linked_action = self.is_priority_linked_action_queuing_or_executing(player, id);
             let action = self.priority_actions.get_mut(&id).unwrap();
+
             action.ignoring = match action.condition_kind {
                 Some(ActionCondition::ErdaShowerOffCooldown) => {
                     has_erda_action || has_linked_action
@@ -334,18 +362,26 @@ impl Rotator {
                 action.last_queued_time = Some(Instant::now());
                 continue;
             }
-            if (action.condition.0)(context, player, action.last_queued_time) {
-                if action.queue_to_front {
-                    self.priority_actions_queue.push_front(id);
-                } else {
-                    self.priority_actions_queue.push_back(id);
+
+            let result = (action.condition.0)(context, player, action.last_queued_time);
+            match result {
+                ConditionResult::Queue => {
+                    if action.queue_to_front {
+                        self.priority_actions_queue.push_front(id);
+                    } else {
+                        self.priority_actions_queue.push_back(id);
+                    }
+                    action.last_queued_time = Some(Instant::now());
+                    if !did_queue_erda_action {
+                        did_queue_erda_action = matches!(
+                            action.condition_kind,
+                            Some(ActionCondition::ErdaShowerOffCooldown)
+                        );
+                    }
                 }
-                action.last_queued_time = Some(Instant::now());
-                if !did_queue_erda_action {
-                    did_queue_erda_action = matches!(
-                        action.condition_kind,
-                        Some(ActionCondition::ErdaShowerOffCooldown)
-                    );
+                ConditionResult::Skip => (),
+                ConditionResult::Ignore => {
+                    action.last_queued_time = Some(Instant::now());
                 }
             }
         }
@@ -710,7 +746,11 @@ fn priority_action(
     PriorityAction {
         inner: action,
         condition: Condition(Box::new(move |context, _, last_queued_time| {
-            should_queue_fixed_action(context, last_queued_time, condition)
+            if should_queue_fixed_action(context, last_queued_time, condition) {
+                ConditionResult::Queue
+            } else {
+                ConditionResult::Skip
+            }
         })),
         condition_kind: Some(condition),
         queue_to_front,
@@ -726,12 +766,50 @@ fn elite_boss_potion_spam_priority_action(key: KeyBinding) -> PriorityAction {
         condition: Condition(Box::new(|context, _, last_queued_time| {
             if !at_least_millis_passed_since(last_queued_time, COOLDOWN_BETWEEN_POTION_QUEUE_MILLIS)
             {
-                return false;
+                return ConditionResult::Skip;
             }
-            if let Minimap::Idle(idle) = context.minimap {
-                return idle.has_elite_boss;
+            if let Minimap::Idle(idle) = context.minimap
+                && idle.has_elite_boss
+            {
+                ConditionResult::Queue
+            } else {
+                ConditionResult::Skip
             }
-            false
+        })),
+        condition_kind: None,
+        inner: RotatorAction::Single(PlayerAction::Key(PlayerActionKey {
+            key,
+            link_key: None,
+            count: 1,
+            position: None,
+            direction: ActionKeyDirection::Any,
+            with: ActionKeyWith::Any,
+            wait_before_use_ticks: 5,
+            wait_before_use_ticks_random_range: 0,
+            wait_after_use_ticks: 0,
+            wait_after_use_ticks_random_range: 0,
+        })),
+        queue_to_front: true,
+        ignoring: false,
+        last_queued_time: None,
+    }
+}
+
+#[inline]
+fn familiar_essence_replenish_priority_action(key: KeyBinding) -> PriorityAction {
+    PriorityAction {
+        condition: Condition(Box::new(|context, _, last_queued_time| {
+            if !at_least_millis_passed_since(last_queued_time, COOLDOWN_BETWEEN_QUEUE_MILLIS) {
+                return ConditionResult::Skip;
+            }
+            if !matches!(context.buffs[BuffKind::Familiar], Buff::Yes) {
+                return ConditionResult::Skip;
+            }
+            if context.detector_unwrap().detect_familiar_essence_depleted() {
+                ConditionResult::Queue
+            } else {
+                ConditionResult::Ignore
+            }
         })),
         condition_kind: None,
         inner: RotatorAction::Single(PlayerAction::Key(PlayerActionKey {
@@ -758,22 +836,24 @@ fn elite_boss_potion_spam_priority_action(key: KeyBinding) -> PriorityAction {
 /// - The player is not validating previous rune solving
 /// - At least [`COOLDOWN_BETWEEN_QUEUE_MILLIS`] have been passed since last action queue
 /// - The minimap is in [`Minimap::Idle`] state and there is a rune
-/// - The player rune buff is [`Buff::NoBuff`]
+/// - The player rune buff is [`Buff::No`]
 #[inline]
 fn solve_rune_priority_action() -> PriorityAction {
     PriorityAction {
         condition: Condition(Box::new(|context, player, last_queued_time| {
             if player.is_validating_rune() {
-                return false;
+                return ConditionResult::Skip;
             }
             if !at_least_millis_passed_since(last_queued_time, COOLDOWN_BETWEEN_QUEUE_MILLIS) {
-                return false;
+                return ConditionResult::Skip;
             }
-            if let Minimap::Idle(idle) = context.minimap {
-                return idle.rune.value().is_some()
-                    && matches!(context.buffs[BuffKind::Rune], Buff::NoBuff);
+            if let Minimap::Idle(idle) = context.minimap
+                && idle.rune.value().is_some()
+                && matches!(context.buffs[BuffKind::Rune], Buff::No)
+            {
+                return ConditionResult::Queue;
             }
-            false
+            ConditionResult::Skip
         })),
         condition_kind: None,
         inner: RotatorAction::Single(PlayerAction::SolveRune),
@@ -788,12 +868,16 @@ fn buff_priority_action(buff: BuffKind, key: KeyBinding) -> PriorityAction {
     PriorityAction {
         condition: Condition(Box::new(move |context, _, last_queued_time| {
             if !at_least_millis_passed_since(last_queued_time, COOLDOWN_BETWEEN_QUEUE_MILLIS) {
-                return false;
+                return ConditionResult::Skip;
             }
             if !matches!(context.minimap, Minimap::Idle(_)) {
-                return false;
+                return ConditionResult::Skip;
             }
-            matches!(context.buffs[buff], Buff::NoBuff)
+            if matches!(context.buffs[buff], Buff::No) {
+                ConditionResult::Queue
+            } else {
+                ConditionResult::Skip
+            }
         })),
         condition_kind: None,
         inner: RotatorAction::Single(PlayerAction::Key(PlayerActionKey {
@@ -939,8 +1023,13 @@ mod tests {
             RotatorMode::default(),
             &actions,
             &buffs,
-            KeyBinding::A,
-            &Settings::default(),
+            KeyBinding::default(),
+            KeyBinding::default(),
+            SwappableFamiliars::default(),
+            &HashSet::default(),
+            0,
+            true,
+            false,
             false,
         );
         assert_eq!(rotator.priority_actions.len(), 7);
@@ -1005,12 +1094,16 @@ mod tests {
         minimap.rune.set_value(Point::default());
         let mut context = Context::new(None, None);
         context.minimap = Minimap::Idle(minimap);
-        context.buffs[BuffKind::Rune] = Buff::NoBuff;
+        context.buffs[BuffKind::Rune] = Buff::No;
         rotator.priority_actions.insert(
             55,
             PriorityAction {
                 condition: Condition(Box::new(|context, _, _| {
-                    matches!(context.minimap, Minimap::Idle(_))
+                    if matches!(context.minimap, Minimap::Idle(_)) {
+                        ConditionResult::Queue
+                    } else {
+                        ConditionResult::Skip
+                    }
                 })),
                 condition_kind: None,
                 inner: RotatorAction::Single(PlayerAction::SolveRune),
@@ -1034,7 +1127,7 @@ mod tests {
         rotator.priority_actions.insert(
             2,
             PriorityAction {
-                condition: Condition(Box::new(|_, _, _| true)),
+                condition: Condition(Box::new(|_, _, _| ConditionResult::Queue)),
                 condition_kind: None,
                 inner: RotatorAction::Single(NORMAL_ACTION.into()),
                 queue_to_front: false,
@@ -1045,7 +1138,7 @@ mod tests {
         rotator.priority_actions.insert(
             3,
             PriorityAction {
-                condition: Condition(Box::new(|_, _, _| true)),
+                condition: Condition(Box::new(|_, _, _| ConditionResult::Queue)),
                 condition_kind: None,
                 inner: RotatorAction::Single(NORMAL_ACTION.into()),
                 queue_to_front: false,
@@ -1062,7 +1155,7 @@ mod tests {
         rotator.priority_actions.insert(
             4,
             PriorityAction {
-                condition: Condition(Box::new(|_, _, _| true)),
+                condition: Condition(Box::new(|_, _, _| ConditionResult::Queue)),
                 condition_kind: None,
                 inner: RotatorAction::Single(NORMAL_ACTION.into()),
                 queue_to_front: true,
@@ -1083,7 +1176,7 @@ mod tests {
         rotator.priority_actions.insert(
             5,
             PriorityAction {
-                condition: Condition(Box::new(|_, _, _| true)),
+                condition: Condition(Box::new(|_, _, _| ConditionResult::Queue)),
                 condition_kind: None,
                 inner: RotatorAction::Single(NORMAL_ACTION.into()),
                 queue_to_front: true,
@@ -1110,7 +1203,7 @@ mod tests {
         rotator.priority_actions.insert(
             2,
             PriorityAction {
-                condition: Condition(Box::new(|_, _, _| true)),
+                condition: Condition(Box::new(|_, _, _| ConditionResult::Queue)),
                 condition_kind: None,
                 inner: RotatorAction::Linked(LinkedAction {
                     inner: NORMAL_ACTION.into(),
@@ -1135,7 +1228,7 @@ mod tests {
         rotator.priority_actions.insert(
             4,
             PriorityAction {
-                condition: Condition(Box::new(|_, _, _| true)),
+                condition: Condition(Box::new(|_, _, _| ConditionResult::Queue)),
                 condition_kind: None,
                 inner: RotatorAction::Single(PlayerAction::SolveRune),
                 queue_to_front: true,

@@ -16,6 +16,7 @@ use opencv::{
 use platforms::windows::{Handle, KeyInputKind, KeyKind, KeyReceiver, query_capture_handles};
 #[cfg(debug_assertions)]
 use rand::distr::{Alphanumeric, SampleString};
+use strum::IntoEnumIterator;
 use tokio::sync::broadcast;
 
 #[cfg(debug_assertions)]
@@ -130,7 +131,12 @@ impl DefaultRequestHandler<'_> {
                 .as_slice(),
             self.buffs,
             self.config.potion_key.key,
-            self.settings,
+            self.config.familiar_essence_key.key,
+            self.settings.familiars.swappable_familiars,
+            &self.settings.familiars.swappable_rarities,
+            self.settings.familiars.swap_check_millis,
+            self.settings.enable_rune_solving,
+            self.settings.familiars.enable_familiars_swapping,
             reset_on_erda,
         );
     }
@@ -193,7 +199,7 @@ impl RequestHandler for DefaultRequestHandler<'_> {
         self.player.config.jump_key = self.config.jump_key.key.into();
         self.player.config.upjump_key = self.config.up_jump_key.map(|key| key.key.into());
         self.player.config.cash_shop_key = self.config.cash_shop_key.key.into();
-        self.player.config.familiar_key = self.config.familiar_key.key.into();
+        self.player.config.familiar_key = self.config.familiar_menu_key.key.into();
         self.player.config.potion_key = self.config.potion_key.key.into();
         self.player.config.use_potion_below_percent =
             match (self.config.potion_key.enabled, self.config.potion_mode) {
@@ -456,32 +462,63 @@ fn extract_minimap(context: &Context, mat: &impl MatTraitConst) -> Option<(Vec<u
 }
 
 pub fn config_buffs(config: &Configuration) -> Vec<(BuffKind, KeyBinding)> {
-    let mut buffs = Vec::new();
-    if let KeyBindingConfiguration { key, enabled: true } = config.sayram_elixir_key {
-        buffs.push((BuffKind::SayramElixir, key));
-    }
-    if let KeyBindingConfiguration { key, enabled: true } = config.aurelia_elixir_key {
-        buffs.push((BuffKind::AureliaElixir, key));
-    }
-    if let KeyBindingConfiguration { key, enabled: true } = config.exp_x3_key {
-        buffs.push((BuffKind::ExpCouponX3, key));
-    }
-    if let KeyBindingConfiguration { key, enabled: true } = config.bonus_exp_key {
-        buffs.push((BuffKind::BonusExpCoupon, key));
-    }
-    if let KeyBindingConfiguration { key, enabled: true } = config.wealth_acquisition_potion_key {
-        buffs.push((BuffKind::WealthAcquisitionPotion, key));
-    }
-    if let KeyBindingConfiguration { key, enabled: true } = config.exp_accumulation_potion_key {
-        buffs.push((BuffKind::ExpAccumulationPotion, key));
-    }
-    if let KeyBindingConfiguration { key, enabled: true } = config.legion_luck_key {
-        buffs.push((BuffKind::LegionLuck, key));
-    }
-    if let KeyBindingConfiguration { key, enabled: true } = config.legion_wealth_key {
-        buffs.push((BuffKind::LegionWealth, key));
-    }
-    buffs
+    BuffKind::iter()
+        .filter_map(|kind| {
+            let enabled_key = match kind {
+                BuffKind::Rune => None, // Internal buff
+                BuffKind::Familiar => config
+                    .familiar_buff_key
+                    .enabled
+                    .then_some(config.familiar_buff_key.key),
+                BuffKind::SayramElixir => config
+                    .sayram_elixir_key
+                    .enabled
+                    .then_some(config.sayram_elixir_key.key),
+                BuffKind::AureliaElixir => config
+                    .aurelia_elixir_key
+                    .enabled
+                    .then_some(config.aurelia_elixir_key.key),
+                BuffKind::ExpCouponX3 => config.exp_x3_key.enabled.then_some(config.exp_x3_key.key),
+                BuffKind::BonusExpCoupon => config
+                    .bonus_exp_key
+                    .enabled
+                    .then_some(config.bonus_exp_key.key),
+                BuffKind::LegionLuck => config
+                    .legion_luck_key
+                    .enabled
+                    .then_some(config.legion_luck_key.key),
+                BuffKind::LegionWealth => config
+                    .legion_wealth_key
+                    .enabled
+                    .then_some(config.legion_wealth_key.key),
+                BuffKind::WealthAcquisitionPotion => config
+                    .wealth_acquisition_potion_key
+                    .enabled
+                    .then_some(config.wealth_acquisition_potion_key.key),
+                BuffKind::ExpAccumulationPotion => config
+                    .exp_accumulation_potion_key
+                    .enabled
+                    .then_some(config.exp_accumulation_potion_key.key),
+                BuffKind::ExtremeRedPotion => config
+                    .extreme_red_potion_key
+                    .enabled
+                    .then_some(config.extreme_red_potion_key.key),
+                BuffKind::ExtremeBluePotion => config
+                    .extreme_blue_potion_key
+                    .enabled
+                    .then_some(config.extreme_blue_potion_key.key),
+                BuffKind::ExtremeGreenPotion => config
+                    .extreme_green_potion_key
+                    .enabled
+                    .then_some(config.extreme_green_potion_key.key),
+                BuffKind::ExtremeGoldPotion => config
+                    .extreme_gold_potion_key
+                    .enabled
+                    .then_some(config.extreme_gold_potion_key.key),
+            };
+            Some(kind).zip(enabled_key)
+        })
+        .collect()
 }
 
 fn config_actions(config: &Configuration) -> Vec<Action> {

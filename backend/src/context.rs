@@ -108,7 +108,7 @@ impl Context {
             minimap: Minimap::Detecting,
             player: Player::Detecting,
             skills: [Skill::Detecting; SkillKind::COUNT],
-            buffs: [Buff::NoBuff; BuffKind::COUNT],
+            buffs: [Buff::No; BuffKind::COUNT],
             halting: false,
             tick: 0,
         }
@@ -209,7 +209,7 @@ fn update_loop() {
         minimap: Minimap::Detecting,
         player: Player::Idle,
         skills: [Skill::Detecting],
-        buffs: [Buff::NoBuff; BuffKind::COUNT],
+        buffs: [Buff::No; BuffKind::COUNT],
         halting: true,
         tick: 0,
     };

@@ -2,6 +2,8 @@ use std::{
     cell::RefCell,
     mem::{self, size_of},
     sync::LazyLock,
+    thread,
+    time::Duration,
 };
 
 use bit_vec::BitVec;
@@ -17,16 +19,16 @@ use windows::{
         UI::{
             Input::KeyboardAndMouse::{
                 INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBD_EVENT_FLAGS, KEYBDINPUT,
-                KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, MAPVK_VK_TO_VSC_EX, MOUSEEVENTF_ABSOLUTE,
-                MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_WHEEL,
-                MOUSEINPUT, MapVirtualKeyW, SendInput, VIRTUAL_KEY, VK_0, VK_1, VK_2, VK_3, VK_4,
-                VK_5, VK_6, VK_7, VK_8, VK_9, VK_A, VK_B, VK_C, VK_CONTROL, VK_D, VK_DELETE,
-                VK_DOWN, VK_E, VK_END, VK_ESCAPE, VK_F, VK_F1, VK_F2, VK_F3, VK_F4, VK_F5, VK_F6,
-                VK_F7, VK_F8, VK_F9, VK_F10, VK_F11, VK_F12, VK_G, VK_H, VK_HOME, VK_I, VK_INSERT,
-                VK_J, VK_K, VK_L, VK_LEFT, VK_M, VK_MENU, VK_N, VK_NEXT, VK_O, VK_OEM_1, VK_OEM_2,
-                VK_OEM_3, VK_OEM_7, VK_OEM_COMMA, VK_OEM_PERIOD, VK_P, VK_PRIOR, VK_Q, VK_R,
-                VK_RETURN, VK_RIGHT, VK_S, VK_SHIFT, VK_SPACE, VK_T, VK_U, VK_UP, VK_V, VK_W, VK_X,
-                VK_Y, VK_Z,
+                KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, MAPVK_VK_TO_VSC_EX, MOUSE_EVENT_FLAGS,
+                MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE,
+                MOUSEEVENTF_WHEEL, MOUSEINPUT, MapVirtualKeyW, SendInput, VIRTUAL_KEY, VK_0, VK_1,
+                VK_2, VK_3, VK_4, VK_5, VK_6, VK_7, VK_8, VK_9, VK_A, VK_B, VK_C, VK_CONTROL, VK_D,
+                VK_DELETE, VK_DOWN, VK_E, VK_END, VK_ESCAPE, VK_F, VK_F1, VK_F2, VK_F3, VK_F4,
+                VK_F5, VK_F6, VK_F7, VK_F8, VK_F9, VK_F10, VK_F11, VK_F12, VK_G, VK_H, VK_HOME,
+                VK_I, VK_INSERT, VK_J, VK_K, VK_L, VK_LEFT, VK_M, VK_MENU, VK_N, VK_NEXT, VK_O,
+                VK_OEM_1, VK_OEM_2, VK_OEM_3, VK_OEM_7, VK_OEM_COMMA, VK_OEM_PERIOD, VK_P,
+                VK_PRIOR, VK_Q, VK_R, VK_RETURN, VK_RIGHT, VK_S, VK_SHIFT, VK_SPACE, VK_T, VK_U,
+                VK_UP, VK_V, VK_W, VK_X, VK_Y, VK_Z,
             },
             WindowsAndMessaging::{
                 CallNextHookEx, GetForegroundWindow, GetSystemMetrics, GetWindowRect,
@@ -233,6 +235,22 @@ impl Keys {
     }
 
     pub fn send_mouse(&self, x: i32, y: i32, action: MouseAction) -> Result<(), Error> {
+        #[inline]
+        fn mouse_input(dx: i32, dy: i32, flags: MOUSE_EVENT_FLAGS, data: i32) -> [INPUT; 1] {
+            [INPUT {
+                r#type: INPUT_MOUSE,
+                Anonymous: INPUT_0 {
+                    mi: MOUSEINPUT {
+                        dx,
+                        dy,
+                        dwFlags: flags,
+                        mouseData: data as u32,
+                        ..MOUSEINPUT::default()
+                    },
+                },
+            }]
+        }
+
         let mut handle = self.get_handle()?;
         if !is_foreground(handle, self.key_input_kind) {
             return Err(Error::WindowNotFound);
@@ -242,36 +260,20 @@ impl Keys {
         }
 
         let (dx, dy) = client_to_absolute_coordinate_raw(handle, x, y)?;
-        let mut flags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
+        let base_flags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
+
         match action {
-            MouseAction::Move => (),
+            MouseAction::Move => send_input(mouse_input(dx, dy, base_flags, 0)),
             MouseAction::Click => {
-                flags |= MOUSEEVENTF_LEFTDOWN;
-                flags |= MOUSEEVENTF_LEFTUP;
+                send_input(mouse_input(dx, dy, base_flags | MOUSEEVENTF_LEFTDOWN, 0))?;
+                // TODO: Hack or double-click won't work...
+                thread::sleep(Duration::from_millis(80));
+                send_input(mouse_input(dx, dy, base_flags | MOUSEEVENTF_LEFTUP, 0))
             }
             MouseAction::Scroll => {
-                flags |= MOUSEEVENTF_WHEEL;
+                send_input(mouse_input(dx, dy, base_flags | MOUSEEVENTF_WHEEL, -300))
             }
         }
-        let data = if matches!(action, MouseAction::Scroll) {
-            -300
-        } else {
-            0
-        };
-
-        let input = [INPUT {
-            r#type: INPUT_MOUSE,
-            Anonymous: INPUT_0 {
-                mi: MOUSEINPUT {
-                    dx,
-                    dy,
-                    dwFlags: flags,
-                    mouseData: data as u32,
-                    ..MOUSEINPUT::default()
-                },
-            },
-        }];
-        send_input(input)
     }
 
     pub fn send_up(&self, kind: KeyKind) -> Result<(), Error> {
