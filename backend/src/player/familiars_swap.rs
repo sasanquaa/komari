@@ -19,13 +19,15 @@ use crate::{
 /// Number of familiar slots available.
 const FAMILIAR_SLOTS: usize = 3;
 
+const MAX_RETRY: u32 = 4;
+
 /// Internal state machine representing the current stage of familiar swapping.
 #[derive(Debug, Clone, Copy)]
 enum SwappingStage {
     /// Opening the familiar menu.
-    OpenMenu(Timeout),
+    OpenMenu(Timeout, u32),
     /// Clicking on the "Setup" tab in the familiar UI.
-    OpenSetup(Timeout),
+    OpenSetup(Timeout, u32),
     /// Find the familiar slots.
     FindSlots,
     /// Check if slot is free or occupied to release the slot.
@@ -63,8 +65,8 @@ pub struct FamiliarsSwapping {
 impl Display for FamiliarsSwapping {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.stage {
-            SwappingStage::OpenMenu(_) => write!(f, "Opening"),
-            SwappingStage::OpenSetup(_) => write!(f, "Opening Setup"),
+            SwappingStage::OpenMenu(_, _) => write!(f, "Opening"),
+            SwappingStage::OpenSetup(_, _) => write!(f, "Opening Setup"),
             SwappingStage::FindSlots => write!(f, "Find Slots"),
             SwappingStage::FreeSlots(_, _) | SwappingStage::FreeSlot(_, _) => {
                 write!(f, "Freeing Slots")
@@ -84,7 +86,7 @@ impl FamiliarsSwapping {
         swappable_rarities: Array<FamiliarRarity, 2>,
     ) -> Self {
         Self {
-            stage: SwappingStage::OpenMenu(Timeout::default()),
+            stage: SwappingStage::OpenMenu(Timeout::default(), 0),
             slots: Array::new(),
             cards: Array::new(),
             swappable_slots,
@@ -101,13 +103,13 @@ impl FamiliarsSwapping {
     }
 
     #[inline]
-    fn stage_open_menu(self, timeout: Timeout) -> FamiliarsSwapping {
-        self.stage(SwappingStage::OpenMenu(timeout))
+    fn stage_open_menu(self, timeout: Timeout, retry_count: u32) -> FamiliarsSwapping {
+        self.stage(SwappingStage::OpenMenu(timeout, retry_count))
     }
 
     #[inline]
-    fn stage_open_setup(self, timeout: Timeout) -> FamiliarsSwapping {
-        self.stage(SwappingStage::OpenSetup(timeout))
+    fn stage_open_setup(self, timeout: Timeout, retry_count: u32) -> FamiliarsSwapping {
+        self.stage(SwappingStage::OpenSetup(timeout, retry_count))
     }
 
     #[inline]
@@ -154,10 +156,16 @@ pub fn update_familiars_swapping_context(
         swapping.stage(SwappingStage::Completed)
     } else {
         match swapping.stage {
-            SwappingStage::OpenMenu(timeout) => {
-                update_open_menu(context, state.config.familiar_key, swapping, timeout)
+            SwappingStage::OpenMenu(timeout, retry_count) => update_open_menu(
+                context,
+                state.config.familiar_key,
+                swapping,
+                timeout,
+                retry_count,
+            ),
+            SwappingStage::OpenSetup(timeout, retry_count) => {
+                open_setup(context, swapping, timeout, retry_count)
             }
-            SwappingStage::OpenSetup(timeout) => open_setup(context, swapping, timeout),
             SwappingStage::FindSlots => update_find_slots(context, swapping),
             SwappingStage::FreeSlots(index, was_freeing) => {
                 update_free_slots(context, swapping, index, was_freeing)
@@ -169,8 +177,8 @@ pub fn update_familiars_swapping_context(
             SwappingStage::Swapping(timeout, index) => {
                 update_swapping(context, swapping, timeout, index)
             }
-            SwappingStage::Scrolling(timeout, scrollbar, scrolled_count) => {
-                update_scrolling(context, swapping, timeout, scrollbar, scrolled_count)
+            SwappingStage::Scrolling(timeout, scrollbar, retry_count) => {
+                update_scrolling(context, swapping, timeout, scrollbar, retry_count)
             }
             SwappingStage::Saving(timeout) => update_saving(context, swapping, timeout),
             SwappingStage::Completed => unreachable!(),
@@ -186,7 +194,7 @@ pub fn update_familiars_swapping_context(
     on_action(
         state,
         |_| Some((next, matches!(next, Player::Idle))),
-        || next,
+        || Player::Idle, // Force cancel if it is not initiated from an action
     )
 }
 
@@ -195,10 +203,11 @@ fn update_open_menu(
     key: KeyKind,
     swapping: FamiliarsSwapping,
     timeout: Timeout,
+    retry_count: u32,
 ) -> FamiliarsSwapping {
     update_with_timeout(
         timeout,
-        5,
+        10,
         |timeout| {
             let rest = swapping.mouse_rest;
             let _ = context.keys.send_mouse(rest.x, rest.y, MouseAction::Move);
@@ -207,15 +216,17 @@ fn update_open_menu(
                 .detect_familiar_setup_button()
                 .is_ok()
             {
-                swapping.stage_open_setup(Timeout::default())
-            } else {
+                swapping.stage_open_setup(Timeout::default(), 0)
+            } else if retry_count + 1 < MAX_RETRY {
                 // Try open familiar menu until familiar setup button shows up
                 let _ = context.keys.send(key);
-                swapping.stage_open_menu(timeout)
+                swapping.stage_open_menu(timeout, retry_count + 1)
+            } else {
+                swapping.stage(SwappingStage::Completed)
             }
         },
-        || swapping.stage_open_menu(Timeout::default()),
-        |timeout| swapping.stage_open_menu(timeout),
+        || swapping.stage_open_menu(Timeout::default(), retry_count),
+        |timeout| swapping.stage_open_menu(timeout, retry_count),
     )
 }
 
@@ -223,8 +234,9 @@ fn open_setup(
     context: &Context,
     swapping: FamiliarsSwapping,
     timeout: Timeout,
+    retry_count: u32,
 ) -> FamiliarsSwapping {
-    const OPEN_SETUP_TIMEOUT: u32 = 5;
+    const OPEN_SETUP_TIMEOUT: u32 = 10;
 
     update_with_timeout(
         timeout,
@@ -240,7 +252,7 @@ fn open_setup(
                 swapping.mouse_rest = Point::new(bbox.x, bbox.y - 100);
             }
 
-            swapping.stage_open_setup(timeout)
+            swapping.stage_open_setup(timeout, retry_count)
         },
         || {
             if context
@@ -248,7 +260,11 @@ fn open_setup(
                 .detect_familiar_setup_button()
                 .is_ok()
             {
-                swapping.stage_open_setup(Timeout::default())
+                if retry_count + 1 < MAX_RETRY {
+                    swapping.stage_open_setup(Timeout::default(), retry_count + 1)
+                } else {
+                    swapping.stage(SwappingStage::Completed)
+                }
             } else {
                 // This could also indicate familiar menu already closed. If that is the case,
                 // find slots will handle it. And send to mouse rest position for detecting slots.
@@ -257,7 +273,7 @@ fn open_setup(
                 swapping.stage(SwappingStage::FindSlots)
             }
         },
-        |timeout| swapping.stage_open_setup(timeout),
+        |timeout| swapping.stage_open_setup(timeout, retry_count),
     )
 }
 
@@ -277,7 +293,7 @@ fn update_find_slots(context: &Context, mut swapping: FamiliarsSwapping) -> Fami
 
     if swapping.slots.is_empty() {
         // Still empty, bail and retry as this could indicate the menu closed/overlap
-        swapping.stage_open_menu(Timeout::default())
+        swapping.stage_open_menu(Timeout::default(), 0)
     } else {
         swapping.stage_free_slots(FAMILIAR_SLOTS - 1, false)
     }
@@ -320,7 +336,7 @@ fn update_free_slots(
                 // Bail and retry as this could indicate the menu closed/overlap
                 FamiliarsSwapping {
                     slots: Array::new(),
-                    ..swapping.stage_open_menu(Timeout::default())
+                    ..swapping.stage_open_menu(Timeout::default(), 0)
                 }
             } else {
                 swapping.stage_free_slot(Timeout::default(), index)
@@ -510,7 +526,7 @@ fn update_scrolling(
     swapping: FamiliarsSwapping,
     timeout: Timeout,
     scrollbar: Option<Rect>,
-    scrolled_count: u32,
+    retry_count: u32,
 ) -> FamiliarsSwapping {
     /// Timeout for scrolling familiar cards list.
     const SCROLLING_TIMEOUT: u32 = 10;
@@ -520,8 +536,6 @@ fn update_scrolling(
 
     /// Y distance difference indicating the scrollbar has scrolled.
     const SCROLLBAR_SCROLLED_THRESHOLD: i32 = 10;
-
-    const MAX_SCROLL_COUNT: u32 = 5;
 
     update_with_timeout(
         timeout,
@@ -535,7 +549,7 @@ fn update_scrolling(
             let (x, y) = bbox_click_point(scrollbar);
             let _ = context.keys.send_mouse(x, y, MouseAction::Scroll);
 
-            swapping.stage_scrolling(timeout, Some(scrollbar), scrolled_count)
+            swapping.stage_scrolling(timeout, Some(scrollbar), retry_count)
         },
         || {
             if let Ok(bar) = context.detector_unwrap().detect_familiar_scrollbar() {
@@ -544,13 +558,13 @@ fn update_scrolling(
                         cards: Array::new(), // Reset cards array
                         ..swapping.stage(SwappingStage::FindCards)
                     };
-                } else if scrolled_count + 1 < MAX_SCROLL_COUNT {
+                } else if retry_count + 1 < MAX_RETRY {
                     // Try again because scrolling might have failed. This could also indicate
                     // the list is empty.
                     return swapping.stage_scrolling(
                         Timeout::default(),
                         Some(bar),
-                        scrolled_count + 1,
+                        retry_count + 1,
                     );
                 }
             }
@@ -563,7 +577,7 @@ fn update_scrolling(
                 let _ = context.keys.send_mouse(x + 70, y, MouseAction::Move);
             }
 
-            swapping.stage_scrolling(timeout, scrollbar, scrolled_count)
+            swapping.stage_scrolling(timeout, scrollbar, retry_count)
         },
     )
 }
