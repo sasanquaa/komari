@@ -258,6 +258,7 @@ pub struct Configuration {
     pub potion_key: KeyBindingConfiguration,
     pub potion_mode: PotionMode,
     pub health_update_millis: u64,
+    #[serde(default)]
     pub familiar_buff_key: KeyBindingConfiguration,
     pub sayram_elixir_key: KeyBindingConfiguration,
     pub aurelia_elixir_key: KeyBindingConfiguration,

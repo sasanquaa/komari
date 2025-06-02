@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use log::debug;
 use opencv::core::{Point, Rect};
 use platforms::windows::KeyKind;
 
@@ -287,6 +288,7 @@ fn update_find_slots(context: &Context, mut swapping: FamiliarsSwapping) -> Fami
                 swapping.slots.push(pair);
             }
         } else {
+            debug!(target: "player", "familiar slots is not 3, aborting...");
             // Weird spots with false positives
             return swapping.stage_completing(Timeout::default(), false);
         }
