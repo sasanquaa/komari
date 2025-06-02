@@ -131,7 +131,12 @@ impl DefaultRequestHandler<'_> {
                 .as_slice(),
             self.buffs,
             self.config.potion_key.key,
-            self.settings,
+            self.config.familiar_essence_key.key,
+            self.settings.familiars.swappable_familiars,
+            &self.settings.familiars.swappable_rarities,
+            self.settings.familiars.swap_check_millis,
+            self.settings.enable_rune_solving,
+            self.settings.familiars.enable_familiars_swapping,
             reset_on_erda,
         );
     }

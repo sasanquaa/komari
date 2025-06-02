@@ -946,7 +946,7 @@ impl PlayerState {
                 VALIDATE_TIMEOUT,
                 Some,
                 || {
-                    if matches!(context.buffs[BuffKind::Rune], Buff::NoBuff) {
+                    if matches!(context.buffs[BuffKind::Rune], Buff::No) {
                         self.track_rune_fail_count();
                     } else {
                         self.rune_failed_count = 0;

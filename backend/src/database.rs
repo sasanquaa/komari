@@ -260,6 +260,8 @@ pub struct Configuration {
     pub health_update_millis: u64,
     #[serde(default)]
     pub familiar_buff_key: KeyBindingConfiguration,
+    #[serde(default = "familiar_essence_key_default")]
+    pub familiar_essence_key: KeyBindingConfiguration,
     pub sayram_elixir_key: KeyBindingConfiguration,
     pub aurelia_elixir_key: KeyBindingConfiguration,
     pub exp_x3_key: KeyBindingConfiguration,
@@ -285,8 +287,17 @@ pub struct Configuration {
 }
 
 fn jump_key_default() -> KeyBindingConfiguration {
+    // Enabled is not neccessary but for semantic purpose
     KeyBindingConfiguration {
         key: KeyBinding::Space,
+        enabled: true,
+    }
+}
+
+fn familiar_essence_key_default() -> KeyBindingConfiguration {
+    // Enabled is not neccessary but for semantic purpose
+    KeyBindingConfiguration {
+        key: KeyBinding::default(),
         enabled: true,
     }
 }
@@ -309,6 +320,7 @@ impl Default for Configuration {
             potion_mode: PotionMode::EveryMillis(180000),
             health_update_millis: 1000,
             familiar_buff_key: KeyBindingConfiguration::default(),
+            familiar_essence_key: familiar_essence_key_default(),
             sayram_elixir_key: KeyBindingConfiguration::default(),
             aurelia_elixir_key: KeyBindingConfiguration::default(),
             exp_x3_key: KeyBindingConfiguration::default(),

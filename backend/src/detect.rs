@@ -209,6 +209,9 @@ pub trait Detector: 'static + Send + DynClone + Debug {
 
     /// Detects whether the familiar menu is opened.
     fn detect_familiar_menu_opened(&self) -> bool;
+
+    /// Detects whether the familiar essence depleted assuming already buffed.
+    fn detect_familiar_essence_depleted(&self) -> bool;
 }
 
 #[cfg(test)]
@@ -246,6 +249,7 @@ mock! {
         fn detect_familiar_cards(&self) -> Vec<(Rect, FamiliarRank)>;
         fn detect_familiar_scrollbar(&self) -> Result<Rect>;
         fn detect_familiar_menu_opened(&self) -> bool;
+        fn detect_familiar_essence_depleted(&self) -> bool;
     }
 
     impl Debug for Detector {
@@ -418,6 +422,10 @@ impl Detector for CachedDetector {
 
     fn detect_familiar_menu_opened(&self) -> bool {
         detect_familiar_menu_opened(&**self.grayscale)
+    }
+
+    fn detect_familiar_essence_depleted(&self) -> bool {
+        detect_familiar_essence_depleted(&**self.buffs_grayscale)
     }
 }
 
@@ -1806,6 +1814,18 @@ fn detect_familiar_menu_opened(mat: &impl ToInputArray) -> bool {
     });
 
     detect_template(mat, &*TEMPLATE, Point::default(), 0.75).is_ok()
+}
+
+fn detect_familiar_essence_depleted(mat: &impl ToInputArray) -> bool {
+    static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(
+            include_bytes!(env!("FAMILIAR_ESSENCE_DEPLETE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap()
+    });
+
+    detect_template(mat, &*TEMPLATE, Point::default(), 0.8).is_ok()
 }
 
 /// Detects a single match from `template` with the given BGR image `Mat`.
