@@ -13,6 +13,7 @@ use super::{
 use crate::{
     ActionKeyDirection, Class,
     array::Array,
+    bridge::MouseAction,
     buff::{Buff, BuffKind},
     context::Context,
     detect::ArrowsState,
@@ -159,6 +160,8 @@ pub struct PlayerState {
     pub is_dead: bool,
     /// The task for detecting if player is dead.
     is_dead_task: Option<Task<Result<bool>>>,
+    /// The task for detecting the tomb OK button when player is dead.
+    is_dead_button_task: Option<Task<Result<Rect>>>,
     /// Approximates the player direction for using key.
     pub(super) last_known_direction: ActionKeyDirection,
     /// Tracks last destination points for displaying to UI.
@@ -1029,6 +1032,17 @@ impl PlayerState {
             let _ = context
                 .notification
                 .schedule_notification(NotificationKind::PlayerIsDead);
+        }
+        if is_dead {
+            let update =
+                update_detection_task(context, 1000, &mut self.is_dead_button_task, |detector| {
+                    detector.detect_tomb_ok_button()
+                });
+            if let Update::Ok(bbox) = update {
+                let x = bbox.x + bbox.width / 2;
+                let y = bbox.y + bbox.height / 2;
+                let _ = context.keys.send_mouse(x, y, MouseAction::Click);
+            }
         }
         self.is_dead = is_dead;
     }

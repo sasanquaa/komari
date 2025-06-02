@@ -10,6 +10,7 @@ fn main() {
     let esc_ok = dir.join("esc_ok_ideal_ratio.png");
     let esc_cancel = dir.join("esc_ok_ideal_ratio.png");
     let tomb = dir.join("tomb_ideal_ratio.png");
+    let tomb_ok = dir.join("tomb_button_ok_ideal_ratio.png");
     let elite_boss_bar_1 = dir.join("elite_boss_bar_1_ideal_ratio.png");
     let elite_boss_bar_2 = dir.join("elite_boss_bar_2_ideal_ratio.png");
     let player = dir.join("player_ideal_ratio.png");
@@ -92,6 +93,10 @@ fn main() {
         esc_cancel.to_str().unwrap()
     );
     println!("cargo:rustc-env=TOMB_TEMPLATE={}", tomb.to_str().unwrap());
+    println!(
+        "cargo:rustc-env=TOMB_BUTTON_OK_TEMPLATE={}",
+        tomb_ok.to_str().unwrap()
+    );
     println!(
         "cargo:rustc-env=ELITE_BOSS_BAR_1_TEMPLATE={}",
         elite_boss_bar_1.to_str().unwrap()

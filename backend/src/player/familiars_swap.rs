@@ -136,6 +136,10 @@ impl FamiliarsSwapping {
     }
 }
 
+/// Updates [`Player::FamiliarsSwapping`] contextual state.
+///
+/// Note: This state does not use any [`Task`], so all detections are blocking. But this should be
+/// acceptable for this state.
 pub fn update_familiars_swapping_context(
     context: &Context,
     state: &mut PlayerState,
@@ -594,7 +598,7 @@ fn update_saving(
             swapping.stage_saving(timeout)
         },
         || {
-            if let Ok(button) = context.detector_unwrap().detect_ok_button() {
+            if let Ok(button) = context.detector_unwrap().detect_esc_ok_button() {
                 let (x, y) = bbox_click_point(button);
                 let _ = context.keys.send_mouse(x, y, MouseAction::Click);
             }
