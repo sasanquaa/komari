@@ -6,8 +6,7 @@ use anyhow::Result;
 #[cfg(test)]
 use mockall::automock;
 use platforms::windows::{
-    BitBltCapture, Frame, Handle, KeyInputKind, KeyKind, Keys, MouseActionKind, WgcCapture,
-    WindowBoxCapture,
+    self, BitBltCapture, Frame, Handle, KeyInputKind, KeyKind, Keys, WgcCapture, WindowBoxCapture,
 };
 
 use crate::context::MS_PER_TICK_F32;
@@ -49,7 +48,7 @@ enum KeySenderKind {
 
 #[derive(Debug)]
 pub enum MouseAction {
-    MoveOnly,
+    Move,
     Click,
     Scroll,
 }
@@ -254,14 +253,14 @@ impl KeySender for DefaultKeySender {
             KeySenderKind::Rpc(handle, service) => {
                 if let Some(cell) = service {
                     let mut borrow = cell.borrow_mut();
-                    let coordinates = platforms::windows::client_to_monitor_or_frame(
+                    let coordinates = windows::client_to_monitor_or_frame(
                         *handle,
                         x,
                         y,
                         matches!(borrow.mouse_coordinate(), rpc::Coordinate::Screen),
                     )?;
                     let action = match action {
-                        MouseAction::MoveOnly => rpc::MouseAction::Move,
+                        MouseAction::Move => rpc::MouseAction::Move,
                         MouseAction::Click => rpc::MouseAction::Click,
                         MouseAction::Scroll => rpc::MouseAction::ScrollDown,
                     };
@@ -278,9 +277,9 @@ impl KeySender for DefaultKeySender {
             }
             KeySenderKind::Default(keys) => {
                 let action = match action {
-                    MouseAction::MoveOnly => MouseActionKind::MoveOnly,
-                    MouseAction::Click => MouseActionKind::Click,
-                    MouseAction::Scroll => MouseActionKind::Scroll,
+                    MouseAction::Move => windows::MouseAction::Move,
+                    MouseAction::Click => windows::MouseAction::Click,
+                    MouseAction::Scroll => windows::MouseAction::Scroll,
                 };
                 keys.send_mouse(x, y, action)?;
                 Ok(())

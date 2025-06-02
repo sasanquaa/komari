@@ -87,16 +87,23 @@ class KeyInput(KeyInputServicer):
         # These are for cropping the non-game UI portion of the app the game is running in.
         # For Moonlight/Sunshine, you can leave this as-is. This method can be unreliable due
         # this reason. You can also use PowerToys Screen Ruler to measure this non-game UI area.
+
+        # Make sure you turn off 'Enhance pointer precision' in 'Mouse Properties' settings. That
+        # seems to mess with KMBox relative movement. Pointer speed also affects the movement so
+        # you should change it to the default speed (6).
+        screen_width, screen_height = pyautogui.size()
+        position = pyautogui.position()
+
+        # Map coordinates from bot PC to input PC
         crop_left_px = 0  # Change this until it feels correct
         crop_top_px = 30  # Change this until it feels correct
+        scaled_x = int(
+            ((x - crop_left_px) / (width - crop_left_px)) * screen_width)
+        scaled_y = int(
+            ((y - crop_top_px) / (height - crop_top_px)) * screen_height)
 
-        game_width = 1366  # Assuming your game is 1366x768 full screen
-        game_height = 768  # Assuming your game is 1366x768 full screen
-        position = pyautogui.position()
-        dx = int(((x - crop_left_px) / (width - crop_left_px))
-                 * game_width) - position.x
-        dy = int(((y - crop_top_px) / (height - crop_left_px))
-                 * game_height) - position.y
+        dx = scaled_x - position.x
+        dy = scaled_y - position.y
 
         # Common logics, not very human but just an example
         seed_int = int.from_bytes(self.seed[:4], "little", signed=False)
@@ -112,9 +119,10 @@ class KeyInput(KeyInputServicer):
             kmNet.move_auto(dx, dy, ms)
             kmNet.mouse(0, 0, 0, -1)
 
-        # Sleep to ensure mouse stay in-place after movement so the bot detection can work reliably.
+        # Sleep to ensure mouse movement completes since KMBox move_auto doesn't seem to block until
+        # the move is actually complete.
         # If you let the mouse jump instead of sliding like above, sleep is probably not needed.
-        time.sleep(0.1)
+        time.sleep(ms / 1000)
 
         return MouseResponse()
 

@@ -124,8 +124,11 @@ pub trait Detector: 'static + Send + DynClone + Debug {
     /// Detects whether to press ESC for unstucking.
     fn detect_esc_settings(&self) -> bool;
 
-    /// Detects the ok button.
-    fn detect_ok_button(&self) -> Result<Rect>;
+    /// Detects the ESC ok button.
+    fn detect_esc_ok_button(&self) -> Result<Rect>;
+
+    /// Detects the Tomb ok button.
+    fn detect_tomb_ok_button(&self) -> Result<Rect>;
 
     /// Detects whether there is an elite boss bar.
     fn detect_elite_boss_bar(&self) -> bool;
@@ -213,7 +216,8 @@ mock! {
         fn mat(&self) -> &OwnedMat;
         fn detect_mobs(&self, minimap: Rect, bound: Rect, player: Point) -> Result<Vec<Point>>;
         fn detect_esc_settings(&self) -> bool;
-        fn detect_ok_button(&self) -> Result<Rect>;
+        fn detect_esc_ok_button(&self) -> Result<Rect>;
+        fn detect_tomb_ok_button(&self) -> Result<Rect>;
         fn detect_elite_boss_bar(&self) -> bool;
         fn detect_minimap(&self, border_threshold: u8) -> Result<Rect>;
         fn detect_minimap_portals(&self, minimap: Rect) -> Vec<Rect>;
@@ -296,8 +300,12 @@ impl Detector for CachedDetector {
         detect_esc_settings(&**self.grayscale)
     }
 
-    fn detect_ok_button(&self) -> Result<Rect> {
+    fn detect_esc_ok_button(&self) -> Result<Rect> {
         detect_ok_button(&**self.grayscale)
+    }
+
+    fn detect_tomb_ok_button(&self) -> Result<Rect> {
+        detect_tomb_ok_button(&**self.grayscale)
     }
 
     fn detect_elite_boss_bar(&self) -> bool {
@@ -400,7 +408,7 @@ impl Detector for CachedDetector {
     }
 
     fn detect_familiar_scrollbar(&self) -> Result<Rect> {
-        detect_familiar_scrollbar(&to_bgr(&*self.mat))
+        detect_familiar_scrollbar(&to_grayscale(&*self.mat, false))
     }
 }
 
@@ -549,6 +557,18 @@ fn detect_esc_settings(mat: &impl ToInputArray) -> bool {
 
 fn detect_ok_button(mat: &impl ToInputArray) -> Result<Rect> {
     detect_template(mat, &ESC_SETTINGS[5], Point::default(), 0.75)
+}
+
+fn detect_tomb_ok_button(mat: &impl ToInputArray) -> Result<Rect> {
+    static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(
+            include_bytes!(env!("TOMB_BUTTON_OK_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap()
+    });
+
+    detect_template(mat, &*TEMPLATE, Point::default(), 0.75)
 }
 
 fn detect_elite_boss_bar(mat: &impl MatTraitConst) -> bool {
@@ -1749,13 +1769,14 @@ fn detect_familiar_cards<T: MatTraitConst + ToInputArray>(mat: &T) -> Vec<(Rect,
             filtered.push((card, rank));
         }
     }
+    filtered.sort_by_key(|(bbox, _)| (bbox.y, bbox.x));
 
     filtered
 }
 
 fn detect_familiar_scrollbar(mat: &impl ToInputArray) -> Result<Rect> {
     static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
-        imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_SCROLLBAR")), IMREAD_COLOR).unwrap()
+        imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_SCROLLBAR")), IMREAD_GRAYSCALE).unwrap()
     });
 
     detect_template(mat, &*TEMPLATE, Point::default(), 0.6)
