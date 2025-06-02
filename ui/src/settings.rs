@@ -69,7 +69,7 @@ pub fn Settings(
                     value: settings_view().enable_rune_solving,
                 }
                 SettingsCheckbox {
-                    label: "Stop Actions If Fails / Dies / Changes Map",
+                    label: "Stop Actions If Fails / Changes Map",
                     on_input: move |stop_on_fail_or_change_map| {
                         on_settings(SettingsData {
                             stop_on_fail_or_change_map,

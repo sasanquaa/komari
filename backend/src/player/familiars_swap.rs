@@ -196,9 +196,7 @@ fn update_open_menu(
         5,
         |timeout| {
             let rest = swapping.mouse_rest;
-            let _ = context
-                .keys
-                .send_mouse(rest.x, rest.y, MouseAction::MoveOnly);
+            let _ = context.keys.send_mouse(rest.x, rest.y, MouseAction::Move);
             if context
                 .detector_unwrap()
                 .detect_familiar_setup_button()
@@ -250,9 +248,7 @@ fn open_setup(
                 // This could also indicate familiar menu already closed. If that is the case,
                 // find slots will handle it. And send to mouse rest position for detecting slots.
                 let rest = swapping.mouse_rest;
-                let _ = context
-                    .keys
-                    .send_mouse(rest.x, rest.y, MouseAction::MoveOnly);
+                let _ = context.keys.send_mouse(rest.x, rest.y, MouseAction::Move);
                 swapping.stage(SwappingStage::FindSlots)
             }
         },
@@ -292,9 +288,7 @@ fn update_free_slots(
     fn find_cards_or_complete(context: &Context, swapping: FamiliarsSwapping) -> FamiliarsSwapping {
         if swapping.slots.iter().any(|slot| slot.1) {
             let rest = swapping.mouse_rest;
-            let _ = context
-                .keys
-                .send_mouse(rest.x, rest.y, MouseAction::MoveOnly);
+            let _ = context.keys.send_mouse(rest.x, rest.y, MouseAction::Move);
             swapping.stage(SwappingStage::FindCards)
         } else {
             swapping.stage(SwappingStage::Completed)
@@ -348,9 +342,7 @@ fn update_free_slot(
             // On start, move mouse to hover over the familiar slot to check level
             let bbox = swapping.slots[index].0;
             let x = bbox.x + bbox.width / 2;
-            let _ = context
-                .keys
-                .send_mouse(x, bbox.y + 20, MouseAction::MoveOnly);
+            let _ = context.keys.send_mouse(x, bbox.y + 20, MouseAction::Move);
             swapping.stage_free_slot(timeout, index)
         },
         || swapping.stage_free_slots(index, true),
@@ -368,9 +360,7 @@ fn update_free_slot(
                             let _ = context.keys.send_mouse(x, y, MouseAction::Click);
                             let _ = context.keys.send_mouse(x, y, MouseAction::Click);
                             // Move mouse to rest position to check if it has been truely freed
-                            let _ = context
-                                .keys
-                                .send_mouse(x, bbox.y - 20, MouseAction::MoveOnly);
+                            let _ = context.keys.send_mouse(x, bbox.y - 20, MouseAction::Move);
                         }
                         Ok(FamiliarLevel::LevelOther) => {
                             return if index > 0 {
@@ -380,10 +370,7 @@ fn update_free_slot(
                                 // If there is no more slot to check and any of them is free,
                                 // starts finding cards for swapping
                                 let rest = swapping.mouse_rest;
-                                let _ =
-                                    context
-                                        .keys
-                                        .send_mouse(rest.x, rest.y, MouseAction::MoveOnly);
+                                let _ = context.keys.send_mouse(rest.x, rest.y, MouseAction::Move);
                                 swapping.stage(SwappingStage::FindCards)
                             } else {
                                 // All of the slots are occupied and non-level-5
@@ -459,7 +446,7 @@ fn update_swapping(
         SWAPPING_TIMEOUT,
         |timeout| {
             let (x, y) = bbox_click_point(swapping.cards[index]);
-            let _ = context.keys.send_mouse(x, y, MouseAction::MoveOnly);
+            let _ = context.keys.send_mouse(x, y, MouseAction::Move);
             swapping.stage_swapping(timeout, index)
         },
         || {
@@ -481,9 +468,7 @@ fn update_swapping(
             } else {
                 // Try scroll for more cards
                 let rest = swapping.mouse_rest;
-                let _ = context
-                    .keys
-                    .send_mouse(rest.x, rest.y, MouseAction::MoveOnly);
+                let _ = context.keys.send_mouse(rest.x, rest.y, MouseAction::Move);
                 swapping.stage_scrolling(Timeout::default(), None)
             }
         },
@@ -494,9 +479,7 @@ fn update_swapping(
                 match context.detector_unwrap().detect_familiar_hover_level() {
                     Ok(FamiliarLevel::Level5) => {
                         // Move to rest position and wait for timeout
-                        let _ = context
-                            .keys
-                            .send_mouse(rest.x, rest.y, MouseAction::MoveOnly);
+                        let _ = context.keys.send_mouse(rest.x, rest.y, MouseAction::Move);
                     }
                     Ok(FamiliarLevel::LevelOther) => {
                         // Double click to select and then move to rest point
@@ -504,9 +487,7 @@ fn update_swapping(
                         let (x, y) = bbox_click_point(bbox);
                         let _ = context.keys.send_mouse(x, y, MouseAction::Click);
                         let _ = context.keys.send_mouse(x, y, MouseAction::Click);
-                        let _ = context
-                            .keys
-                            .send_mouse(rest.x, rest.y, MouseAction::MoveOnly);
+                        let _ = context.keys.send_mouse(rest.x, rest.y, MouseAction::Move);
                     }
                     // TODO: recoverable?
                     Err(_) => return swapping.stage(SwappingStage::Completed),
@@ -566,7 +547,7 @@ fn update_scrolling(
         |timeout| {
             if timeout.current == SCROLLING_REST_TICK {
                 let (x, y) = bbox_click_point(scrollbar.unwrap());
-                let _ = context.keys.send_mouse(x + 70, y, MouseAction::MoveOnly);
+                let _ = context.keys.send_mouse(x + 70, y, MouseAction::Move);
             }
 
             swapping.stage_scrolling(timeout, scrollbar)

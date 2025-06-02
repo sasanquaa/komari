@@ -1038,10 +1038,16 @@ impl PlayerState {
                 update_detection_task(context, 1000, &mut self.is_dead_button_task, |detector| {
                     detector.detect_tomb_ok_button()
                 });
-            if let Update::Ok(bbox) = update {
-                let x = bbox.x + bbox.width / 2;
-                let y = bbox.y + bbox.height / 2;
-                let _ = context.keys.send_mouse(x, y, MouseAction::Click);
+            match update {
+                Update::Ok(bbox) => {
+                    let x = bbox.x + bbox.width / 2;
+                    let y = bbox.y + bbox.height / 2;
+                    let _ = context.keys.send_mouse(x, y, MouseAction::Click);
+                }
+                Update::Err(_) => {
+                    let _ = context.keys.send_mouse(50, 50, MouseAction::Move);
+                }
+                Update::Pending => (),
             }
         }
         self.is_dead = is_dead;

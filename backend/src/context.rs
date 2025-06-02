@@ -306,7 +306,7 @@ fn update_loop() {
             was_minimap_idle && matches!(handler.context.minimap, Minimap::Detecting);
         let player_died = was_player_alive && handler.player.is_dead;
         if handler.minimap.data().is_some() && !handler.context.halting {
-            if (minimap_changed || player_died) && handler.settings.stop_on_fail_or_change_map {
+            if player_died || (minimap_changed && handler.settings.stop_on_fail_or_change_map) {
                 handler.on_rotate_actions(true);
             }
 

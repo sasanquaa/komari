@@ -136,8 +136,8 @@ pub struct Keys {
 }
 
 #[derive(Debug)]
-pub enum MouseActionKind {
-    MoveOnly,
+pub enum MouseAction {
+    Move,
     Click,
     Scroll,
 }
@@ -232,7 +232,7 @@ impl Keys {
         Ok(())
     }
 
-    pub fn send_mouse(&self, x: i32, y: i32, action: MouseActionKind) -> Result<(), Error> {
+    pub fn send_mouse(&self, x: i32, y: i32, action: MouseAction) -> Result<(), Error> {
         let mut handle = self.get_handle()?;
         if !is_foreground(handle, self.key_input_kind) {
             return Err(Error::WindowNotFound);
@@ -244,16 +244,16 @@ impl Keys {
         let (dx, dy) = client_to_absolute_coordinate_raw(handle, x, y)?;
         let mut flags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
         match action {
-            MouseActionKind::MoveOnly => (),
-            MouseActionKind::Click => {
+            MouseAction::Move => (),
+            MouseAction::Click => {
                 flags |= MOUSEEVENTF_LEFTDOWN;
                 flags |= MOUSEEVENTF_LEFTUP;
             }
-            MouseActionKind::Scroll => {
+            MouseAction::Scroll => {
                 flags |= MOUSEEVENTF_WHEEL;
             }
         }
-        let data = if matches!(action, MouseActionKind::Scroll) {
+        let data = if matches!(action, MouseAction::Scroll) {
             -300
         } else {
             0
