@@ -37,7 +37,7 @@ enum SwappingStage {
     /// Swapping a card into an empty slot.
     Swapping(Timeout, usize),
     /// Scrolling the familiar cards list to find more cards.
-    Scrolling(Timeout, Option<Rect>),
+    Scrolling(Timeout, Option<Rect>, u32),
     /// Saving the familiar setup.
     Saving(Timeout),
     Completed,
@@ -71,7 +71,7 @@ impl Display for FamiliarsSwapping {
             }
             SwappingStage::FindCards => write!(f, "Finding Cards"),
             SwappingStage::Swapping(_, _) => write!(f, "Swapping"),
-            SwappingStage::Scrolling(_, _) => write!(f, "Scrolling"),
+            SwappingStage::Scrolling(_, _, _) => write!(f, "Scrolling"),
             SwappingStage::Saving(_) => write!(f, "Saving"),
             SwappingStage::Completed => write!(f, "Completed"),
         }
@@ -126,8 +126,13 @@ impl FamiliarsSwapping {
     }
 
     #[inline]
-    fn stage_scrolling(self, timeout: Timeout, scrollbar: Option<Rect>) -> FamiliarsSwapping {
-        self.stage(SwappingStage::Scrolling(timeout, scrollbar))
+    fn stage_scrolling(
+        self,
+        timeout: Timeout,
+        scrollbar: Option<Rect>,
+        scrolled_count: u32,
+    ) -> FamiliarsSwapping {
+        self.stage(SwappingStage::Scrolling(timeout, scrollbar, scrolled_count))
     }
 
     #[inline]
@@ -164,8 +169,8 @@ pub fn update_familiars_swapping_context(
             SwappingStage::Swapping(timeout, index) => {
                 update_swapping(context, swapping, timeout, index)
             }
-            SwappingStage::Scrolling(timeout, scrollbar) => {
-                update_scrolling(context, swapping, timeout, scrollbar)
+            SwappingStage::Scrolling(timeout, scrollbar, scrolled_count) => {
+                update_scrolling(context, swapping, timeout, scrollbar, scrolled_count)
             }
             SwappingStage::Saving(timeout) => update_saving(context, swapping, timeout),
             SwappingStage::Completed => unreachable!(),
@@ -411,7 +416,7 @@ fn update_find_cards(context: &Context, mut swapping: FamiliarsSwapping) -> Fami
     if swapping.cards.is_empty() {
         let vec = context.detector_unwrap().detect_familiar_cards();
         if vec.is_empty() {
-            return swapping.stage_scrolling(Timeout::default(), None);
+            return swapping.stage_scrolling(Timeout::default(), None, 0);
         }
         for pair in vec {
             let rarity = match pair.1 {
@@ -426,7 +431,7 @@ fn update_find_cards(context: &Context, mut swapping: FamiliarsSwapping) -> Fami
 
     if swapping.cards.is_empty() {
         // Try scroll
-        swapping.stage_scrolling(Timeout::default(), None)
+        swapping.stage_scrolling(Timeout::default(), None, 0)
     } else {
         swapping.stage_swapping(Timeout::default(), 0)
     }
@@ -469,7 +474,7 @@ fn update_swapping(
                 // Try scroll for more cards
                 let rest = swapping.mouse_rest;
                 let _ = context.keys.send_mouse(rest.x, rest.y, MouseAction::Move);
-                swapping.stage_scrolling(Timeout::default(), None)
+                swapping.stage_scrolling(Timeout::default(), None, 0)
             }
         },
         |timeout| {
@@ -505,6 +510,7 @@ fn update_scrolling(
     swapping: FamiliarsSwapping,
     timeout: Timeout,
     scrollbar: Option<Rect>,
+    scrolled_count: u32,
 ) -> FamiliarsSwapping {
     /// Timeout for scrolling familiar cards list.
     const SCROLLING_TIMEOUT: u32 = 10;
@@ -514,6 +520,8 @@ fn update_scrolling(
 
     /// Y distance difference indicating the scrollbar has scrolled.
     const SCROLLBAR_SCROLLED_THRESHOLD: i32 = 10;
+
+    const MAX_SCROLL_COUNT: u32 = 5;
 
     update_with_timeout(
         timeout,
@@ -527,19 +535,24 @@ fn update_scrolling(
             let (x, y) = bbox_click_point(scrollbar);
             let _ = context.keys.send_mouse(x, y, MouseAction::Scroll);
 
-            swapping.stage_scrolling(timeout, Some(scrollbar))
+            swapping.stage_scrolling(timeout, Some(scrollbar), scrolled_count)
         },
         || {
             if let Ok(bar) = context.detector_unwrap().detect_familiar_scrollbar() {
-                return if (bar.y - scrollbar.unwrap().y).abs() >= SCROLLBAR_SCROLLED_THRESHOLD {
-                    FamiliarsSwapping {
+                if (bar.y - scrollbar.unwrap().y).abs() >= SCROLLBAR_SCROLLED_THRESHOLD {
+                    return FamiliarsSwapping {
                         cards: Array::new(), // Reset cards array
                         ..swapping.stage(SwappingStage::FindCards)
-                    }
-                } else {
-                    // Try again because scrolling might have failed
-                    swapping.stage_scrolling(Timeout::default(), Some(bar))
-                };
+                    };
+                } else if scrolled_count + 1 < MAX_SCROLL_COUNT {
+                    // Try again because scrolling might have failed. This could also indicate
+                    // the list is empty.
+                    return swapping.stage_scrolling(
+                        Timeout::default(),
+                        Some(bar),
+                        scrolled_count + 1,
+                    );
+                }
             }
 
             swapping.stage(SwappingStage::Completed)
@@ -550,7 +563,7 @@ fn update_scrolling(
                 let _ = context.keys.send_mouse(x + 70, y, MouseAction::Move);
             }
 
-            swapping.stage_scrolling(timeout, scrollbar)
+            swapping.stage_scrolling(timeout, scrollbar, scrolled_count)
         },
     )
 }
@@ -812,7 +825,7 @@ mod tests {
         };
 
         let result = update_swapping(&context, swapping, timeout, 0);
-        assert_matches!(result.stage, SwappingStage::Scrolling(_, None));
+        assert_matches!(result.stage, SwappingStage::Scrolling(_, None, 0));
     }
 
     // TODO: more tests

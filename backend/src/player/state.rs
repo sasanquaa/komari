@@ -1022,7 +1022,7 @@ impl PlayerState {
     #[inline]
     fn update_is_dead_state(&mut self, context: &Context) {
         let Update::Ok(is_dead) =
-            update_detection_task(context, 5000, &mut self.is_dead_task, |detector| {
+            update_detection_task(context, 3000, &mut self.is_dead_task, |detector| {
                 Ok(detector.detect_player_is_dead())
             })
         else {
