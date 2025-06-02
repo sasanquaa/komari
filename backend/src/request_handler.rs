@@ -27,7 +27,7 @@ use crate::detect::{ArrowsCalibrating, ArrowsState, CachedDetector, Detector};
 #[cfg(debug_assertions)]
 use crate::mat::OwnedMat;
 use crate::{
-    Action, ActionCondition, ActionKey, Bound, Configuration, GameState, KeyBinding,
+    Action, ActionCondition, ActionKey, Bound, CaptureMode, Configuration, GameState, KeyBinding,
     KeyBindingConfiguration, Minimap as MinimapData, PotionMode, RequestHandler, Settings,
     bridge::{ImageCapture, ImageCaptureKind, KeySenderMethod},
     buff::{BuffKind, BuffState},
@@ -208,33 +208,38 @@ impl RequestHandler for DefaultRequestHandler<'_> {
     }
 
     fn on_update_settings(&mut self, settings: Settings) {
-        let handle_or_default = self.selected_capture_handle.unwrap_or(self.context.handle);
+        let mut handle_or_default = self.selected_capture_handle.unwrap_or(self.context.handle);
 
         if settings.capture_mode != self.settings.capture_mode {
             self.image_capture
                 .set_mode(handle_or_default, settings.capture_mode);
         }
 
-        if settings.input_method != self.settings.input_method {
+        if settings.input_method != self.settings.input_method
+            || settings.input_method_rpc_server_url != self.settings.input_method_rpc_server_url
+        {
             if let ImageCaptureKind::BitBltArea(capture) = self.image_capture.kind() {
-                *self.key_receiver = KeyReceiver::new(capture.handle(), KeyInputKind::Foreground);
-                if matches!(settings.input_method, InputMethod::Default) {
-                    self.context.keys.set_method(KeySenderMethod::Default(
-                        capture.handle(),
-                        KeyInputKind::Foreground,
+                handle_or_default = capture.handle();
+                *self.key_receiver = KeyReceiver::new(handle_or_default, KeyInputKind::Foreground);
+            }
+            match settings.input_method {
+                InputMethod::Default => {
+                    let kind = if matches!(settings.capture_mode, CaptureMode::BitBltArea) {
+                        KeyInputKind::Foreground
+                    } else {
+                        KeyInputKind::Fixed
+                    };
+                    self.context
+                        .keys
+                        .set_method(KeySenderMethod::Default(handle_or_default, kind));
+                }
+                InputMethod::Rpc => {
+                    self.context.keys.set_method(KeySenderMethod::Rpc(
+                        handle_or_default,
+                        settings.input_method_rpc_server_url.clone(),
                     ));
                 }
-            } else if matches!(settings.input_method, InputMethod::Default) {
-                self.context.keys.set_method(KeySenderMethod::Default(
-                    handle_or_default,
-                    KeyInputKind::Fixed,
-                ));
             }
-        }
-        if let InputMethod::Rpc = settings.input_method {
-            self.context.keys.set_method(KeySenderMethod::Rpc(
-                settings.input_method_rpc_server_url.clone(),
-            ));
         }
 
         *self.settings = settings;
@@ -316,6 +321,10 @@ impl RequestHandler for DefaultRequestHandler<'_> {
     }
 
     fn on_select_capture_handle(&mut self, index: Option<usize>) {
+        if matches!(self.settings.capture_mode, CaptureMode::BitBltArea) {
+            return;
+        }
+
         let handle = index
             .and_then(|index| self.capture_handles.get(index))
             .map(|(_, handle)| *handle);
@@ -324,12 +333,20 @@ impl RequestHandler for DefaultRequestHandler<'_> {
         *self.selected_capture_handle = handle;
         self.image_capture
             .set_mode(handle_or_default, self.settings.capture_mode);
-        if !matches!(self.settings.input_method, InputMethod::Rpc) {
-            self.context.keys.set_method(KeySenderMethod::Default(
-                handle_or_default,
-                KeyInputKind::Fixed,
-            ));
-            *self.key_receiver = KeyReceiver::new(handle_or_default, KeyInputKind::Fixed);
+        *self.key_receiver = KeyReceiver::new(handle_or_default, KeyInputKind::Fixed);
+        match self.settings.input_method {
+            InputMethod::Default => {
+                self.context.keys.set_method(KeySenderMethod::Default(
+                    handle_or_default,
+                    KeyInputKind::Fixed,
+                ));
+            }
+            InputMethod::Rpc => {
+                self.context.keys.set_method(KeySenderMethod::Rpc(
+                    handle_or_default,
+                    self.settings.input_method_rpc_server_url.clone(),
+                ));
+            }
         }
     }
 

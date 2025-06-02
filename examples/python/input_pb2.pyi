@@ -77,6 +77,17 @@ class Key(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     Esc: _ClassVar[Key]
     Shift: _ClassVar[Key]
     Alt: _ClassVar[Key]
+
+class MouseAction(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    Move: _ClassVar[MouseAction]
+    Click: _ClassVar[MouseAction]
+    ScrollDown: _ClassVar[MouseAction]
+
+class Coordinate(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    Screen: _ClassVar[Coordinate]
+    Relative: _ClassVar[Coordinate]
 A: Key
 B: Key
 C: Key
@@ -147,6 +158,11 @@ Slash: Key
 Esc: Key
 Shift: Key
 Alt: Key
+Move: MouseAction
+Click: MouseAction
+ScrollDown: MouseAction
+Screen: Coordinate
+Relative: Coordinate
 
 class KeyInitRequest(_message.Message):
     __slots__ = ("seed",)
@@ -155,6 +171,26 @@ class KeyInitRequest(_message.Message):
     def __init__(self, seed: _Optional[bytes] = ...) -> None: ...
 
 class KeyInitResponse(_message.Message):
+    __slots__ = ("mouse_coordinate",)
+    MOUSE_COORDINATE_FIELD_NUMBER: _ClassVar[int]
+    mouse_coordinate: Coordinate
+    def __init__(self, mouse_coordinate: _Optional[_Union[Coordinate, str]] = ...) -> None: ...
+
+class MouseRequest(_message.Message):
+    __slots__ = ("width", "height", "x", "y", "action")
+    WIDTH_FIELD_NUMBER: _ClassVar[int]
+    HEIGHT_FIELD_NUMBER: _ClassVar[int]
+    X_FIELD_NUMBER: _ClassVar[int]
+    Y_FIELD_NUMBER: _ClassVar[int]
+    ACTION_FIELD_NUMBER: _ClassVar[int]
+    width: int
+    height: int
+    x: int
+    y: int
+    action: MouseAction
+    def __init__(self, width: _Optional[int] = ..., height: _Optional[int] = ..., x: _Optional[int] = ..., y: _Optional[int] = ..., action: _Optional[_Union[MouseAction, str]] = ...) -> None: ...
+
+class MouseResponse(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
 

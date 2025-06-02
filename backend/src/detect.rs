@@ -1740,7 +1740,7 @@ fn detect_familiar_cards<T: MatTraitConst + ToInputArray>(mat: &T) -> Vec<(Rect,
         let score_epic = match_template_score(&roi, &*TEMPLATE_EPIC, &*TEMPLATE_MASK);
         // TODO: If matching all rarities, it will probably be easier since just need to
         // pick lowest score
-        if score_rare < 0.14 && score_epic < 0.14 {
+        if score_rare < 0.14 || score_epic < 0.14 {
             let rank = if score_rare < score_epic {
                 FamiliarRank::Rare
             } else {
