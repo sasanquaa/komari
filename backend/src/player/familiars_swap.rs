@@ -513,8 +513,12 @@ fn update_swapping(
                         let _ = context.keys.send_mouse(x, y, MouseAction::Click);
                         let _ = context.keys.send_mouse(rest.x, rest.y, MouseAction::Move);
                     }
-                    // TODO: recoverable?
-                    Err(_) => return swapping.stage_completing(Timeout::default(), false),
+                    Err(_) => {
+                        // Recoverable in an edge case where the mouse overlap with the level
+                        if !context.detector_unwrap().detect_familiar_menu_opened() {
+                            return swapping.stage_completing(Timeout::default(), false);
+                        }
+                    }
                 }
             }
 
