@@ -1030,6 +1030,13 @@ fn detect_player_buff<T: MatTraitConst + ToInputArray>(mat: &T, kind: BuffKind) 
         )
         .unwrap()
     });
+    static LEGION_WEALTH_BUFF_2: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(
+            include_bytes!(env!("LEGION_WEALTH_BUFF_2_TEMPLATE")),
+            IMREAD_COLOR,
+        )
+        .unwrap()
+    });
     static LEGION_LUCK_BUFF: LazyLock<Mat> = LazyLock::new(|| {
         imgcodecs::imdecode(
             include_bytes!(env!("LEGION_LUCK_BUFF_TEMPLATE")),
@@ -1037,9 +1044,9 @@ fn detect_player_buff<T: MatTraitConst + ToInputArray>(mat: &T, kind: BuffKind) 
         )
         .unwrap()
     });
-    static LEGION_WEALTH_LUCK_BUFF_MASK: LazyLock<Mat> = LazyLock::new(|| {
+    static LEGION_LUCK_BUFF_MASK: LazyLock<Mat> = LazyLock::new(|| {
         imgcodecs::imdecode(
-            include_bytes!(env!("LEGION_WEALTH_LUCK_BUFF_MASK_TEMPLATE")),
+            include_bytes!(env!("LEGION_LUCK_BUFF_MASK_TEMPLATE")),
             IMREAD_GRAYSCALE,
         )
         .unwrap()
@@ -1102,15 +1109,13 @@ fn detect_player_buff<T: MatTraitConst + ToInputArray>(mat: &T, kind: BuffKind) 
 
     let threshold = match kind {
         BuffKind::AureliaElixir => 0.8,
-        BuffKind::LegionWealth
-        | BuffKind::WealthAcquisitionPotion
-        | BuffKind::ExpAccumulationPotion => 0.7,
+        BuffKind::LegionWealth | BuffKind::LegionLuck => 0.73,
+        BuffKind::WealthAcquisitionPotion | BuffKind::ExpAccumulationPotion => 0.7,
         BuffKind::Rune
         | BuffKind::Familiar
         | BuffKind::SayramElixir
         | BuffKind::ExpCouponX3
         | BuffKind::BonusExpCoupon
-        | BuffKind::LegionLuck
         | BuffKind::ExtremeRedPotion
         | BuffKind::ExtremeBluePotion
         | BuffKind::ExtremeGreenPotion
@@ -1176,14 +1181,27 @@ fn detect_player_buff<T: MatTraitConst + ToInputArray>(mat: &T, kind: BuffKind) 
                 || match_other.as_ref().copied().unwrap().0 != match_current.0
                 || match_other.unwrap().1 < match_current.1
         }
-        BuffKind::LegionWealth | BuffKind::LegionLuck => detect_template_single(
+        BuffKind::LegionLuck => detect_template_single(
             mat,
             template,
-            &*LEGION_WEALTH_LUCK_BUFF_MASK,
+            &*LEGION_LUCK_BUFF_MASK,
             Point::default(),
             threshold,
         )
         .is_ok(),
+        BuffKind::LegionWealth => {
+            detect_template_single(mat, template, no_array(), Point::default(), threshold)
+                .or_else(|_| {
+                    detect_template_single(
+                        mat,
+                        &*LEGION_WEALTH_BUFF_2,
+                        no_array(),
+                        Point::default(),
+                        threshold,
+                    )
+                })
+                .is_ok()
+        }
         _ => detect_template(mat, template, Point::default(), threshold).is_ok(),
     }
 }
