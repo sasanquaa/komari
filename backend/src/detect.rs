@@ -1037,13 +1037,6 @@ fn detect_player_buff<T: MatTraitConst + ToInputArray>(mat: &T, kind: BuffKind) 
         )
         .unwrap()
     });
-    static LEGION_WEALTH_LUCK_BUFF_MASK: LazyLock<Mat> = LazyLock::new(|| {
-        imgcodecs::imdecode(
-            include_bytes!(env!("LEGION_WEALTH_LUCK_BUFF_MASK_TEMPLATE")),
-            IMREAD_GRAYSCALE,
-        )
-        .unwrap()
-    });
     static WEALTH_EXP_POTION_MASK: LazyLock<Mat> = LazyLock::new(|| {
         let mut mat = imgcodecs::imdecode(
             include_bytes!(env!("WEALTH_EXP_POTION_MASK_TEMPLATE")),
@@ -1102,14 +1095,13 @@ fn detect_player_buff<T: MatTraitConst + ToInputArray>(mat: &T, kind: BuffKind) 
 
     let threshold = match kind {
         BuffKind::AureliaElixir => 0.8,
-        BuffKind::LegionWealth
-        | BuffKind::WealthAcquisitionPotion
-        | BuffKind::ExpAccumulationPotion => 0.7,
+        BuffKind::WealthAcquisitionPotion | BuffKind::ExpAccumulationPotion => 0.7,
         BuffKind::Rune
         | BuffKind::Familiar
         | BuffKind::SayramElixir
         | BuffKind::ExpCouponX3
         | BuffKind::BonusExpCoupon
+        | BuffKind::LegionWealth
         | BuffKind::LegionLuck
         | BuffKind::ExtremeRedPotion
         | BuffKind::ExtremeBluePotion
@@ -1176,14 +1168,16 @@ fn detect_player_buff<T: MatTraitConst + ToInputArray>(mat: &T, kind: BuffKind) 
                 || match_other.as_ref().copied().unwrap().0 != match_current.0
                 || match_other.unwrap().1 < match_current.1
         }
-        BuffKind::LegionWealth | BuffKind::LegionLuck => detect_template_single(
-            mat,
-            template,
-            &*LEGION_WEALTH_LUCK_BUFF_MASK,
-            Point::default(),
-            threshold,
-        )
-        .is_ok(),
+        BuffKind::LegionWealth | BuffKind::LegionLuck => {
+            detect_template_single(mat, template, no_array(), Point::default(), threshold)
+                .inspect(|(_, score)| {
+                    println!("{kind:?} {score}");
+                })
+                .inspect_err(|err| {
+                    println!("{kind:?} error {:?}", err.downcast_ref::<f64>());
+                })
+                .is_ok()
+        }
         _ => detect_template(mat, template, Point::default(), threshold).is_ok(),
     }
 }
