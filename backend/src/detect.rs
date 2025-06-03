@@ -1109,14 +1109,13 @@ fn detect_player_buff<T: MatTraitConst + ToInputArray>(mat: &T, kind: BuffKind) 
 
     let threshold = match kind {
         BuffKind::AureliaElixir => 0.8,
-        BuffKind::LegionWealth => 0.725,
+        BuffKind::LegionWealth | BuffKind::LegionLuck => 0.73,
         BuffKind::WealthAcquisitionPotion | BuffKind::ExpAccumulationPotion => 0.7,
         BuffKind::Rune
         | BuffKind::Familiar
         | BuffKind::SayramElixir
         | BuffKind::ExpCouponX3
         | BuffKind::BonusExpCoupon
-        | BuffKind::LegionLuck
         | BuffKind::ExtremeRedPotion
         | BuffKind::ExtremeBluePotion
         | BuffKind::ExtremeGreenPotion
