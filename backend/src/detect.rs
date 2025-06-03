@@ -1030,10 +1030,24 @@ fn detect_player_buff<T: MatTraitConst + ToInputArray>(mat: &T, kind: BuffKind) 
         )
         .unwrap()
     });
+    static LEGION_WEALTH_BUFF_2: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(
+            include_bytes!(env!("LEGION_WEALTH_BUFF_2_TEMPLATE")),
+            IMREAD_COLOR,
+        )
+        .unwrap()
+    });
     static LEGION_LUCK_BUFF: LazyLock<Mat> = LazyLock::new(|| {
         imgcodecs::imdecode(
             include_bytes!(env!("LEGION_LUCK_BUFF_TEMPLATE")),
             IMREAD_COLOR,
+        )
+        .unwrap()
+    });
+    static LEGION_LUCK_BUFF_MASK: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(
+            include_bytes!(env!("LEGION_LUCK_BUFF_MASK_TEMPLATE")),
+            IMREAD_GRAYSCALE,
         )
         .unwrap()
     });
@@ -1095,13 +1109,13 @@ fn detect_player_buff<T: MatTraitConst + ToInputArray>(mat: &T, kind: BuffKind) 
 
     let threshold = match kind {
         BuffKind::AureliaElixir => 0.8,
+        BuffKind::LegionWealth => 0.725,
         BuffKind::WealthAcquisitionPotion | BuffKind::ExpAccumulationPotion => 0.7,
         BuffKind::Rune
         | BuffKind::Familiar
         | BuffKind::SayramElixir
         | BuffKind::ExpCouponX3
         | BuffKind::BonusExpCoupon
-        | BuffKind::LegionWealth
         | BuffKind::LegionLuck
         | BuffKind::ExtremeRedPotion
         | BuffKind::ExtremeBluePotion
@@ -1168,13 +1182,24 @@ fn detect_player_buff<T: MatTraitConst + ToInputArray>(mat: &T, kind: BuffKind) 
                 || match_other.as_ref().copied().unwrap().0 != match_current.0
                 || match_other.unwrap().1 < match_current.1
         }
-        BuffKind::LegionWealth | BuffKind::LegionLuck => {
+        BuffKind::LegionLuck => detect_template_single(
+            mat,
+            template,
+            &*LEGION_LUCK_BUFF_MASK,
+            Point::default(),
+            threshold,
+        )
+        .is_ok(),
+        BuffKind::LegionWealth => {
             detect_template_single(mat, template, no_array(), Point::default(), threshold)
-                .inspect(|(_, score)| {
-                    println!("{kind:?} {score}");
-                })
-                .inspect_err(|err| {
-                    println!("{kind:?} error {:?}", err.downcast_ref::<f64>());
+                .or_else(|_| {
+                    detect_template_single(
+                        mat,
+                        &*LEGION_WEALTH_BUFF_2,
+                        no_array(),
+                        Point::default(),
+                        threshold,
+                    )
                 })
                 .is_ok()
         }
