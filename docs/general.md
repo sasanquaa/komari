@@ -172,8 +172,9 @@ Added in v0.12:
 - Player double jumps and uses key until hitting the bound edges, then reverses in the other direction
 - Forces the player to always try and stay inside the bound
 - If already inside bound:
-  - Has 10% chance to grapple/up jump if below bound mid `y`
-  - Has 10% chance to fall down if above bound mid `y`
+  - Has a chance to grapple/up jump if below bound mid `y`
+  - Has a chance to fall down if above bound mid `y`
+  - Within the distance of `9` from the bound mid `y`, randomization (grapple/up jump/fall down) will not happen
 - Simpler than `AutoMobbing`, can achieve higher mob count and useful for class that mostly just double jumps and spams attack (e.g. Night Walker)
 
 #### Platforms Pathing
