@@ -11,6 +11,7 @@
   - [Ping Pong](#ping-pong)
   - [Platforms Pathing](#platforms-pathing)
   - [Capture Modes](#capture-modes)
+  - [Familiars Swapping](#familiars-swapping)
 - [Video guides](#video-guides)
 - [Showcase](#showcase)
   - [Rotation](#rotation)
@@ -171,8 +172,9 @@ Added in v0.12:
 - Player double jumps and uses key until hitting the bound edges, then reverses in the other direction
 - Forces the player to always try and stay inside the bound
 - If already inside bound:
-  - Has 10% chance to grapple/up jump if below bound mid `y`
-  - Has 10% chance to fall down if above bound mid `y`
+  - Has a chance to grapple/up jump if below bound mid `y`
+  - Has a chance to fall down if above bound mid `y`
+  - Within the distance of `9` from the bound mid `y`, randomization (grapple/up jump/fall down) will not happen
 - Simpler than `AutoMobbing`, can achieve higher mob count and useful for class that mostly just double jumps and spams attack (e.g. Night Walker)
 
 #### Platforms Pathing
@@ -201,6 +203,23 @@ There are three capture modes, the first two are similar to what you see in OBS:
     - For example, if you have Notepad on top of the game and focused, it will send input to the Notepad instead of the game
 
 You can also directly select which window to capture via `Capture Handle`.
+
+#### Familiars Swapping
+(From v0.13)
+Familiars swapping in the `Familiars` tab is a feature to help periodically checking currently equipped familiar levels and swapping them out with new familiars if the any of the equipped ones level is maxed:
+- `Swap Check Every Milliseconds`: Check for swapping every `X` milliseconds
+- `Swappable Slots`:
+  - `All`: All slots can be swapped
+  - `Last`: Only last slot can be swapped
+  - `SecondAndLast`: Only second and last slots can be swapped
+- `Allow Swapping Rare Familiar`: Familiar with rare rarity will be included when swapping
+- `Allow Swapping Epic Familiar`: Familiar with epic rarity will be included when swapping
+
+Familiars swapping supports scrolling the familiar cards list to find more selectable cards. But for best experience, the cards list should contain selectable cards immediately without scrolling.
+
+After swapping, it will save the setup and cause the familiar buff to turn off. Therefore, the familiar buff in the `Buffs` tab should also be turned on.
+
+**This feature currently assumes all familiar slots have already been expanded.**
 
 ## Video guides
 1. [Basic operations](https://youtu.be/8X2CKS7bnHY?si=3yPmVPaMsFEyDD8c)

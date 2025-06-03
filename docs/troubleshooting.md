@@ -3,7 +3,7 @@
 - [Default Ratio game resolution](#default-ratio-game-resolution)
 - [Preventing double jump(s)](#preventing-double-jumps)
 - [Mage up jump](#mage-up-jump)
-- [Installation](#installation)
+- [Missing installation](#missing-installation)
 - [Unstucking state](#unstucking-state)
 
 ## Wrong map detection
