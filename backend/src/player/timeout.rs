@@ -6,15 +6,15 @@ use crate::player::Player;
 /// The axis to which the change in position should be detected.
 #[derive(Clone, Copy)]
 pub enum ChangeAxis {
-    /// Detects a change in x direction
+    /// Detects a change in x direction.
     Horizontal,
-    /// Detects a change in y direction
+    /// Detects a change in y direction.
     Vertical,
-    /// Detects a change in both directions
+    /// Detects a change in both directions.
     Both,
 }
 
-/// A struct that stores the current tick before timing out
+/// A struct that stores the current tick before timing out.
 ///
 /// Most contextual states can be timed out as there is no guaranteed
 /// an action will be performed or a state can be transitioned. So timeout is used to retry
@@ -29,9 +29,9 @@ pub struct Timeout {
     /// The total number of passed ticks.
     ///
     /// Useful when [`Self::current`] can be reset. And currently only used for delaying
-    /// up-jumping and stopping down key early in falling
+    /// up-jumping and stopping down key early in falling.
     pub total: u32,
-    /// Inidcates whether the timeout has started
+    /// Inidcates whether the timeout has started.
     pub started: bool,
 }
 
