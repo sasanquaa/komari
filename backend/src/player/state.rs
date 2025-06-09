@@ -256,6 +256,11 @@ impl PlayerState {
         };
     }
 
+    #[cfg(test)]
+    pub fn normal_action(&self) -> Option<PlayerAction> {
+        self.normal_action
+    }
+
     /// The normal action name for displaying to UI.
     #[inline]
     pub fn normal_action_name(&self) -> Option<String> {
