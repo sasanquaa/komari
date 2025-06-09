@@ -76,7 +76,7 @@ impl Rng {
         min_ms: f32,
         max_ms: f32,
     ) -> (f32, u32) {
-        debug_assert!(std_ms > 0.0 && tick_ms > 0.0);
+        debug_assert!(std_ms >= 0.0 && tick_ms > 0.0);
 
         let mut rng = self.inner.borrow_mut();
         let normal = Normal::new(mean_ms, std_ms).unwrap();

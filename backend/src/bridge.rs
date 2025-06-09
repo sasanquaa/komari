@@ -83,6 +83,7 @@ pub struct DefaultKeySender {
     delay_map: RefCell<HashMap<KeyKind, u32>>,
 }
 
+#[derive(Debug)]
 enum InputDelay {
     Untracked,
     Tracked,
@@ -185,7 +186,7 @@ impl DefaultKeySender {
         }
     }
 
-    /// Updates the input delay (key up timing) for held down keys.
+    /// Updates the input delay (key up timing) for held down keys and delay std/mean pair.
     #[inline]
     pub fn update_input_delay(&mut self, game_tick: u64) {
         const UPDATE_MEAN_STD_PAIR_INTERVAL: u64 = 200;
@@ -363,5 +364,74 @@ fn to_image_capture_kind_from(handle: Handle, mode: CaptureMode) -> ImageCapture
             ImageCaptureKind::Wgc(WgcCapture::new(handle, MS_PER_TICK).ok())
         }
         CaptureMode::BitBltArea => ImageCaptureKind::BitBltArea(WindowBoxCapture::default()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::assert_matches::assert_matches;
+
+    use super::*;
+
+    const SEED: [u8; 32] = [
+        64, 241, 206, 219, 49, 21, 218, 145, 254, 152, 68, 176, 242, 238, 152, 14, 176, 241, 153,
+        64, 44, 192, 172, 191, 191, 157, 107, 206, 193, 55, 115, 68,
+    ];
+
+    fn test_key_sender() -> DefaultKeySender {
+        let seeds = Seeds {
+            id: None,
+            seed: SEED,
+        };
+        DefaultKeySender::new(
+            KeySenderMethod::Default(Handle::new("Handle"), KeyInputKind::Fixed),
+            seeds,
+        )
+    }
+
+    #[test]
+    fn track_input_delay_tracked() {
+        let sender = test_key_sender();
+
+        // Force rng to generate delay > 0
+        let result = sender.track_input_delay(KeyKind::Ctrl);
+        assert_matches!(result, InputDelay::Tracked);
+        assert!(sender.has_input_delay(KeyKind::Ctrl));
+    }
+
+    #[test]
+    fn track_input_delay_already_tracked() {
+        let sender = test_key_sender();
+        sender.delay_map.borrow_mut().insert(KeyKind::Ctrl, 3);
+
+        let result = sender.track_input_delay(KeyKind::Ctrl);
+        assert_matches!(result, InputDelay::AlreadyTracked);
+    }
+
+    #[test]
+    fn update_input_delay_decrement_and_release_key() {
+        let mut sender = test_key_sender();
+        let count = 50;
+        sender.delay_map.borrow_mut().insert(KeyKind::Ctrl, count);
+
+        for _ in 0..count {
+            sender.update_input_delay(0);
+        }
+        // After `count` updates, key should be released and removed
+        assert!(!sender.has_input_delay(KeyKind::Ctrl));
+    }
+
+    #[test]
+    fn update_input_delay_refresh_mean_std_pair_every_interval() {
+        let mut sender = test_key_sender();
+        let original_pair = sender.delay_mean_std_pair;
+
+        // Simulate tick before the interval: should NOT update
+        sender.update_input_delay(199);
+        assert_eq!(sender.delay_mean_std_pair, original_pair);
+
+        // Simulate tick AT the interval: should update
+        sender.update_input_delay(200);
+        assert_ne!(sender.delay_mean_std_pair, original_pair);
     }
 }
