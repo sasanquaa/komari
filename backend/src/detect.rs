@@ -309,7 +309,7 @@ impl Detector for CachedDetector {
     }
 
     fn detect_esc_ok_button(&self) -> Result<Rect> {
-        detect_ok_button(&**self.grayscale)
+        detect_esc_ok_button(&**self.grayscale)
     }
 
     fn detect_tomb_ok_button(&self) -> Result<Rect> {
@@ -535,7 +535,7 @@ fn detect_mobs(
 }
 
 /// TODO: Support default ratio
-static ESC_SETTINGS: LazyLock<[Mat; 7]> = LazyLock::new(|| {
+static ESC_SETTINGS: LazyLock<[Mat; 9]> = LazyLock::new(|| {
     [
         imgcodecs::imdecode(
             include_bytes!(env!("ESC_SETTING_TEMPLATE")),
@@ -560,6 +560,12 @@ static ESC_SETTINGS: LazyLock<[Mat; 7]> = LazyLock::new(|| {
             IMREAD_GRAYSCALE,
         )
         .unwrap(),
+        imgcodecs::imdecode(
+            include_bytes!(env!("ESC_END_CHAT_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap(),
+        imgcodecs::imdecode(include_bytes!(env!("ESC_NEXT_TEMPLATE")), IMREAD_GRAYSCALE).unwrap(),
     ]
 });
 
@@ -572,7 +578,7 @@ fn detect_esc_settings(mat: &impl ToInputArray) -> bool {
     false
 }
 
-fn detect_ok_button(mat: &impl ToInputArray) -> Result<Rect> {
+fn detect_esc_ok_button(mat: &impl ToInputArray) -> Result<Rect> {
     detect_template(mat, &ESC_SETTINGS[5], Point::default(), 0.75)
 }
 
