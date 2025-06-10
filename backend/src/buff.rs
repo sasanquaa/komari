@@ -13,20 +13,21 @@ use crate::{
     task::{Task, Update, update_detection_task},
 };
 
-const BUFF_FAIL_MAX_COUNT: u32 = 5;
+const BUFF_FAIL_MAX_COUNT: u32 = 3;
 
+/// Stores persistent state of a buff.
 #[derive(Debug)]
 pub struct BuffState {
-    /// The kind of buff
+    /// The kind of buff.
     kind: BuffKind,
-    /// Task for detecting buff
+    /// Task for detecting if the coresponding buff exists.
     task: Option<Task<Result<bool>>>,
-    /// The count [`Buff::HasBuff`] has failed to detect
+    /// The number of time [`Buff::Volatile`] has failed to detect if the buff exists.
     fail_count: u32,
-    /// The maximum number of time [`Buff::HasBuff`] can fail before transitioning
-    /// to [`Buff:NoBuff`]
+    /// The maximum number of time [`Buff::Volatile`] can fail before transitioning
+    /// to [`Buff:No`].
     max_fail_count: u32,
-    /// Whether a buff is enabled
+    /// Whether a buff is enabled.
     enabled: bool,
 }
 
@@ -56,7 +57,7 @@ impl BuffState {
         }
     }
 
-    /// Update the enabled state of buff to only detect if enabled
+    /// Updates the enabled states of each buff to only detect if enabled.
     pub fn update_enabled_state(&mut self, config: &Configuration, settings: &Settings) {
         self.enabled = match self.kind {
             BuffKind::Rune => settings.enable_rune_solving,
@@ -81,10 +82,14 @@ impl BuffState {
     }
 }
 
+/// Buff contextual state.
 #[derive(Clone, Copy, Debug)]
 pub enum Buff {
+    /// Player does not have this [`BuffKind`].
     No,
+    /// Player has this [`BuffKind`].
     Yes,
+    /// Player did have this [`BuffKind`] but currently unsure.
     Volatile,
 }
 
@@ -92,8 +97,8 @@ pub enum Buff {
 #[cfg_attr(test, derive(PartialEq))]
 #[repr(usize)]
 pub enum BuffKind {
-    /// NOTE: Upon failing to solving rune, there is a cooldown
-    /// that looks exactly like the normal rune buff
+    // NOTE: Upon failing to solving rune, there is a cooldown
+    // that looks exactly like the normal rune buff.
     Rune,
     Familiar,
     SayramElixir,

@@ -174,9 +174,9 @@ pub fn update_up_jumping_context(
                         with: ActionKeyWith::Stationary | ActionKeyWith::DoubleJump,
                         ..
                     })
-                    | PlayerAction::FamiliarsSwapping(_)
                     | PlayerAction::Move(_)
                     | PlayerAction::SolveRune => None,
+                    PlayerAction::Panic(_) | PlayerAction::FamiliarsSwapping(_) => unreachable!(),
                 },
                 || Player::UpJumping(moving),
             )

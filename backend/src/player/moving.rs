@@ -412,7 +412,7 @@ fn on_player_action(
         )),
         PlayerAction::SolveRune => Some((Player::SolvingRune(SolvingRune::default()), false)),
         PlayerAction::PingPong(_) => Some((Player::Idle, true)),
-        PlayerAction::FamiliarsSwapping(_) => unreachable!(),
+        PlayerAction::Panic(_) | PlayerAction::FamiliarsSwapping(_) => unreachable!(),
     }
 }
 

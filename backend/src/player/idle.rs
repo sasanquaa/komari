@@ -166,6 +166,7 @@ fn on_player_action(
             )),
             false,
         )),
+        PlayerAction::Panic(panic) => todo!(),
     }
 }
 

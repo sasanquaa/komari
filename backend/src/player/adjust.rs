@@ -176,9 +176,10 @@ fn on_player_action(
             with: ActionKeyWith::Stationary,
             ..
         })
-        | PlayerAction::PingPong(_)
         | PlayerAction::SolveRune
-        | PlayerAction::FamiliarsSwapping(_)
         | PlayerAction::Move(_) => None,
+        PlayerAction::PingPong(_) | PlayerAction::Panic(_) | PlayerAction::FamiliarsSwapping(_) => {
+            unreachable!()
+        }
     }
 }

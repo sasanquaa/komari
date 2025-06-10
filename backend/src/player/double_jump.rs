@@ -36,7 +36,7 @@ const USE_KEY_Y_THRESHOLD: i32 = 10;
 /// Maximum number of ticks before timing out.
 ///
 /// Note: Even in auto mob, also use the non-auto mob threshold.
-const TIMEOUT: u32 = MOVE_TIMEOUT * 2;
+const TIMEOUT: u32 = MOVE_TIMEOUT;
 
 /// Number of ticks to wait after a double jump.
 ///
@@ -226,8 +226,10 @@ pub fn update_double_jumping_context(
                     {
                         debug!(target: "player", "performs grappling on double jump");
                         Player::Grappling(moving.completed(false).timeout(Timeout::default()))
-                    } else if moving.completed && moving.timeout.current >= MOVE_TIMEOUT {
-                        Player::Moving(moving.dest, moving.exact, moving.intermediates)
+                    } else if moving.completed {
+                        Player::DoubleJumping(
+                            double_jumping.moving(moving.timeout_current(TIMEOUT)),
+                        )
                     } else {
                         Player::DoubleJumping(double_jumping.moving(moving))
                     }
@@ -299,9 +301,9 @@ fn on_player_action(
             with: ActionKeyWith::Stationary,
             ..
         })
-        | PlayerAction::FamiliarsSwapping(_)
         | PlayerAction::SolveRune
         | PlayerAction::Move { .. } => None,
+        PlayerAction::Panic(_) | PlayerAction::FamiliarsSwapping(_) => unreachable!(),
     }
 }
 

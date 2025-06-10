@@ -717,6 +717,7 @@ impl PlayerState {
             | PlayerAction::PingPong(_)
             | PlayerAction::Key(_)
             | PlayerAction::Move(_)
+            | PlayerAction::Panic(_)
             | PlayerAction::SolveRune => {
                 unreachable!()
             }

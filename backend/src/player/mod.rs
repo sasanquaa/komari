@@ -9,6 +9,7 @@ use idle::update_idle_context;
 use jump::update_jumping_context;
 use moving::{MOVE_TIMEOUT, Moving, MovingIntermediates, update_moving_context};
 use opencv::core::Point;
+use panic::Panicking;
 use platforms::windows::KeyKind;
 use solve_rune::{SolvingRune, update_solving_rune_context};
 use stall::update_stalling_context;
@@ -35,6 +36,7 @@ mod grapple;
 mod idle;
 mod jump;
 mod moving;
+mod panic;
 mod solve_rune;
 mod stall;
 mod state;
@@ -50,44 +52,46 @@ pub use {
     grapple::GRAPPLING_MAX_THRESHOLD, grapple::GRAPPLING_THRESHOLD, state::PlayerState,
 };
 
-/// Minimum y distance from the destination required to perform a jump
+/// Minimum y distance from the destination required to perform a jump.
 pub const JUMP_THRESHOLD: i32 = 7;
 
-/// The player contextual states
+/// The player contextual states.
 #[derive(Clone, Copy, Debug, Display)]
 #[allow(clippy::large_enum_variant)] // There is only ever a single instance of Player
 pub enum Player {
-    /// Detects player on the minimap
+    /// Detects player on the minimap.
     Detecting,
-    /// Does nothing state
+    /// Does nothing state.
     ///
-    /// Acts as entry to other state when there is a [`PlayerAction`]
+    /// Acts as entry to other state when there is a [`PlayerAction`].
     Idle,
+    /// Uses key.
     UseKey(UseKey),
-    /// Movement-related coordinator state
+    /// Movement-related coordinator state.
     Moving(Point, bool, Option<MovingIntermediates>),
-    /// Performs walk or small adjustment x-wise action
+    /// Performs walk or small adjustment x-wise action.
     Adjusting(Moving),
-    /// Performs double jump action
+    /// Performs double jump action.
     DoubleJumping(DoubleJumping),
-    /// Performs a grappling action
+    /// Performs a grappling action.
     Grappling(Moving),
-    /// Performs a normal jump
+    /// Performs a normal jump.
     Jumping(Moving),
-    /// Performs an up jump action
+    /// Performs an up jump action.
     UpJumping(Moving),
-    /// Performs a falling action
+    /// Performs a falling action.
     Falling(Moving, Point, bool),
-    /// Unstucks when inside non-detecting position or because of [`PlayerState::unstuck_counter`]
+    /// Unstucks when inside non-detecting position or because of [`PlayerState::unstuck_counter`].
     Unstucking(Timeout, Option<bool>, bool),
-    /// Stalls for time and return to [`Player::Idle`] or [`PlayerState::stalling_timeout_state`]
+    /// Stalls for time and return to [`Player::Idle`] or [`PlayerState::stalling_timeout_state`].
     Stalling(Timeout, u32),
-    /// Tries to solve a rune
+    /// Tries to solve a rune.
     SolvingRune(SolvingRune),
-    /// Enters the cash shop then exit after 10 seconds
+    /// Enters the cash shop then exit after 10 seconds.
     CashShopThenExit(Timeout, CashShop),
     #[strum(to_string = "FamiliarsSwapping({0})")]
     FamiliarsSwapping(FamiliarsSwapping),
+    Panicking(Panicking),
 }
 
 impl Player {
@@ -112,6 +116,7 @@ impl Player {
             | Player::DoubleJumping(DoubleJumping { forced: true, .. })
             | Player::UseKey(_)
             | Player::FamiliarsSwapping(_)
+            | Player::Panicking(_)
             | Player::Stalling(_, _) => false,
         }
     }
@@ -234,6 +239,7 @@ fn update_non_positional_context(
         | Player::Grappling(_)
         | Player::Jumping(_)
         | Player::UpJumping(_)
+        | Player::Panicking(_)
         | Player::Falling(_, _, _) => None,
     }
 }
@@ -266,6 +272,7 @@ fn update_positional_context(
         | Player::Stalling(_, _)
         | Player::SolvingRune(_)
         | Player::FamiliarsSwapping(_)
+        | Player::Panicking(_)
         | Player::CashShopThenExit(_, _) => unreachable!(),
     }
 }

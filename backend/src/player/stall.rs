@@ -41,11 +41,12 @@ pub fn update_stalling_context(
                 }
                 Some((next, is_terminal))
             }
-            PlayerAction::PingPong(_)
-            | PlayerAction::Key(_)
-            | PlayerAction::Move(_)
-            | PlayerAction::FamiliarsSwapping(_)
-            | PlayerAction::SolveRune => Some((next, matches!(next, Player::Idle))),
+            PlayerAction::PingPong(_) | PlayerAction::Key(_) | PlayerAction::Move(_) => {
+                Some((next, matches!(next, Player::Idle)))
+            }
+            PlayerAction::SolveRune
+            | PlayerAction::Panic(_)
+            | PlayerAction::FamiliarsSwapping(_) => unreachable!(),
         },
         || next,
     )
