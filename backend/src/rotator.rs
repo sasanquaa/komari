@@ -20,8 +20,9 @@ use crate::{
     database::{Action, ActionCondition, ActionKey, ActionMove, PingPong},
     minimap::Minimap,
     player::{
-        GRAPPLING_THRESHOLD, PingPongDirection, Player, PlayerAction, PlayerActionAutoMob,
-        PlayerActionFamiliarsSwapping, PlayerActionKey, PlayerActionPingPong, PlayerState,
+        GRAPPLING_THRESHOLD, PanicTo, PingPongDirection, Player, PlayerAction, PlayerActionAutoMob,
+        PlayerActionFamiliarsSwapping, PlayerActionKey, PlayerActionPanic, PlayerActionPingPong,
+        PlayerState,
     },
     skill::{Skill, SkillKind},
     task::{Task, Update, update_detection_task},
@@ -239,6 +240,10 @@ impl Rotator {
                 ),
             );
         }
+        self.priority_actions.insert(
+            self.id_counter.fetch_add(1, Ordering::Relaxed),
+            panic_priority_action(),
+        );
         for (i, key) in buffs.iter().copied() {
             self.priority_actions.insert(
                 self.id_counter.fetch_add(1, Ordering::Relaxed),
@@ -919,6 +924,37 @@ fn buff_priority_action(buff: BuffKind, key: KeyBinding) -> PriorityAction {
             wait_before_use_ticks_random_range: 0,
             wait_after_use_ticks: 10,
             wait_after_use_ticks_random_range: 0,
+        })),
+        queue_to_front: true,
+        ignoring: false,
+        last_queued_time: None,
+    }
+}
+
+#[inline]
+fn panic_priority_action() -> PriorityAction {
+    PriorityAction {
+        condition: Condition(Box::new(|context, _, last_queued_time| {
+            if context.halting {
+                return ConditionResult::Ignore;
+            }
+            match context.minimap {
+                Minimap::Detecting => ConditionResult::Skip,
+                Minimap::Idle(idle) => {
+                    if !idle.has_any_other_player() || last_queued_time.is_none() {
+                        return ConditionResult::Ignore;
+                    }
+                    if at_least_millis_passed_since(last_queued_time, 15000) {
+                        ConditionResult::Queue
+                    } else {
+                        ConditionResult::Skip
+                    }
+                }
+            }
+        })),
+        condition_kind: None,
+        inner: RotatorAction::Single(PlayerAction::Panic(PlayerActionPanic {
+            to: PanicTo::Channel,
         })),
         queue_to_front: true,
         ignoring: false,

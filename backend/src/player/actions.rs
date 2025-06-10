@@ -166,7 +166,7 @@ pub enum PlayerAction {
     Key(PlayerActionKey),
     /// Fixed move action provided by the user.
     Move(PlayerActionMove),
-    /// Solveing rune action.
+    /// Solve rune action.
     SolveRune,
     /// Auto-mobbing action.
     #[strum(to_string = "AutoMob({0})")]

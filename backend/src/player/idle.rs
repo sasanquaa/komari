@@ -8,6 +8,7 @@ use super::{
     double_jump::DoubleJumping,
     familiars_swap::FamiliarsSwapping,
     moving::{Moving, find_intermediate_points},
+    panic::Panicking,
     use_key::UseKey,
 };
 use crate::{
@@ -166,7 +167,7 @@ fn on_player_action(
             )),
             false,
         )),
-        PlayerAction::Panic(panic) => todo!(),
+        PlayerAction::Panic(panic) => Some((Player::Panicking(Panicking::new(panic.to)), false)),
     }
 }
 
