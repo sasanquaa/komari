@@ -7,11 +7,12 @@
   - [Condition](#condition)
   - [Linked Key & Linked Action](#linked-key--linked-action)
   - [Rotation Modes](#rotation-modes)
-  - [Auto-mobbing](#auto-mobbing)
-  - [Ping Pong](#ping-pong)
+    - [Auto-mobbing](#auto-mobbing)
+    - [Ping Pong](#ping-pong)
   - [Platforms Pathing](#platforms-pathing)
   - [Capture Modes](#capture-modes)
   - [Familiars Swapping](#familiars-swapping)
+  - [Panic Mode](#panic-mode)
 - [Video guides](#video-guides)
 - [Showcase](#showcase)
   - [Rotation](#rotation)
@@ -154,7 +155,7 @@ For other conditions actions:
 - `EveryMillis` actions run out of order
 - `ErdaShowerOffCooldown` actions run in the order added same as `StartToEnd`
 
-#### Auto-mobbing
+##### Auto-mobbing
 Auto-mobbing is feature to hit random mobs detected on screen. It can be enabled by changing `Rotation Mode` to `AutoMobbing`. When `AutoMobbing` is used:
 - Setting the bounds to inside the minimap is required so that the bot will not wrongly detect out of bounds mobs
 - The bounds should be the rectangle where you can move around (two edges of the map)
@@ -166,7 +167,7 @@ Auto-mobbing is feature to hit random mobs detected on screen. It can be enabled
 
 ![Auto Mobbing](https://github.com/sasanquaa/komari/blob/master/.github/images/automobbing.png?raw=true)
 
-#### Ping Pong
+##### Ping Pong
 Added in v0.12:
 - All added `Any` condition actions are ignored but still possible to use other conditions similar to `AutoMobbing`
 - Player double jumps and uses key until hitting the bound edges, then reverses in the other direction
@@ -219,7 +220,17 @@ Familiars swapping supports scrolling the familiar cards list to find more selec
 
 After swapping, it will save the setup and cause the familiar buff to turn off. Therefore, the familiar buff in the `Buffs` tab should also be turned on.
 
-**This feature currently assumes all familiar slots have already been expanded.**
+**This feature currently assumes all familiar slots have already been expanded. Also make sure your key binding to open the familiar menu is set when using this feature.**
+
+#### Panic Mode
+(From v0.14)
+Panic mode can be enabled in `Settings` tab and:
+- If another player (friend, guild, stranger) appears in the same map for 15 seconds, it will enter `Panicking` state
+- Has two modes:
+    - `CycleChannel`: Cycles through channels until a map without another player is found
+    - `GoingToTown`: Uses Maple Guide to go to town
+
+The behavior of `GoingToTown` should be used with `Stop Actions If Fails / Changes Map` enabled or the bot will continue running. However, `CycleChannel` does not affect `Stop Actions If Fails / Changes Map` if the map is changed due to channel changing. When using either of the mode, ensure the key bindings are set up first.
 
 ## Video guides
 1. [Basic operations](https://youtu.be/8X2CKS7bnHY?si=3yPmVPaMsFEyDD8c)
