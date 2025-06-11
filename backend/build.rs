@@ -63,6 +63,7 @@ fn main() {
     let maple_guide_menu = dir.join("maple_guide_menu_ideal_ratio.png");
     let maple_guide_town = dir.join("maple_guide_town_ideal_ratio.png");
     let maple_guide_town_mask = dir.join("maple_guide_town_mask_ideal_ratio.png");
+    let change_channel_menu = dir.join("change_channel_menu_ideal_ratio.png");
 
     let mob_model = dir.join("mob_nms.onnx");
     let rune_model = dir.join("rune_nms.onnx");
@@ -310,6 +311,10 @@ fn main() {
     println!(
         "cargo:rustc-env=MAPLE_GUIDE_TOWN_MASK_TEMPLATE={}",
         maple_guide_town_mask.to_str().unwrap()
+    );
+    println!(
+        "cargo:rustc-env=CHANGE_CHANNEL_MENU_TEMPLATE={}",
+        change_channel_menu.to_str().unwrap()
     );
 
     println!(

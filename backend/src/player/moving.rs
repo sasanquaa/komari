@@ -8,6 +8,7 @@ use super::{
     double_jump::{DOUBLE_JUMP_THRESHOLD, DoubleJumping},
     state::LastMovement,
     timeout::Timeout,
+    up_jump::UpJumping,
 };
 use crate::{
     ActionKeyDirection, ActionKeyWith, MAX_PLATFORMS_COUNT,
@@ -300,7 +301,7 @@ pub fn update_moving_context(
                 state.clear_action_completed();
                 return Player::Idle;
             }
-            abort_action_on_state_repeat(Player::UpJumping(moving), context, state)
+            abort_action_on_state_repeat(Player::UpJumping(UpJumping::new(moving)), context, state)
         }
         (false, _, y, d) if y > 0 && d >= JUMP_THRESHOLD => {
             abort_action_on_state_repeat(Player::Jumping(moving), context, state)

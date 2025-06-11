@@ -1,5 +1,5 @@
 use actions::{on_action, on_action_state_mut};
-use adjust::{ADJUSTING_MEDIUM_THRESHOLD, update_adjusting_context};
+use adjust::update_adjusting_context;
 use cash_shop::{CashShop, update_cash_shop_context};
 use double_jump::{DoubleJumping, update_double_jumping_context};
 use fall::update_falling_context;
@@ -17,7 +17,7 @@ use state::LastMovement;
 use strum::Display;
 use timeout::{Timeout, update_with_timeout};
 use unstuck::update_unstucking_context;
-use up_jump::update_up_jumping_context;
+use up_jump::{UpJumping, update_up_jumping_context};
 use use_key::{UseKey, update_use_key_context};
 
 use crate::{
@@ -79,7 +79,7 @@ pub enum Player {
     /// Performs a normal jump.
     Jumping(Moving),
     /// Performs an up jump action.
-    UpJumping(Moving),
+    UpJumping(UpJumping),
     /// Performs a falling action.
     Falling(Moving, Point, bool),
     /// Unstucks when inside non-detecting position or because of [`PlayerState::unstuck_counter`].
@@ -98,6 +98,8 @@ pub enum Player {
 impl Player {
     #[inline]
     pub fn can_action_override_current_state(&self) -> bool {
+        const OVERRIDABLE_DISTANCE: i32 = 6;
+
         match self {
             Player::Detecting
             | Player::Idle
@@ -105,11 +107,11 @@ impl Player {
             | Player::DoubleJumping(DoubleJumping { forced: false, .. }) => true,
             Player::Adjusting(moving) => {
                 let (distance, _) = moving.x_distance_direction_from(true, moving.pos);
-                distance >= ADJUSTING_MEDIUM_THRESHOLD
+                distance >= OVERRIDABLE_DISTANCE
             }
             Player::Grappling(moving)
             | Player::Jumping(moving)
-            | Player::UpJumping(moving)
+            | Player::UpJumping(UpJumping { moving, .. })
             | Player::Falling(moving, _, _) => moving.completed,
             Player::SolvingRune(_)
             | Player::CashShopThenExit(_, _)

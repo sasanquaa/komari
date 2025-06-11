@@ -7,13 +7,15 @@ use super::{
 };
 use crate::{bridge::MouseAction, context::Context, minimap::Minimap};
 
+const MAX_RETRY: u32 = 4;
+
 /// Stages of panicking mode.
 #[derive(Debug, Clone, Copy)]
 enum PanickingStage {
     /// Cycling through channels.
-    ChangingChannel(Timeout),
+    ChangingChannel(Timeout, u32),
     /// Going to town.
-    GoingToTown(Timeout),
+    GoingToTown(Timeout, u32),
     Completing(Timeout, bool),
 }
 
@@ -27,25 +29,25 @@ impl Panicking {
     pub fn new(to: PanicTo) -> Self {
         Self {
             stage: match to {
-                PanicTo::Channel => PanickingStage::ChangingChannel(Timeout::default()),
-                PanicTo::Town => PanickingStage::GoingToTown(Timeout::default()),
+                PanicTo::Channel => PanickingStage::ChangingChannel(Timeout::default(), 0),
+                PanicTo::Town => PanickingStage::GoingToTown(Timeout::default(), 0),
             },
             to,
         }
     }
 
     #[inline]
-    fn stage_changing_channel(self, timeout: Timeout) -> Panicking {
+    fn stage_changing_channel(self, timeout: Timeout, retry_count: u32) -> Panicking {
         Panicking {
-            stage: PanickingStage::ChangingChannel(timeout),
+            stage: PanickingStage::ChangingChannel(timeout, retry_count),
             ..self
         }
     }
 
     #[inline]
-    fn stage_going_to_town(self, timeout: Timeout) -> Panicking {
+    fn stage_going_to_town(self, timeout: Timeout, retry_count: u32) -> Panicking {
         Panicking {
-            stage: PanickingStage::GoingToTown(timeout),
+            stage: PanickingStage::GoingToTown(timeout, retry_count),
             ..self
         }
     }
@@ -66,12 +68,20 @@ pub fn update_panicking_context(
     panicking: Panicking,
 ) -> Player {
     let panicking = match panicking.stage {
-        PanickingStage::ChangingChannel(timeout) => {
-            update_changing_channel(context, state.config.change_channel_key, panicking, timeout)
-        }
-        PanickingStage::GoingToTown(timeout) => {
-            update_going_to_town(context, state.config.maple_guide_key, panicking, timeout)
-        }
+        PanickingStage::ChangingChannel(timeout, retry_count) => update_changing_channel(
+            context,
+            state.config.change_channel_key,
+            panicking,
+            timeout,
+            retry_count,
+        ),
+        PanickingStage::GoingToTown(timeout, retry_count) => update_going_to_town(
+            context,
+            state.config.maple_guide_key,
+            panicking,
+            timeout,
+            retry_count,
+        ),
         PanickingStage::Completing(timeout, completed) => {
             update_completing(context, panicking, timeout, completed)
         }
@@ -94,20 +104,30 @@ fn update_changing_channel(
     key: KeyKind,
     panicking: Panicking,
     timeout: Timeout,
+    retry_count: u32,
 ) -> Panicking {
     const PRESS_RIGHT_AT: u32 = 15;
     const PRESS_ENTER_AT: u32 = 30;
 
     update_with_timeout(
         timeout,
-        30,
+        50,
         |timeout| {
-            let _ = context.keys.send(key);
-            panicking.stage_changing_channel(timeout)
+            if !context
+                .detector_unwrap()
+                .detect_change_channel_menu_opened()
+            {
+                let _ = context.keys.send(key);
+            }
+            panicking.stage_changing_channel(timeout, retry_count)
         },
         || {
             if matches!(context.minimap, Minimap::Idle(_)) {
-                panicking.stage_changing_channel(Timeout::default())
+                if retry_count + 1 < MAX_RETRY {
+                    panicking.stage_changing_channel(Timeout::default(), retry_count + 1)
+                } else {
+                    panicking.stage_completing(Timeout::default(), true)
+                }
             } else {
                 panicking.stage_completing(Timeout::default(), false)
             }
@@ -123,7 +143,7 @@ fn update_changing_channel(
                 _ => (),
             }
 
-            panicking.stage_changing_channel(timeout)
+            panicking.stage_changing_channel(timeout, retry_count)
         },
     )
 }
@@ -133,19 +153,22 @@ fn update_going_to_town(
     key: KeyKind,
     panicking: Panicking,
     timeout: Timeout,
+    retry_count: u32,
 ) -> Panicking {
+    const GUIDE_FULLY_OPENED_CHECK_AT: u32 = 30;
+
     update_with_timeout(
         timeout,
-        30,
+        50,
         |timeout| {
-            if !context.detector_unwrap().detect_maple_guide_menu_opened()
-                && matches!(context.minimap, Minimap::Idle(_))
-            {
-                let _ = context.keys.send(key);
+            if matches!(context.minimap, Minimap::Idle(_)) {
+                if !context.detector_unwrap().detect_maple_guide_menu_opened() {
+                    let _ = context.keys.send(key);
+                }
             } else {
                 return panicking.stage_completing(Timeout::default(), false);
             }
-            panicking.stage_going_to_town(timeout)
+            panicking.stage_going_to_town(timeout, retry_count)
         },
         || {
             if context.detector_unwrap().detect_maple_guide_menu_opened() {
@@ -157,9 +180,20 @@ fn update_going_to_town(
                     let _ = context.keys.send_mouse(x, y, MouseAction::Click);
                 }
             }
-            panicking.stage_going_to_town(Timeout::default())
+            if retry_count + 1 < MAX_RETRY {
+                panicking.stage_going_to_town(Timeout::default(), retry_count + 1)
+            } else {
+                panicking.stage_completing(Timeout::default(), true)
+            }
         },
-        |timeout| panicking.stage_going_to_town(timeout),
+        |timeout| {
+            if timeout.current == GUIDE_FULLY_OPENED_CHECK_AT
+                && !context.detector_unwrap().detect_maple_guide_menu_opened()
+            {
+                let _ = context.keys.send(key);
+            }
+            panicking.stage_going_to_town(timeout, retry_count)
+        },
     )
 }
 
@@ -180,7 +214,7 @@ fn update_completing(
         || {
             if let Minimap::Idle(idle) = context.minimap {
                 if idle.has_any_other_player() {
-                    panicking.stage_changing_channel(Timeout::default())
+                    panicking.stage_changing_channel(Timeout::default(), 0)
                 } else {
                     panicking.stage_completing(timeout, true)
                 }
@@ -217,16 +251,16 @@ mod panicking_tests {
             started: true,
             ..Default::default()
         };
-        let result = update_changing_channel(&context, KeyKind::F1, panicking, timeout);
-        assert_matches!(result.stage, PanickingStage::ChangingChannel(_));
+        let result = update_changing_channel(&context, KeyKind::F1, panicking, timeout, 0);
+        assert_matches!(result.stage, PanickingStage::ChangingChannel(_, _));
 
         let timeout = Timeout {
             current: 29,
             started: true,
             ..Default::default()
         };
-        let result = update_changing_channel(&context, KeyKind::F1, panicking, timeout);
-        assert_matches!(result.stage, PanickingStage::ChangingChannel(_));
+        let result = update_changing_channel(&context, KeyKind::F1, panicking, timeout, 0);
+        assert_matches!(result.stage, PanickingStage::ChangingChannel(_, _));
     }
 
     #[test]
@@ -235,12 +269,12 @@ mod panicking_tests {
         context.minimap = Minimap::Detecting;
         let panicking = Panicking::new(PanicTo::Channel);
         let timeout = Timeout {
-            current: 30,
+            current: 50,
             started: true,
             ..Default::default()
         };
 
-        let result = update_changing_channel(&context, KeyKind::F1, panicking, timeout);
+        let result = update_changing_channel(&context, KeyKind::F1, panicking, timeout, 0);
         assert_matches!(result.stage, PanickingStage::Completing(_, false));
     }
 
@@ -258,8 +292,8 @@ mod panicking_tests {
         let panicking = Panicking::new(PanicTo::Town);
         let timeout = Timeout::default();
 
-        let result = update_going_to_town(&context, KeyKind::F2, panicking, timeout);
-        assert_matches!(result.stage, PanickingStage::GoingToTown(_));
+        let result = update_going_to_town(&context, KeyKind::F2, panicking, timeout, 0);
+        assert_matches!(result.stage, PanickingStage::GoingToTown(_, _));
     }
 
     #[test]
@@ -273,7 +307,7 @@ mod panicking_tests {
         let panicking = Panicking::new(PanicTo::Town);
         let timeout = Timeout::default();
 
-        let result = update_going_to_town(&context, KeyKind::F2, panicking, timeout);
+        let result = update_going_to_town(&context, KeyKind::F2, panicking, timeout, 0);
         assert_matches!(result.stage, PanickingStage::Completing(_, false));
     }
 

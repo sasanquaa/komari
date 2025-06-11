@@ -218,6 +218,9 @@ pub trait Detector: 'static + Send + DynClone + Debug {
 
     /// Detects all maple guide towns.
     fn detect_maple_guide_towns(&self) -> Vec<Rect>;
+
+    /// Detects whether the change channel menu is opened.
+    fn detect_change_channel_menu_opened(&self) -> bool;
 }
 
 #[cfg(test)]
@@ -258,6 +261,7 @@ mock! {
         fn detect_familiar_essence_depleted(&self) -> bool;
         fn detect_maple_guide_menu_opened(&self) -> bool;
         fn detect_maple_guide_towns(&self) -> Vec<Rect>;
+        fn detect_change_channel_menu_opened(&self) -> bool;
     }
 
     impl Debug for Detector {
@@ -442,6 +446,10 @@ impl Detector for CachedDetector {
 
     fn detect_maple_guide_towns(&self) -> Vec<Rect> {
         detect_maple_guide_towns(&**self.grayscale)
+    }
+
+    fn detect_change_channel_menu_opened(&self) -> bool {
+        detect_change_channel_menu_opened(&**self.grayscale)
     }
 }
 
@@ -1940,6 +1948,18 @@ fn detect_maple_guide_towns(mat: &impl ToInputArray) -> Vec<Rect> {
         .into_iter()
         .filter_map(|result| result.ok().map(|(rect, _)| rect))
         .collect()
+}
+
+fn detect_change_channel_menu_opened(mat: &impl ToInputArray) -> bool {
+    static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(
+            include_bytes!(env!("CHANGE_CHANNEL_MENU_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap()
+    });
+
+    detect_template(mat, &*TEMPLATE, Point::default(), 0.75).is_ok()
 }
 
 /// Detects a single match from `template` with the given BGR image `Mat`.
