@@ -25,7 +25,7 @@ const TIMEOUT: u32 = MOVE_TIMEOUT * 8;
 const STOPPING_TIMEOUT: u32 = MOVE_TIMEOUT + 3;
 
 /// Maximum y distance allowed to stop grappling.
-const STOPPING_THRESHOLD: i32 = 4;
+const STOPPING_THRESHOLD: i32 = 3;
 
 /// Updates the [`Player::Grappling`] contextual state.
 ///
@@ -62,7 +62,7 @@ pub fn update_grappling_context(
                 moving = moving.timeout_current(TIMEOUT).completed(true);
             }
             if !moving.completed {
-                if y_direction <= 0 || y_distance <= STOPPING_THRESHOLD {
+                if y_direction <= 0 || y_distance <= stopping_threshold(state.velocity.1) {
                     let _ = context.keys.send(key);
                     moving = moving.completed(true);
                 }
@@ -110,4 +110,10 @@ pub fn update_grappling_context(
         },
         ChangeAxis::Vertical,
     )
+}
+
+/// Converts vertical velocity to a stopping threshold.
+#[inline]
+fn stopping_threshold(velocity: f32) -> i32 {
+    (STOPPING_THRESHOLD as f32 + 1.1 * velocity).ceil() as i32
 }
