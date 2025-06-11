@@ -37,7 +37,7 @@ use crate::{
     minimap::{Minimap, MinimapState},
     player::PlayerState,
     poll_request,
-    rotator::Rotator,
+    rotator::{Rotator, RotatorBuildArgs},
     skill::SkillKind,
 };
 
@@ -121,24 +121,27 @@ impl DefaultRequestHandler<'_> {
             .data()
             .map(|minimap| minimap.actions_any_reset_on_erda_condition)
             .unwrap_or_default();
-
-        self.rotator.build_actions(
+        let actions = config_actions(self.config)
+            .into_iter()
+            .chain(self.actions.iter().copied())
+            .collect::<Vec<_>>();
+        let args = RotatorBuildArgs {
             mode,
-            config_actions(self.config)
-                .into_iter()
-                .chain(self.actions.iter().copied())
-                .collect::<Vec<_>>()
-                .as_slice(),
-            self.buffs,
-            self.config.potion_key.key,
-            self.config.familiar_essence_key.key,
-            self.settings.familiars.swappable_familiars,
-            &self.settings.familiars.swappable_rarities,
-            self.settings.familiars.swap_check_millis,
-            self.settings.enable_rune_solving,
-            self.settings.familiars.enable_familiars_swapping,
-            reset_on_erda,
-        );
+            actions: actions.as_slice(),
+            buffs: self.buffs,
+            potion_key: self.config.potion_key.key,
+            familiar_essence_key: self.config.familiar_essence_key.key,
+            familiar_swappable_slots: self.settings.familiars.swappable_familiars,
+            familiar_swappable_rarities: &self.settings.familiars.swappable_rarities,
+            familiar_swap_check_millis: self.settings.familiars.swap_check_millis,
+            panic_mode: self.settings.panic_mode,
+            enable_panic_mode: self.settings.enable_panic_mode,
+            enable_rune_solving: self.settings.enable_rune_solving,
+            enable_familiars_swapping: self.settings.familiars.enable_familiars_swapping,
+            enable_reset_normal_actions_on_erda: reset_on_erda,
+        };
+
+        self.rotator.build_actions(args);
     }
 }
 
@@ -200,6 +203,8 @@ impl RequestHandler for DefaultRequestHandler<'_> {
         self.player.config.upjump_key = self.config.up_jump_key.map(|key| key.key.into());
         self.player.config.cash_shop_key = self.config.cash_shop_key.key.into();
         self.player.config.familiar_key = self.config.familiar_menu_key.key.into();
+        self.player.config.maple_guide_key = self.config.maple_guide_key.key.into();
+        self.player.config.change_channel_key = self.config.change_channel_key.key.into();
         self.player.config.potion_key = self.config.potion_key.key.into();
         self.player.config.use_potion_below_percent =
             match (self.config.potion_key.enabled, self.config.potion_mode) {

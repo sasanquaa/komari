@@ -27,7 +27,7 @@ use crate::{
     mat::OwnedMat,
     minimap::{Minimap, MinimapState},
     network::{DiscordNotification, NotificationKind},
-    player::{Player, PlayerState},
+    player::{PanicTo, Panicking, Player, PlayerState},
     query_configs, query_settings,
     request_handler::{DefaultRequestHandler, config_buffs},
     rng::Rng,
@@ -302,15 +302,23 @@ fn update_loop() {
 
         // Upon accidental or white roomed causing map to change,
         // abort actions and send notification
-        let minimap_changed =
-            was_minimap_idle && matches!(handler.context.minimap, Minimap::Detecting);
-        let player_died = was_player_alive && handler.player.is_dead;
         if handler.minimap.data().is_some() && !handler.context.halting {
-            if player_died || (minimap_changed && handler.settings.stop_on_fail_or_change_map) {
+            let minimap_changed =
+                was_minimap_idle && matches!(handler.context.minimap, Minimap::Detecting);
+            let player_died = was_player_alive && handler.player.is_dead;
+            let can_halt_or_notify = minimap_changed
+                && !matches!(
+                    handler.context.player,
+                    Player::Panicking(Panicking {
+                        to: PanicTo::Town,
+                        ..
+                    })
+                );
+
+            if player_died || (can_halt_or_notify && handler.settings.stop_on_fail_or_change_map) {
                 handler.on_rotate_actions(true);
             }
-
-            if minimap_changed {
+            if can_halt_or_notify {
                 drop(settings_borrow_mut); // For notification to borrow immutably
                 let _ = context
                     .notification

@@ -133,6 +133,15 @@ fn familiars_swap_check_millis() -> u64 {
     300000
 }
 
+#[derive(
+    Clone, Copy, PartialEq, Default, Debug, Serialize, Deserialize, EnumIter, Display, EnumString,
+)]
+pub enum PanicMode {
+    #[default]
+    CycleChannel,
+    GoToTown,
+}
+
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct Notifications {
     pub discord_webhook_url: String,
@@ -154,6 +163,10 @@ pub struct Settings {
     pub capture_mode: CaptureMode,
     #[serde(default = "enable_rune_solving_default")]
     pub enable_rune_solving: bool,
+    #[serde(default)]
+    pub enable_panic_mode: bool,
+    #[serde(default)]
+    pub panic_mode: PanicMode,
     #[serde(default)]
     pub stop_on_fail_or_change_map: bool,
     #[serde(default)]
@@ -180,6 +193,8 @@ impl Default for Settings {
             id: None,
             capture_mode: CaptureMode::default(),
             enable_rune_solving: enable_rune_solving_default(),
+            enable_panic_mode: false,
+            panic_mode: PanicMode::default(),
             input_method: InputMethod::default(),
             input_method_rpc_server_url: String::default(),
             stop_on_fail_or_change_map: false,
@@ -253,6 +268,10 @@ pub struct Configuration {
     pub cash_shop_key: KeyBindingConfiguration,
     #[serde(default)]
     pub familiar_menu_key: KeyBindingConfiguration,
+    #[serde(default)]
+    pub maple_guide_key: KeyBindingConfiguration,
+    #[serde(default)]
+    pub change_channel_key: KeyBindingConfiguration,
     pub feed_pet_key: KeyBindingConfiguration,
     pub feed_pet_millis: u64,
     pub potion_key: KeyBindingConfiguration,
@@ -314,6 +333,8 @@ impl Default for Configuration {
             interact_key: KeyBindingConfiguration::default(),
             cash_shop_key: KeyBindingConfiguration::default(),
             familiar_menu_key: KeyBindingConfiguration::default(),
+            maple_guide_key: KeyBindingConfiguration::default(),
+            change_channel_key: KeyBindingConfiguration::default(),
             feed_pet_key: KeyBindingConfiguration::default(),
             feed_pet_millis: 320000,
             potion_key: KeyBindingConfiguration::default(),
@@ -412,6 +433,7 @@ pub struct Bound {
     pub height: i32,
 }
 
+// TODO: Should be part of auto-mobbing or ping-pong logics, not here
 impl From<Bound> for Rect {
     fn from(value: Bound) -> Self {
         Self::new(value.x, value.y, value.width, value.height)
@@ -519,6 +541,7 @@ pub struct Platform {
     pub y: i32,
 }
 
+// TODO: Should be part of pathing logics, not here
 impl From<Platform> for pathing::Platform {
     fn from(value: Platform) -> Self {
         Self::new(value.x_start..value.x_end, value.y)
