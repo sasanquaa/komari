@@ -310,7 +310,7 @@ fn update_loop() {
                 && !matches!(
                     handler.context.player,
                     Player::Panicking(Panicking {
-                        to: PanicTo::Town,
+                        to: PanicTo::Channel,
                         ..
                     })
                 );
