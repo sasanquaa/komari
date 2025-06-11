@@ -22,7 +22,6 @@ const SOFT_SPAM_DELAY: u32 = 12;
 const STOP_UP_KEY_TICK: u32 = 3;
 const TIMEOUT: u32 = MOVE_TIMEOUT + 3;
 const UP_JUMPED_Y_VELOCITY_THRESHOLD: f32 = 1.3;
-const SOFT_UP_JUMPED_Y_VELOCITY_THRESHOLD: f32 = 1.1;
 const X_NEAR_STATIONARY_THRESHOLD: f32 = 0.28;
 const TELEPORT_UP_JUMP_THRESHOLD: i32 = 14;
 const SOFT_UP_JUMP_THRESHOLD: i32 = 16;
@@ -31,7 +30,6 @@ const SOFT_UP_JUMP_THRESHOLD: i32 = 16;
 pub struct UpJumping {
     pub moving: Moving,
     spam_delay: u32,
-    velocity_threshold: f32,
 }
 
 impl UpJumping {
@@ -42,16 +40,7 @@ impl UpJumping {
         } else {
             SPAM_DELAY
         };
-        let velocity_threshold = if y_distance <= SOFT_UP_JUMP_THRESHOLD {
-            SOFT_UP_JUMPED_Y_VELOCITY_THRESHOLD
-        } else {
-            UP_JUMPED_Y_VELOCITY_THRESHOLD
-        };
-        Self {
-            moving,
-            spam_delay,
-            velocity_threshold,
-        }
+        Self { moving, spam_delay }
     }
 
     #[inline]
@@ -126,7 +115,7 @@ pub fn update_up_jumping_context(
         |mut moving| {
             match (moving.completed, up_jump_key, has_teleport_key) {
                 (false, None, true) | (false, Some(KeyKind::Up), false) | (false, None, false) => {
-                    if state.velocity.1 <= up_jumping.velocity_threshold {
+                    if state.velocity.1 <= UP_JUMPED_Y_VELOCITY_THRESHOLD {
                         // Spam jump key until the player y changes
                         // above a threshold as sending jump key twice
                         // doesn't work
