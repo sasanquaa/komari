@@ -1,8 +1,8 @@
 use std::{fmt::Display, str::FromStr};
 
 use backend::{
-    CaptureMode, InputMethod, IntoEnumIterator, KeyBindingConfiguration, Settings as SettingsData,
-    query_capture_handles, select_capture_handle,
+    CaptureMode, InputMethod, IntoEnumIterator, KeyBindingConfiguration, PanicMode,
+    Settings as SettingsData, query_capture_handles, select_capture_handle,
 };
 #[cfg(debug_assertions)]
 use backend::{capture_image, infer_minimap, infer_rune, record_images, test_spin_rune};
@@ -67,6 +67,27 @@ pub fn Settings(
                         });
                     },
                     value: settings_view().enable_rune_solving,
+                }
+                SettingsCheckbox {
+                    label: "Enable Panic Mode",
+                    on_input: move |enable_panic_mode| {
+                        on_settings(SettingsData {
+                            enable_panic_mode,
+                            ..settings_view.peek().clone()
+                        });
+                    },
+                    value: settings_view().enable_panic_mode,
+                }
+                SettingsEnumSelect::<PanicMode> {
+                    label: "Panic Mode",
+                    on_select: move |panic_mode| {
+                        on_settings(SettingsData {
+                            panic_mode,
+                            ..settings_view.peek().clone()
+                        });
+                    },
+                    disabled: false,
+                    selected: settings_view().panic_mode,
                 }
                 SettingsCheckbox {
                     label: "Stop Actions If Fails / Changes Map",

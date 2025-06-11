@@ -26,6 +26,8 @@ const UP_JUMP: &str = "Up Jump";
 const INTERACT: &str = "Interact";
 const CASH_SHOP: &str = "Cash Shop";
 const FAMILIAR: &str = "Familiar Menu";
+const MAPLE_GUIDE: &str = "Maple Guide";
+const CHANGE_CHANNEL: &str = "Change Channel";
 const FEED_PET: &str = "Feed Pet";
 const POTION: &str = "Potion";
 const FAMILIAR_BUFF: &str = "Familiar Skill";
@@ -230,6 +232,30 @@ fn ConfigGameKeyBindings(
                     });
                 },
                 value: Some(config_view().familiar_menu_key),
+            }
+            KeyBindingConfigurationInput {
+                label: MAPLE_GUIDE,
+                label_active: active,
+                is_disabled: is_disabled(),
+                on_input: move |key: Option<KeyBindingConfiguration>| {
+                    on_config(ConfigurationData {
+                        maple_guide_key: key.unwrap(),
+                        ..config_view.peek().clone()
+                    });
+                },
+                value: Some(config_view().maple_guide_key),
+            }
+            KeyBindingConfigurationInput {
+                label: CHANGE_CHANNEL,
+                label_active: active,
+                is_disabled: is_disabled(),
+                on_input: move |key: Option<KeyBindingConfiguration>| {
+                    on_config(ConfigurationData {
+                        change_channel_key: key.unwrap(),
+                        ..config_view.peek().clone()
+                    });
+                },
+                value: Some(config_view().change_channel_key),
             }
             KeyBindingConfigurationInput {
                 label: FEED_PET,

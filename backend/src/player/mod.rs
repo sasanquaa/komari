@@ -1,5 +1,5 @@
 use actions::{on_action, on_action_state_mut};
-use adjust::{ADJUSTING_MEDIUM_THRESHOLD, update_adjusting_context};
+use adjust::update_adjusting_context;
 use cash_shop::{CashShop, update_cash_shop_context};
 use double_jump::{DoubleJumping, update_double_jumping_context};
 use fall::update_falling_context;
@@ -9,6 +9,7 @@ use idle::update_idle_context;
 use jump::update_jumping_context;
 use moving::{MOVE_TIMEOUT, Moving, MovingIntermediates, update_moving_context};
 use opencv::core::Point;
+use panic::update_panicking_context;
 use platforms::windows::KeyKind;
 use solve_rune::{SolvingRune, update_solving_rune_context};
 use stall::update_stalling_context;
@@ -16,7 +17,7 @@ use state::LastMovement;
 use strum::Display;
 use timeout::{Timeout, update_with_timeout};
 use unstuck::update_unstucking_context;
-use up_jump::update_up_jumping_context;
+use up_jump::{UpJumping, update_up_jumping_context};
 use use_key::{UseKey, update_use_key_context};
 
 use crate::{
@@ -35,6 +36,7 @@ mod grapple;
 mod idle;
 mod jump;
 mod moving;
+mod panic;
 mod solve_rune;
 mod stall;
 mod state;
@@ -44,55 +46,60 @@ mod up_jump;
 mod use_key;
 
 pub use {
-    actions::PingPongDirection, actions::PlayerAction, actions::PlayerActionAutoMob,
-    actions::PlayerActionFamiliarsSwapping, actions::PlayerActionKey, actions::PlayerActionMove,
-    actions::PlayerActionPingPong, double_jump::DOUBLE_JUMP_THRESHOLD,
-    grapple::GRAPPLING_MAX_THRESHOLD, grapple::GRAPPLING_THRESHOLD, state::PlayerState,
+    actions::PanicTo, actions::PingPongDirection, actions::PlayerAction,
+    actions::PlayerActionAutoMob, actions::PlayerActionFamiliarsSwapping, actions::PlayerActionKey,
+    actions::PlayerActionMove, actions::PlayerActionPanic, actions::PlayerActionPingPong,
+    double_jump::DOUBLE_JUMP_THRESHOLD, grapple::GRAPPLING_MAX_THRESHOLD,
+    grapple::GRAPPLING_THRESHOLD, panic::Panicking, state::PlayerState,
 };
 
-/// Minimum y distance from the destination required to perform a jump
+/// Minimum y distance from the destination required to perform a jump.
 pub const JUMP_THRESHOLD: i32 = 7;
 
-/// The player contextual states
+/// The player contextual states.
 #[derive(Clone, Copy, Debug, Display)]
 #[allow(clippy::large_enum_variant)] // There is only ever a single instance of Player
 pub enum Player {
-    /// Detects player on the minimap
+    /// Detects player on the minimap.
     Detecting,
-    /// Does nothing state
+    /// Does nothing state.
     ///
-    /// Acts as entry to other state when there is a [`PlayerAction`]
+    /// Acts as entry to other state when there is a [`PlayerAction`].
     Idle,
+    /// Uses key.
     UseKey(UseKey),
-    /// Movement-related coordinator state
+    /// Movement-related coordinator state.
     Moving(Point, bool, Option<MovingIntermediates>),
-    /// Performs walk or small adjustment x-wise action
+    /// Performs walk or small adjustment x-wise action.
     Adjusting(Moving),
-    /// Performs double jump action
+    /// Performs double jump action.
     DoubleJumping(DoubleJumping),
-    /// Performs a grappling action
+    /// Performs a grappling action.
     Grappling(Moving),
-    /// Performs a normal jump
+    /// Performs a normal jump.
     Jumping(Moving),
-    /// Performs an up jump action
-    UpJumping(Moving),
-    /// Performs a falling action
+    /// Performs an up jump action.
+    UpJumping(UpJumping),
+    /// Performs a falling action.
     Falling(Moving, Point, bool),
-    /// Unstucks when inside non-detecting position or because of [`PlayerState::unstuck_counter`]
+    /// Unstucks when inside non-detecting position or because of [`PlayerState::unstuck_counter`].
     Unstucking(Timeout, Option<bool>, bool),
-    /// Stalls for time and return to [`Player::Idle`] or [`PlayerState::stalling_timeout_state`]
+    /// Stalls for time and return to [`Player::Idle`] or [`PlayerState::stalling_timeout_state`].
     Stalling(Timeout, u32),
-    /// Tries to solve a rune
+    /// Tries to solve a rune.
     SolvingRune(SolvingRune),
-    /// Enters the cash shop then exit after 10 seconds
+    /// Enters the cash shop then exit after 10 seconds.
     CashShopThenExit(Timeout, CashShop),
     #[strum(to_string = "FamiliarsSwapping({0})")]
     FamiliarsSwapping(FamiliarsSwapping),
+    Panicking(Panicking),
 }
 
 impl Player {
     #[inline]
     pub fn can_action_override_current_state(&self) -> bool {
+        const OVERRIDABLE_DISTANCE: i32 = 6;
+
         match self {
             Player::Detecting
             | Player::Idle
@@ -100,11 +107,11 @@ impl Player {
             | Player::DoubleJumping(DoubleJumping { forced: false, .. }) => true,
             Player::Adjusting(moving) => {
                 let (distance, _) = moving.x_distance_direction_from(true, moving.pos);
-                distance >= ADJUSTING_MEDIUM_THRESHOLD
+                distance >= OVERRIDABLE_DISTANCE
             }
             Player::Grappling(moving)
             | Player::Jumping(moving)
-            | Player::UpJumping(moving)
+            | Player::UpJumping(UpJumping { moving, .. })
             | Player::Falling(moving, _, _) => moving.completed,
             Player::SolvingRune(_)
             | Player::CashShopThenExit(_, _)
@@ -112,6 +119,7 @@ impl Player {
             | Player::DoubleJumping(DoubleJumping { forced: true, .. })
             | Player::UseKey(_)
             | Player::FamiliarsSwapping(_)
+            | Player::Panicking(_)
             | Player::Stalling(_, _) => false,
         }
     }
@@ -226,6 +234,7 @@ fn update_non_positional_context(
             cash_shop,
             failed_to_detect_player,
         )),
+        Player::Panicking(panicking) => Some(update_panicking_context(context, state, panicking)),
         Player::Detecting
         | Player::Idle
         | Player::Moving(_, _, _)
@@ -266,6 +275,7 @@ fn update_positional_context(
         | Player::Stalling(_, _)
         | Player::SolvingRune(_)
         | Player::FamiliarsSwapping(_)
+        | Player::Panicking(_)
         | Player::CashShopThenExit(_, _) => unreachable!(),
     }
 }

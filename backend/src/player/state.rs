@@ -117,6 +117,10 @@ pub struct PlayerConfiguration {
     pub cash_shop_key: KeyKind,
     /// The familiar key.
     pub familiar_key: KeyKind,
+    /// The maple guide key.
+    pub maple_guide_key: KeyKind,
+    /// The change channel key.
+    pub change_channel_key: KeyKind,
     /// The potion key.
     pub potion_key: KeyKind,
     /// Uses potion when health is below a percentage.
@@ -717,6 +721,7 @@ impl PlayerState {
             | PlayerAction::PingPong(_)
             | PlayerAction::Key(_)
             | PlayerAction::Move(_)
+            | PlayerAction::Panic(_)
             | PlayerAction::SolveRune => {
                 unreachable!()
             }

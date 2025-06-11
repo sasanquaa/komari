@@ -18,11 +18,47 @@ use crate::{
 };
 
 const SPAM_DELAY: u32 = 7;
+const SOFT_SPAM_DELAY: u32 = 12;
 const STOP_UP_KEY_TICK: u32 = 3;
 const TIMEOUT: u32 = MOVE_TIMEOUT + 3;
 const UP_JUMPED_Y_VELOCITY_THRESHOLD: f32 = 1.3;
+const SOFT_UP_JUMPED_Y_VELOCITY_THRESHOLD: f32 = 1.1;
 const X_NEAR_STATIONARY_THRESHOLD: f32 = 0.28;
 const TELEPORT_UP_JUMP_THRESHOLD: i32 = 14;
+const SOFT_UP_JUMP_THRESHOLD: i32 = 16;
+
+#[derive(Debug, Clone, Copy)]
+pub struct UpJumping {
+    pub moving: Moving,
+    spam_delay: u32,
+    velocity_threshold: f32,
+}
+
+impl UpJumping {
+    pub fn new(moving: Moving) -> Self {
+        let (y_distance, _) = moving.y_distance_direction_from(true, moving.pos);
+        let spam_delay = if y_distance <= SOFT_UP_JUMP_THRESHOLD {
+            SOFT_SPAM_DELAY
+        } else {
+            SPAM_DELAY
+        };
+        let velocity_threshold = if y_distance <= SOFT_UP_JUMP_THRESHOLD {
+            SOFT_UP_JUMPED_Y_VELOCITY_THRESHOLD
+        } else {
+            UP_JUMPED_Y_VELOCITY_THRESHOLD
+        };
+        Self {
+            moving,
+            spam_delay,
+            velocity_threshold,
+        }
+    }
+
+    #[inline]
+    pub fn moving(self, moving: Moving) -> UpJumping {
+        UpJumping { moving, ..self }
+    }
+}
 
 /// Updates the [`Player::UpJumping`] contextual state
 ///
@@ -34,16 +70,17 @@ const TELEPORT_UP_JUMP_THRESHOLD: i32 = 14;
 pub fn update_up_jumping_context(
     context: &Context,
     state: &mut PlayerState,
-    moving: Moving,
+    up_jumping: UpJumping,
 ) -> Player {
     let cur_pos = state.last_known_pos.unwrap();
+    let moving = up_jumping.moving;
     let (y_distance, y_direction) = moving.y_distance_direction_from(true, cur_pos);
     let up_jump_key = state.config.upjump_key;
     let has_teleport_key = state.config.teleport_key.is_some();
 
     if !moving.timeout.started {
         if state.velocity.0 > X_NEAR_STATIONARY_THRESHOLD {
-            return Player::UpJumping(moving);
+            return Player::UpJumping(up_jumping.moving(moving));
         }
         if let Minimap::Idle(idle) = context.minimap {
             for portal in idle.portals {
@@ -81,7 +118,7 @@ pub fn update_up_jumping_context(
                 }
                 _ => (),
             }
-            Player::UpJumping(moving)
+            Player::UpJumping(up_jumping.moving(moving))
         },
         Some(|| {
             let _ = context.keys.send_up(KeyKind::Up);
@@ -89,11 +126,11 @@ pub fn update_up_jumping_context(
         |mut moving| {
             match (moving.completed, up_jump_key, has_teleport_key) {
                 (false, None, true) | (false, Some(KeyKind::Up), false) | (false, None, false) => {
-                    if state.velocity.1 <= UP_JUMPED_Y_VELOCITY_THRESHOLD {
+                    if state.velocity.1 <= up_jumping.velocity_threshold {
                         // Spam jump key until the player y changes
                         // above a threshold as sending jump key twice
                         // doesn't work
-                        if moving.timeout.total >= SPAM_DELAY {
+                        if moving.timeout.total >= up_jumping.spam_delay {
                             // This up jump key is Up for Demon Slayer
                             if let Some(key) = up_jump_key {
                                 let _ = context.keys.send(key);
@@ -106,6 +143,7 @@ pub fn update_up_jumping_context(
                     }
                 }
                 (false, Some(key), _) => {
+                    // TODO: Support soft up jump?
                     // If the player is a mage and y distance is less
                     // than `TELEPORT_UP_JUMP_THRESHOLD`, send the teleport key immediately.
                     if !has_teleport_key
@@ -174,11 +212,11 @@ pub fn update_up_jumping_context(
                         with: ActionKeyWith::Stationary | ActionKeyWith::DoubleJump,
                         ..
                     })
-                    | PlayerAction::FamiliarsSwapping(_)
                     | PlayerAction::Move(_)
                     | PlayerAction::SolveRune => None,
+                    PlayerAction::Panic(_) | PlayerAction::FamiliarsSwapping(_) => unreachable!(),
                 },
-                || Player::UpJumping(moving),
+                || Player::UpJumping(up_jumping.moving(moving)),
             )
         },
         ChangeAxis::Vertical,
@@ -203,7 +241,7 @@ mod tests {
     use opencv::core::Point;
     use platforms::windows::KeyKind;
 
-    use super::{Moving, PlayerState, update_up_jumping_context};
+    use super::{Moving, PlayerState, UpJumping, update_up_jumping_context};
     use crate::{
         bridge::MockKeySender,
         context::Context,
@@ -235,7 +273,7 @@ mod tests {
             .once();
         context.keys = Box::new(keys);
         // Space + Up only
-        update_up_jumping_context(&context, &mut state, moving);
+        update_up_jumping_context(&context, &mut state, UpJumping::new(moving));
         let _ = context.keys; // drop mock for validation
 
         state.config.upjump_key = Some(KeyKind::C);
@@ -250,7 +288,7 @@ mod tests {
             .returning(|_| Ok(()));
         context.keys = Box::new(keys);
         // Up only
-        update_up_jumping_context(&context, &mut state, moving);
+        update_up_jumping_context(&context, &mut state, UpJumping::new(moving));
         let _ = context.keys; // drop mock for validation
 
         state.config.teleport_key = Some(KeyKind::Shift);
@@ -265,7 +303,7 @@ mod tests {
             .returning(|_| Ok(()));
         context.keys = Box::new(keys);
         // Space + Up
-        update_up_jumping_context(&context, &mut state, moving);
+        update_up_jumping_context(&context, &mut state, UpJumping::new(moving));
         let _ = context.keys; // drop mock for validation
     }
 
@@ -287,14 +325,17 @@ mod tests {
 
         // up jumped because y velocity > 1.35
         assert_matches!(
-            update_up_jumping_context(&context, &mut state, moving),
-            Player::UpJumping(Moving {
-                timeout: Timeout {
-                    current: 1,
-                    total: 1,
+            update_up_jumping_context(&context, &mut state, UpJumping::new(moving)),
+            Player::UpJumping(UpJumping {
+                moving: Moving {
+                    timeout: Timeout {
+                        current: 1,
+                        total: 1,
+                        ..
+                    },
+                    completed: true,
                     ..
                 },
-                completed: true,
                 ..
             })
         );
@@ -303,7 +344,7 @@ mod tests {
     #[test]
     fn up_jump_demon_slayer() {
         let pos = Point::new(10, 10);
-        let dest = Point::new(10, 20);
+        let dest = Point::new(10, 30);
         let mut moving = Moving {
             pos,
             dest,
@@ -327,7 +368,7 @@ mod tests {
         context.keys = Box::new(keys);
 
         // Start by sending Space only
-        update_up_jumping_context(&context, &mut state, moving);
+        update_up_jumping_context(&context, &mut state, UpJumping::new(moving));
         let _ = context.keys;
 
         // Update by sending Up
@@ -342,8 +383,8 @@ mod tests {
             .withf(|key| *key == KeyKind::Space)
             .never();
         context.keys = Box::new(keys);
-        update_up_jumping_context(&context, &mut state, moving);
-        update_up_jumping_context(&context, &mut state, moving);
+        update_up_jumping_context(&context, &mut state, UpJumping::new(moving));
+        update_up_jumping_context(&context, &mut state, UpJumping::new(moving));
         let _ = context.keys;
     }
 
@@ -378,7 +419,7 @@ mod tests {
         context.keys = Box::new(keys);
 
         // Start by sending Up and Space
-        update_up_jumping_context(&context, &mut state, moving);
+        update_up_jumping_context(&context, &mut state, UpJumping::new(moving));
         let _ = context.keys;
 
         // Change to started
@@ -390,9 +431,12 @@ mod tests {
         keys.expect_send().never();
         context.keys = Box::new(keys);
         assert_matches!(
-            update_up_jumping_context(&context, &mut state, moving),
-            Player::UpJumping(Moving {
-                completed: false,
+            update_up_jumping_context(&context, &mut state, UpJumping::new(moving)),
+            Player::UpJumping(UpJumping {
+                moving: Moving {
+                    completed: false,
+                    ..
+                },
                 ..
             })
         );
@@ -407,9 +451,12 @@ mod tests {
             .returning(|_| Ok(()));
         context.keys = Box::new(keys);
         assert_matches!(
-            update_up_jumping_context(&context, &mut state, moving),
-            Player::UpJumping(Moving {
-                completed: true,
+            update_up_jumping_context(&context, &mut state, UpJumping::new(moving)),
+            Player::UpJumping(UpJumping {
+                moving: Moving {
+                    completed: true,
+                    ..
+                },
                 ..
             })
         );

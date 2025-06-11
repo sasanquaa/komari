@@ -212,6 +212,15 @@ pub trait Detector: 'static + Send + DynClone + Debug {
 
     /// Detects whether the familiar essence depleted assuming already buffed.
     fn detect_familiar_essence_depleted(&self) -> bool;
+
+    /// Detects whether the maple guide menu is opened.
+    fn detect_maple_guide_menu_opened(&self) -> bool;
+
+    /// Detects all maple guide towns.
+    fn detect_maple_guide_towns(&self) -> Vec<Rect>;
+
+    /// Detects whether the change channel menu is opened.
+    fn detect_change_channel_menu_opened(&self) -> bool;
 }
 
 #[cfg(test)]
@@ -250,6 +259,9 @@ mock! {
         fn detect_familiar_scrollbar(&self) -> Result<Rect>;
         fn detect_familiar_menu_opened(&self) -> bool;
         fn detect_familiar_essence_depleted(&self) -> bool;
+        fn detect_maple_guide_menu_opened(&self) -> bool;
+        fn detect_maple_guide_towns(&self) -> Vec<Rect>;
+        fn detect_change_channel_menu_opened(&self) -> bool;
     }
 
     impl Debug for Detector {
@@ -426,6 +438,18 @@ impl Detector for CachedDetector {
 
     fn detect_familiar_essence_depleted(&self) -> bool {
         detect_familiar_essence_depleted(&**self.buffs_grayscale)
+    }
+
+    fn detect_maple_guide_menu_opened(&self) -> bool {
+        detect_maple_guide_menu_opened(&**self.grayscale)
+    }
+
+    fn detect_maple_guide_towns(&self) -> Vec<Rect> {
+        detect_maple_guide_towns(&**self.grayscale)
+    }
+
+    fn detect_change_channel_menu_opened(&self) -> bool {
+        detect_change_channel_menu_opened(&**self.grayscale)
     }
 }
 
@@ -1679,7 +1703,11 @@ fn detect_erda_shower(mat: &impl MatTraitConst) -> Result<Rect> {
 
 fn detect_familiar_save_button(mat: &impl ToInputArray) -> Result<Rect> {
     static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
-        imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_BUTTON_SAVE")), IMREAD_COLOR).unwrap()
+        imgcodecs::imdecode(
+            include_bytes!(env!("FAMILIAR_BUTTON_SAVE_TEMPLATE")),
+            IMREAD_COLOR,
+        )
+        .unwrap()
     });
 
     detect_template(mat, &*TEMPLATE, Point::default(), 0.75)
@@ -1687,21 +1715,33 @@ fn detect_familiar_save_button(mat: &impl ToInputArray) -> Result<Rect> {
 
 fn detect_familiar_setup_button(mat: &impl ToInputArray) -> Result<Rect> {
     static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
-        imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_BUTTON_SETUP")), IMREAD_COLOR).unwrap()
+        imgcodecs::imdecode(
+            include_bytes!(env!("FAMILIAR_BUTTON_SETUP_TEMPLATE")),
+            IMREAD_COLOR,
+        )
+        .unwrap()
     });
 
     detect_template(mat, &*TEMPLATE, Point::default(), 0.75)
 }
 
 static FAMILIAR_SLOT_FREE: LazyLock<Mat> = LazyLock::new(|| {
-    imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_SLOT_FREE")), IMREAD_COLOR).unwrap()
+    imgcodecs::imdecode(
+        include_bytes!(env!("FAMILIAR_SLOT_FREE_TEMPLATE")),
+        IMREAD_COLOR,
+    )
+    .unwrap()
 });
 static FAMILIAR_SLOT_OCCUPIED: LazyLock<Mat> = LazyLock::new(|| {
-    imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_SLOT_OCCUPIED")), IMREAD_COLOR).unwrap()
+    imgcodecs::imdecode(
+        include_bytes!(env!("FAMILIAR_SLOT_OCCUPIED_TEMPLATE")),
+        IMREAD_COLOR,
+    )
+    .unwrap()
 });
 static FAMILIAR_SLOT_OCCUPIED_MASK: LazyLock<Mat> = LazyLock::new(|| {
     imgcodecs::imdecode(
-        include_bytes!(env!("FAMILIAR_SLOT_OCCUPIED_MASK")),
+        include_bytes!(env!("FAMILIAR_SLOT_OCCUPIED_MASK_TEMPLATE")),
         IMREAD_GRAYSCALE,
     )
     .unwrap()
@@ -1743,11 +1783,15 @@ fn detect_familiar_slot_is_free(mat: &impl ToInputArray) -> bool {
 
 fn detect_familiar_hover_level<T: ToInputArray + MatTraitConst>(mat: &T) -> Result<FamiliarLevel> {
     static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
-        imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_LEVEL_5")), IMREAD_COLOR).unwrap()
+        imgcodecs::imdecode(
+            include_bytes!(env!("FAMILIAR_LEVEL_5_TEMPLATE")),
+            IMREAD_COLOR,
+        )
+        .unwrap()
     });
     static TEMPLATE_MASK: LazyLock<Mat> = LazyLock::new(|| {
         imgcodecs::imdecode(
-            include_bytes!(env!("FAMILIAR_LEVEL_5_MASK")),
+            include_bytes!(env!("FAMILIAR_LEVEL_5_MASK_TEMPLATE")),
             IMREAD_GRAYSCALE,
         )
         .unwrap()
@@ -1764,13 +1808,25 @@ fn detect_familiar_hover_level<T: ToInputArray + MatTraitConst>(mat: &T) -> Resu
 
 fn detect_familiar_cards<T: MatTraitConst + ToInputArray>(mat: &T) -> Vec<(Rect, FamiliarRank)> {
     static TEMPLATE_RARE: LazyLock<Mat> = LazyLock::new(|| {
-        imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_CARD_RARE")), IMREAD_COLOR).unwrap()
+        imgcodecs::imdecode(
+            include_bytes!(env!("FAMILIAR_CARD_RARE_TEMPLATE")),
+            IMREAD_COLOR,
+        )
+        .unwrap()
     });
     static TEMPLATE_EPIC: LazyLock<Mat> = LazyLock::new(|| {
-        imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_CARD_EPIC")), IMREAD_COLOR).unwrap()
+        imgcodecs::imdecode(
+            include_bytes!(env!("FAMILIAR_CARD_EPIC_TEMPLATE")),
+            IMREAD_COLOR,
+        )
+        .unwrap()
     });
     static TEMPLATE_MASK: LazyLock<Mat> = LazyLock::new(|| {
-        imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_CARD_MASK")), IMREAD_GRAYSCALE).unwrap()
+        imgcodecs::imdecode(
+            include_bytes!(env!("FAMILIAR_CARD_MASK_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap()
     });
 
     #[inline]
@@ -1826,7 +1882,11 @@ fn detect_familiar_cards<T: MatTraitConst + ToInputArray>(mat: &T) -> Vec<(Rect,
 
 fn detect_familiar_scrollbar(mat: &impl ToInputArray) -> Result<Rect> {
     static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
-        imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_SCROLLBAR")), IMREAD_GRAYSCALE).unwrap()
+        imgcodecs::imdecode(
+            include_bytes!(env!("FAMILIAR_SCROLLBAR_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap()
     });
 
     detect_template(mat, &*TEMPLATE, Point::default(), 0.6)
@@ -1834,7 +1894,11 @@ fn detect_familiar_scrollbar(mat: &impl ToInputArray) -> Result<Rect> {
 
 fn detect_familiar_menu_opened(mat: &impl ToInputArray) -> bool {
     static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
-        imgcodecs::imdecode(include_bytes!(env!("FAMILIAR_MENU")), IMREAD_GRAYSCALE).unwrap()
+        imgcodecs::imdecode(
+            include_bytes!(env!("FAMILIAR_MENU_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap()
     });
 
     detect_template(mat, &*TEMPLATE, Point::default(), 0.75).is_ok()
@@ -1843,13 +1907,59 @@ fn detect_familiar_menu_opened(mat: &impl ToInputArray) -> bool {
 fn detect_familiar_essence_depleted(mat: &impl ToInputArray) -> bool {
     static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
         imgcodecs::imdecode(
-            include_bytes!(env!("FAMILIAR_ESSENCE_DEPLETE")),
+            include_bytes!(env!("FAMILIAR_ESSENCE_DEPLETE_TEMPLATE")),
             IMREAD_GRAYSCALE,
         )
         .unwrap()
     });
 
     detect_template(mat, &*TEMPLATE, Point::default(), 0.8).is_ok()
+}
+
+fn detect_maple_guide_menu_opened(mat: &impl ToInputArray) -> bool {
+    static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(
+            include_bytes!(env!("MAPLE_GUIDE_MENU_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap()
+    });
+
+    detect_template(mat, &*TEMPLATE, Point::default(), 0.75).is_ok()
+}
+
+fn detect_maple_guide_towns(mat: &impl ToInputArray) -> Vec<Rect> {
+    static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(
+            include_bytes!(env!("MAPLE_GUIDE_TOWN_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap()
+    });
+    static TEMPLATE_MASK: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(
+            include_bytes!(env!("MAPLE_GUIDE_TOWN_MASK_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap()
+    });
+
+    detect_template_multiple(mat, &*TEMPLATE, &*TEMPLATE_MASK, Point::default(), 9, 0.75)
+        .into_iter()
+        .filter_map(|result| result.ok().map(|(rect, _)| rect))
+        .collect()
+}
+
+fn detect_change_channel_menu_opened(mat: &impl ToInputArray) -> bool {
+    static TEMPLATE: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(
+            include_bytes!(env!("CHANGE_CHANNEL_MENU_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap()
+    });
+
+    detect_template(mat, &*TEMPLATE, Point::default(), 0.75).is_ok()
 }
 
 /// Detects a single match from `template` with the given BGR image `Mat`.

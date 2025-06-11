@@ -12,16 +12,17 @@ use ordered_hash_map::OrderedHashMap;
 use rand::seq::IteratorRandom;
 
 use crate::{
-    ActionKeyDirection, ActionKeyWith, AutoMobbing, FamiliarRarity, KeyBinding, Position,
-    RotationMode, SwappableFamiliars,
+    ActionKeyDirection, ActionKeyWith, AutoMobbing, FamiliarRarity, KeyBinding, PanicMode,
+    Position, RotationMode, SwappableFamiliars,
     array::Array,
     buff::{Buff, BuffKind},
     context::{Context, MS_PER_TICK},
     database::{Action, ActionCondition, ActionKey, ActionMove, PingPong},
     minimap::Minimap,
     player::{
-        GRAPPLING_THRESHOLD, PingPongDirection, Player, PlayerAction, PlayerActionAutoMob,
-        PlayerActionFamiliarsSwapping, PlayerActionKey, PlayerActionPingPong, PlayerState,
+        GRAPPLING_THRESHOLD, PanicTo, PingPongDirection, Player, PlayerAction, PlayerActionAutoMob,
+        PlayerActionFamiliarsSwapping, PlayerActionKey, PlayerActionPanic, PlayerActionPingPong,
+        PlayerState,
     },
     skill::{Skill, SkillKind},
     task::{Task, Update, update_detection_task},
@@ -146,22 +147,40 @@ pub struct Rotator {
     priority_actions_queue: VecDeque<u32>,
 }
 
+pub struct RotatorBuildArgs<'a> {
+    pub mode: RotatorMode,
+    pub actions: &'a [Action],
+    pub buffs: &'a [(BuffKind, KeyBinding)],
+    pub potion_key: KeyBinding,
+    pub familiar_essence_key: KeyBinding,
+    pub familiar_swappable_slots: SwappableFamiliars,
+    pub familiar_swappable_rarities: &'a HashSet<FamiliarRarity>,
+    pub familiar_swap_check_millis: u64,
+    pub panic_mode: PanicMode,
+    pub enable_panic_mode: bool,
+    pub enable_rune_solving: bool,
+    pub enable_familiars_swapping: bool,
+    pub enable_reset_normal_actions_on_erda: bool,
+}
+
 impl Rotator {
-    #[allow(clippy::too_many_arguments)]
-    pub fn build_actions(
-        &mut self,
-        mode: RotatorMode,
-        actions: &[Action],
-        buffs: &[(BuffKind, KeyBinding)],
-        potion_key: KeyBinding,
-        familiar_essence_key: KeyBinding,
-        familiar_swappable_slots: SwappableFamiliars,
-        familiar_swappable_rarities: &HashSet<FamiliarRarity>,
-        familiar_swap_check_millis: u64,
-        enable_rune_solving: bool,
-        enable_familiars_swapping: bool,
-        enable_reset_normal_actions_on_erda: bool,
-    ) {
+    pub fn build_actions(&mut self, args: RotatorBuildArgs<'_>) {
+        let RotatorBuildArgs {
+            mode,
+            actions,
+            buffs,
+            potion_key,
+            familiar_essence_key,
+            familiar_swappable_slots,
+            familiar_swappable_rarities,
+            familiar_swap_check_millis,
+            panic_mode,
+            enable_panic_mode,
+            enable_rune_solving,
+            enable_familiars_swapping,
+            enable_reset_normal_actions_on_erda,
+        } = args;
+
         debug!(target: "rotator", "preparing actions {actions:?} {buffs:?}");
         self.reset_queue();
         self.normal_actions.clear();
@@ -237,6 +256,12 @@ impl Rotator {
                     ActionCondition::EveryMillis(familiar_swap_check_millis),
                     true,
                 ),
+            );
+        }
+        if enable_panic_mode {
+            self.priority_actions.insert(
+                self.id_counter.fetch_add(1, Ordering::Relaxed),
+                panic_priority_action(panic_mode),
             );
         }
         for (i, key) in buffs.iter().copied() {
@@ -927,6 +952,40 @@ fn buff_priority_action(buff: BuffKind, key: KeyBinding) -> PriorityAction {
 }
 
 #[inline]
+fn panic_priority_action(mode: PanicMode) -> PriorityAction {
+    let to = match mode {
+        PanicMode::CycleChannel => PanicTo::Channel,
+        PanicMode::GoToTown => PanicTo::Town,
+    };
+
+    PriorityAction {
+        condition: Condition(Box::new(|context, _, last_queued_time| {
+            if context.halting {
+                return ConditionResult::Ignore;
+            }
+            match context.minimap {
+                Minimap::Detecting => ConditionResult::Skip,
+                Minimap::Idle(idle) => {
+                    if !idle.has_any_other_player() || last_queued_time.is_none() {
+                        return ConditionResult::Ignore;
+                    }
+                    if at_least_millis_passed_since(last_queued_time, 15000) {
+                        ConditionResult::Queue
+                    } else {
+                        ConditionResult::Skip
+                    }
+                }
+            }
+        })),
+        condition_kind: None,
+        inner: RotatorAction::Single(PlayerAction::Panic(PlayerActionPanic { to })),
+        queue_to_front: true,
+        ignoring: false,
+        last_queued_time: None,
+    }
+}
+
+#[inline]
 fn at_least_millis_passed_since(last_queued_time: Option<Instant>, millis: u128) -> bool {
     last_queued_time
         .map(|instant| Instant::now().duration_since(instant).as_millis() >= millis)
@@ -1049,20 +1108,23 @@ mod tests {
         let mut rotator = Rotator::default();
         let actions = vec![NORMAL_ACTION, NORMAL_ACTION, PRIORITY_ACTION];
         let buffs = vec![(BuffKind::Rune, KeyBinding::default()); 4];
+        let args = RotatorBuildArgs {
+            mode: RotatorMode::default(),
+            actions: &actions,
+            buffs: &buffs,
+            potion_key: KeyBinding::default(),
+            familiar_essence_key: KeyBinding::default(),
+            familiar_swappable_slots: SwappableFamiliars::default(),
+            familiar_swappable_rarities: &HashSet::default(),
+            familiar_swap_check_millis: 0,
+            panic_mode: PanicMode::default(),
+            enable_panic_mode: false,
+            enable_rune_solving: true,
+            enable_familiars_swapping: false,
+            enable_reset_normal_actions_on_erda: false,
+        };
 
-        rotator.build_actions(
-            RotatorMode::default(),
-            &actions,
-            &buffs,
-            KeyBinding::default(),
-            KeyBinding::default(),
-            SwappableFamiliars::default(),
-            &HashSet::default(),
-            0,
-            true,
-            false,
-            false,
-        );
+        rotator.build_actions(args);
         assert_eq!(rotator.priority_actions.len(), 7);
         assert_eq!(rotator.normal_actions.len(), 2);
     }

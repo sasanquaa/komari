@@ -108,6 +108,7 @@ pub fn update_solving_rune_context(
             }
             PlayerAction::PingPong(_)
             | PlayerAction::AutoMob(_)
+            | PlayerAction::Panic(_)
             | PlayerAction::Key(_)
             | PlayerAction::FamiliarsSwapping(_)
             | PlayerAction::Move(_) => {

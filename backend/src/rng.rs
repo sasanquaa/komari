@@ -62,6 +62,15 @@ impl Rng {
         self.inner.borrow_mut().random_range(range)
     }
 
+    #[inline]
+    pub fn random_choose<'a, T>(&self, items: &'a [T]) -> Option<&'a T> {
+        if items.is_empty() {
+            None
+        } else {
+            Some(&items[self.random_range(0..items.len())])
+        }
+    }
+
     /// Samples a random `(delay, tick count)` pair.
     ///
     /// The delay is sampled from a normal distribution with mean `mean_ms` and

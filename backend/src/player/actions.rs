@@ -130,12 +130,6 @@ pub struct PlayerActionPingPong {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct PlayerActionFamiliarsSwapping {
-    pub swappable_slots: SwappableFamiliars,
-    pub swappable_rarities: Array<FamiliarRarity, 2>,
-}
-
-#[derive(Clone, Copy, Debug)]
 pub enum PingPongDirection {
     Left,
     Right,
@@ -148,6 +142,23 @@ impl Default for PingPongDirection {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct PlayerActionFamiliarsSwapping {
+    pub swappable_slots: SwappableFamiliars,
+    pub swappable_rarities: Array<FamiliarRarity, 2>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct PlayerActionPanic {
+    pub to: PanicTo,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum PanicTo {
+    Town,
+    Channel,
+}
+
 /// Represents an action the [`Rotator`] can use.
 #[derive(Clone, Copy, Debug, Display)]
 pub enum PlayerAction {
@@ -157,13 +168,15 @@ pub enum PlayerAction {
     Move(PlayerActionMove),
     /// Solve rune action.
     SolveRune,
-    /// Auto-mobbing action provided by [`Rotator`].
+    /// Auto-mobbing action.
     #[strum(to_string = "AutoMob({0})")]
     AutoMob(PlayerActionAutoMob),
-    /// Ping pong action provided by [`Rotator`].
+    /// Ping pong action.
     PingPong(PlayerActionPingPong),
     /// Familiars swapping action.
     FamiliarsSwapping(PlayerActionFamiliarsSwapping),
+    /// Panicking to town or another channel action.
+    Panic(PlayerActionPanic),
 }
 
 impl From<Action> for PlayerAction {
@@ -297,7 +310,8 @@ pub fn on_action_state_mut(
                 }) => {
                     state.clear_unstucking(false);
                 }
-                PlayerAction::FamiliarsSwapping(_)
+                PlayerAction::Panic(_)
+                | PlayerAction::FamiliarsSwapping(_)
                 | PlayerAction::AutoMob(_)
                 | PlayerAction::Key(PlayerActionKey { position: None, .. }) => (),
             }

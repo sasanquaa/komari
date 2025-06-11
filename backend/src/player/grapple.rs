@@ -102,10 +102,8 @@ pub fn update_grappling_context(
                             None
                         }
                     }
-                    PlayerAction::FamiliarsSwapping(_)
-                    | PlayerAction::Key(_)
-                    | PlayerAction::Move(_)
-                    | PlayerAction::SolveRune => None,
+                    PlayerAction::Key(_) | PlayerAction::Move(_) | PlayerAction::SolveRune => None,
+                    PlayerAction::Panic(_) | PlayerAction::FamiliarsSwapping(_) => unreachable!(),
                 },
                 || Player::Grappling(moving),
             )

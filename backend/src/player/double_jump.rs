@@ -9,6 +9,7 @@ use super::{
     actions::{PlayerActionPingPong, on_action_state, on_auto_mob_use_key_action},
     moving::Moving,
     timeout::update_with_timeout,
+    up_jump::UpJumping,
     use_key::UseKey,
 };
 use crate::{
@@ -34,9 +35,9 @@ const USE_KEY_X_THRESHOLD: i32 = DOUBLE_JUMP_THRESHOLD;
 const USE_KEY_Y_THRESHOLD: i32 = 10;
 
 /// Maximum number of ticks before timing out.
-///
-/// Note: Even in auto mob, also use the non-auto mob threshold.
-const TIMEOUT: u32 = MOVE_TIMEOUT * 2;
+const TIMEOUT: u32 = MOVE_TIMEOUT;
+
+const TIMEOUT_FORCED: u32 = MOVE_TIMEOUT + 3;
 
 /// Number of ticks to wait after a double jump.
 ///
@@ -152,7 +153,11 @@ pub fn update_double_jumping_context(
     update_moving_axis_context(
         moving,
         cur_pos,
-        TIMEOUT,
+        if double_jumping.forced {
+            TIMEOUT_FORCED
+        } else {
+            TIMEOUT
+        },
         |moving| Player::DoubleJumping(double_jumping.moving(moving)),
         Some(|| {
             let _ = context.keys.send_up(KeyKind::Right);
@@ -226,8 +231,10 @@ pub fn update_double_jumping_context(
                     {
                         debug!(target: "player", "performs grappling on double jump");
                         Player::Grappling(moving.completed(false).timeout(Timeout::default()))
-                    } else if moving.completed && moving.timeout.current >= MOVE_TIMEOUT {
-                        Player::Moving(moving.dest, moving.exact, moving.intermediates)
+                    } else if moving.completed {
+                        Player::DoubleJumping(
+                            double_jumping.moving(moving.timeout_current(TIMEOUT)),
+                        )
                     } else {
                         Player::DoubleJumping(double_jumping.moving(moving))
                     }
@@ -299,9 +306,9 @@ fn on_player_action(
             with: ActionKeyWith::Stationary,
             ..
         })
-        | PlayerAction::FamiliarsSwapping(_)
         | PlayerAction::SolveRune
         | PlayerAction::Move { .. } => None,
+        PlayerAction::Panic(_) | PlayerAction::FamiliarsSwapping(_) => unreachable!(),
     }
 }
 
@@ -362,7 +369,7 @@ fn on_ping_pong_use_key_action(
         let next = if has_grappling {
             Player::Grappling(moving)
         } else {
-            Player::UpJumping(moving)
+            Player::UpJumping(UpJumping::new(moving))
         };
         return Some((next, false));
     }

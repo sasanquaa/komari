@@ -114,6 +114,14 @@ pub struct MinimapIdle {
     pub platforms_bound: Option<Rect>,
 }
 
+impl MinimapIdle {
+    pub fn has_any_other_player(&self) -> bool {
+        self.has_guildie_player.value.unwrap_or_default()
+            || self.has_stranger_player.value.unwrap_or_default()
+            || self.has_friend_player.value.unwrap_or_default()
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 #[allow(clippy::large_enum_variant)] // There is only ever a single instance of Minimap
 pub enum Minimap {
@@ -332,7 +340,7 @@ fn update_other_player_task(
     kind: OtherPlayerKind,
 ) -> Threshold<bool> {
     let has_player = threshold.value.unwrap_or_default();
-    let threshold = update_threshold_detection(context, 5000, threshold, task, move |detector| {
+    let threshold = update_threshold_detection(context, 2000, threshold, task, move |detector| {
         Ok(detector.detect_player_kind(minimap, kind))
     });
     if !context.halting && !has_player && threshold.value.unwrap_or_default() {
