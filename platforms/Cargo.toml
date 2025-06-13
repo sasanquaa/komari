@@ -4,14 +4,14 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-thiserror = "2"
+thiserror = "2.0.12"
 tokio = { workspace = true }
 bit-vec = "0.8"
 tao = "0.33.0"
 softbuffer = "0.4.6"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.59", features = [
+windows = { version = "0.61.3", features = [
     "Win32_Foundation",
     "Win32_UI_HiDpi",
     "Win32_UI_WindowsAndMessaging",
@@ -31,4 +31,4 @@ windows = { version = "0.59", features = [
 ] }
 
 [target.'cfg(windows)'.build-dependencies]
-tauri-winres = "0.1"
+tauri-winres = "0.3.1"

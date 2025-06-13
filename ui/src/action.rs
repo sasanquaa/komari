@@ -328,11 +328,11 @@ fn ActionPresetTab(
                         ActionEnumSelect {
                             label: "Type",
                             on_input: move |action: Action| {
-                                if let Some((editing_action, _)) = *editing_action.peek() {
-                                    if editing_action.to_string() == action.to_string() {
-                                        on_edit(editing_action);
-                                        return;
-                                    }
+                                if let Some((editing_action, _)) = *editing_action.peek()
+                                    && editing_action.to_string() == action.to_string()
+                                {
+                                    on_edit(editing_action);
+                                    return;
                                 }
                                 on_edit(action);
                             },
@@ -456,10 +456,8 @@ fn ActionItemList(
                             drag_index.set(Some(i));
                         },
                         on_drop: move |(i, swapping)| {
-                            if let Some(drag_i) = drag_index.take() {
-                                if drag_i != i {
-                                    on_change((drag_i, i, swapping));
-                                }
+                            if let Some(drag_i) = drag_index.take() && drag_i != i {
+                                on_change((drag_i, i, swapping));
                             }
                         },
                     }

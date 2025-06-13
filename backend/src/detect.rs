@@ -38,8 +38,9 @@ use opencv::{
     },
 };
 use ort::{
+    execution_providers::CUDAExecutionProvider,
     session::{Session, SessionInputValue, SessionOutputs},
-    value::Tensor,
+    value::TensorRef,
 };
 use platforms::windows::KeyKind;
 
@@ -453,7 +454,7 @@ impl Detector for CachedDetector {
     }
 }
 
-fn crop_to_buffs_region(mat: &impl MatTraitConst) -> BoxedRef<Mat> {
+fn crop_to_buffs_region(mat: &impl MatTraitConst) -> BoxedRef<'_, Mat> {
     let size = mat.size().unwrap();
     // crop to top right of the image for buffs region
     let crop_x = size.width / 3;
@@ -468,10 +469,11 @@ fn detect_mobs(
     bound: Rect,
     player: Point,
 ) -> Result<Vec<Point>> {
-    static MOB_MODEL: LazyLock<Session> = LazyLock::new(|| {
-        Session::builder()
-            .and_then(|b| b.commit_from_memory(include_bytes!(env!("MOB_MODEL"))))
-            .expect("unable to build mob detection session")
+    static MOB_MODEL: LazyLock<Mutex<Session>> = LazyLock::new(|| {
+        Mutex::new(
+            build_session(include_bytes!(env!("MOB_MODEL")))
+                .expect("unable to build mob detection session"),
+        )
     });
 
     /// Approximates the mob coordinate on screen to mob coordinate on minimap.
@@ -546,7 +548,8 @@ fn detect_mobs(
 
     let size = mat.size().unwrap();
     let (mat_in, w_ratio, h_ratio, left, top) = preprocess_for_yolo(mat);
-    let result = MOB_MODEL.run([norm_rgb_to_input_value(&mat_in)]).unwrap();
+    let mut model = MOB_MODEL.lock().unwrap();
+    let result = model.run([norm_rgb_to_input_value(&mat_in)]).unwrap();
     let result = from_output_value(&result);
     // SAFETY: 0..result.rows() is within Mat bounds
     let points = (0..result.rows())
@@ -647,10 +650,11 @@ fn detect_elite_boss_bar(mat: &impl MatTraitConst) -> bool {
 }
 
 fn detect_minimap(mat: &impl MatTraitConst, border_threshold: u8) -> Result<Rect> {
-    static MINIMAP_MODEL: LazyLock<Session> = LazyLock::new(|| {
-        Session::builder()
-            .and_then(|b| b.commit_from_memory(include_bytes!(env!("MINIMAP_MODEL"))))
-            .expect("unable to build minimap detection session")
+    static MINIMAP_MODEL: LazyLock<Mutex<Session>> = LazyLock::new(|| {
+        Mutex::new(
+            build_session(include_bytes!(env!("MINIMAP_MODEL")))
+                .expect("unable to build minimap detection session"),
+        )
     });
 
     enum Border {
@@ -715,9 +719,8 @@ fn detect_minimap(mat: &impl MatTraitConst, border_threshold: u8) -> Result<Rect
 
     let size = mat.size().unwrap();
     let (mat_in, w_ratio, h_ratio, left, top) = preprocess_for_yolo(mat);
-    let result = MINIMAP_MODEL
-        .run([norm_rgb_to_input_value(&mat_in)])
-        .unwrap();
+    let mut model = MINIMAP_MODEL.lock().unwrap();
+    let result = model.run([norm_rgb_to_input_value(&mat_in)]).unwrap();
     let mat_out = from_output_value(&result);
     let pred = (0..mat_out.rows())
         // SAFETY: 0..result.rows() is within Mat bounds
@@ -1237,10 +1240,11 @@ fn detect_player_buff<T: MatTraitConst + ToInputArray>(mat: &T, kind: BuffKind) 
 }
 
 fn detect_rune_arrows_with_scores_regions(mat: &impl MatTraitConst) -> Vec<(Rect, KeyKind, f32)> {
-    static RUNE_MODEL: LazyLock<Session> = LazyLock::new(|| {
-        Session::builder()
-            .and_then(|b| b.commit_from_memory(include_bytes!(env!("RUNE_MODEL"))))
-            .expect("unable to build rune detection session")
+    static RUNE_MODEL: LazyLock<Mutex<Session>> = LazyLock::new(|| {
+        Mutex::new(
+            build_session(include_bytes!(env!("RUNE_MODEL")))
+                .expect("unable to build rune detection session"),
+        )
     });
 
     fn map_arrow(pred: &[f32]) -> KeyKind {
@@ -1255,7 +1259,8 @@ fn detect_rune_arrows_with_scores_regions(mat: &impl MatTraitConst) -> Vec<(Rect
 
     let size = mat.size().unwrap();
     let (mat_in, w_ratio, h_ratio, left, top) = preprocess_for_yolo(mat);
-    let result = RUNE_MODEL.run([norm_rgb_to_input_value(&mat_in)]).unwrap();
+    let mut model = RUNE_MODEL.lock().unwrap();
+    let result = model.run([norm_rgb_to_input_value(&mat_in)]).unwrap();
     let mat_out = from_output_value(&result);
     let mut vec = (0..mat_out.rows())
         // SAFETY: 0..outputs.rows() is within Mat bounds
@@ -2144,15 +2149,15 @@ fn extract_text_bboxes(
 ) -> Vec<Rect> {
     const TEXT_SCORE_THRESHOLD: f64 = 0.7;
     const LINK_SCORE_THRESHOLD: f64 = 0.4;
-    static TEXT_DETECTION_MODEL: LazyLock<Session> = LazyLock::new(|| {
-        Session::builder()
-            .and_then(|b| b.commit_from_memory(include_bytes!(env!("TEXT_DETECTION_MODEL"))))
-            .expect("unable to build minimap name detection session")
+    static TEXT_DETECTION_MODEL: LazyLock<Mutex<Session>> = LazyLock::new(|| {
+        Mutex::new(
+            build_session(include_bytes!(env!("TEXT_DETECTION_MODEL")))
+                .expect("unable to build minimap name detection session"),
+        )
     });
 
-    let result = TEXT_DETECTION_MODEL
-        .run([norm_rgb_to_input_value(mat_in)])
-        .unwrap();
+    let mut model = TEXT_DETECTION_MODEL.lock().unwrap();
+    let result = model.run([norm_rgb_to_input_value(mat_in)]).unwrap();
     let mat = from_output_value(&result);
     let text_score = mat
         .ranges(&Vector::from_iter([
@@ -2474,7 +2479,7 @@ fn to_grayscale(mat: &impl MatTraitConst, add_contrast: bool) -> Mat {
 /// The returned `Mat` has shape `[..dims]` with batch size (1) removed.
 #[inline]
 fn from_output_value(result: &SessionOutputs) -> Mat {
-    let (dims, outputs) = result["output0"].try_extract_raw_tensor::<f32>().unwrap();
+    let (dims, outputs) = result["output0"].try_extract_tensor::<f32>().unwrap();
     let dims = dims.iter().map(|&dim| dim as i32).collect::<Vec<i32>>();
     let mat = Mat::new_nd_with_data(dims.as_slice(), outputs).unwrap();
     let mat = mat.reshape_nd(1, &dims.as_slice()[1..]).unwrap();
@@ -2487,12 +2492,25 @@ fn from_output_value(result: &SessionOutputs) -> Mat {
 /// will panic if not. The `Mat` is reshaped to single channel, tranposed to `[1, 3, H, W]` and
 /// converted to `SessionInputValue`.
 #[inline]
-fn norm_rgb_to_input_value(mat: &impl MatTraitConst) -> SessionInputValue {
+fn norm_rgb_to_input_value(mat: &impl MatTraitConst) -> SessionInputValue<'_> {
     let mat = mat.reshape_nd(1, &[1, mat.rows(), mat.cols(), 3]).unwrap();
     let mut mat_t = Mat::default();
     transpose_nd(&mat, &Vector::from_slice(&[0, 3, 1, 2]), &mut mat_t).unwrap();
     let shape = mat_t.mat_size();
     let input = (shape.as_slice(), mat_t.data_typed::<f32>().unwrap());
-    let tensor = Tensor::from_array(input).unwrap();
-    SessionInputValue::Owned(tensor.into_dyn())
+    let tensor = TensorRef::from_array_view(input).unwrap();
+    SessionInputValue::Owned(tensor.clone().into_dyn())
+}
+
+#[inline]
+fn build_session(model: &[u8]) -> Result<Session> {
+    // TODO: ort supports fallback to CPU if GPU is not found. Check if missing GPU-related
+    // TODO: onnxruntime dlls affect this.
+    if cfg!(feature = "gpu") {
+        Ok(Session::builder()?
+            .with_execution_providers([CUDAExecutionProvider::default().build()])?
+            .commit_from_memory(model)?)
+    } else {
+        Ok(Session::builder()?.commit_from_memory(model)?)
+    }
 }

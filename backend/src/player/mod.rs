@@ -98,7 +98,7 @@ pub enum Player {
 impl Player {
     #[inline]
     pub fn can_action_override_current_state(&self) -> bool {
-        const OVERRIDABLE_DISTANCE: i32 = 6;
+        const OVERRIDABLE_DISTANCE: i32 = DOUBLE_JUMP_THRESHOLD / 2;
 
         match self {
             Player::Detecting

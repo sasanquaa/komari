@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, fs, path::PathBuf};
 
 fn main() {
     let dir = env::current_dir().unwrap().join("resources");
@@ -68,7 +68,11 @@ fn main() {
     let mob_model = dir.join("mob_nms.onnx");
     let rune_model = dir.join("rune_nms.onnx");
     let minimap_model = dir.join("minimap_nms.onnx");
-    let onnx_runtime = dir.join("onnxruntime.dll");
+    let onnx_runtime = dir.join("onnxruntime/onnxruntime.dll");
+    #[cfg(feature = "gpu")]
+    let onnx_runtime_cuda = dir.join("onnxruntime/onnxruntime_providers_cuda.dll");
+    #[cfg(feature = "gpu")]
+    let onnx_runtime_shared = dir.join("onnxruntime/onnxruntime_providers_shared.dll");
     let text_detection_model = dir.join("text_detection.onnx");
     let text_recognition_model = dir.join("text_recognition.onnx");
     let text_alphabet_txt = dir.join("alphabet_94.txt");
@@ -317,10 +321,41 @@ fn main() {
         change_channel_menu.to_str().unwrap()
     );
 
-    println!(
-        "cargo:rustc-env=ONNX_RUNTIME={}",
-        onnx_runtime.to_str().unwrap()
-    );
+    // onnxruntime dependencies
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let target_dir = out_dir.ancestors().nth(5).unwrap();
+    let exe_build_type = if cfg!(debug_assertions) {
+        "debug"
+    } else {
+        "release"
+    };
+    let exe_dir = target_dir
+        .join("dx")
+        .join("ui")
+        .join(exe_build_type)
+        .join("windows")
+        .join("app");
+    let _ = fs::create_dir_all(&exe_dir);
+
+    fs::copy(
+        &onnx_runtime,
+        exe_dir.join(onnx_runtime.file_name().unwrap()),
+    )
+    .unwrap();
+    #[cfg(feature = "gpu")]
+    fs::copy(
+        &onnx_runtime_cuda,
+        exe_dir.join(onnx_runtime_cuda.file_name().unwrap()),
+    )
+    .unwrap();
+    #[cfg(feature = "gpu")]
+    fs::copy(
+        &onnx_runtime_shared,
+        exe_dir.join(onnx_runtime_shared.file_name().unwrap()),
+    )
+    .unwrap();
+
+    // Detection models
     println!("cargo:rustc-env=MOB_MODEL={}", mob_model.to_str().unwrap());
     println!(
         "cargo:rustc-env=MINIMAP_MODEL={}",

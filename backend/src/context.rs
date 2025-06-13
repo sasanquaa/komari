@@ -1,8 +1,6 @@
 use std::{
     cell::RefCell,
     env,
-    fs::File,
-    io::Write,
     rc::Rc,
     sync::atomic::{AtomicBool, Ordering},
     thread,
@@ -140,10 +138,7 @@ pub fn init() {
             .parent()
             .unwrap()
             .join("onnxruntime.dll");
-        if let Ok(mut file) = File::create_new(dll.clone()) {
-            file.write_all(include_bytes!(env!("ONNX_RUNTIME")))
-                .unwrap();
-        }
+
         ort::init_from(dll.to_str().unwrap()).commit().unwrap();
         windows::init();
         thread::spawn(|| {

@@ -1,12 +1,15 @@
 use std::{cell::Cell, ffi::OsString, os::windows::ffi::OsStringExt, ptr, str};
 
-use windows::Win32::{
-    Foundation::{BOOL, HWND, LPARAM},
-    Graphics::Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute},
-    UI::WindowsAndMessaging::{
-        EnumWindows, GWL_EXSTYLE, GWL_STYLE, GetClassNameW, GetWindowLongPtrW, GetWindowTextW,
-        IsWindowVisible, WS_DISABLED, WS_EX_TOOLWINDOW,
+use windows::{
+    Win32::{
+        Foundation::{HWND, LPARAM},
+        Graphics::Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute},
+        UI::WindowsAndMessaging::{
+            EnumWindows, GWL_EXSTYLE, GWL_STYLE, GetClassNameW, GetWindowLongPtrW, GetWindowTextW,
+            IsWindowVisible, WS_DISABLED, WS_EX_TOOLWINDOW,
+        },
     },
+    core::BOOL,
 };
 
 #[derive(Clone, Debug)]

@@ -5,31 +5,32 @@ edition.workspace = true
 
 [dependencies]
 tokio = { workspace = true }
-tonic = "0.13.0"
+tonic = "0.13.1"
 bit-vec = "0.8"
-prost = "0.13"
+prost = "0.13.5"
 platforms = { workspace = true }
-ort = { version = "2.0.0-rc.9", default-features = false, features = [
+ort = { version = "2.0.0-rc.10", default-features = false, features = [
     "load-dynamic",
+    "cuda",
 ] }
-opencv = { version = "0.94.2", default-features = false, features = [
+opencv = { version = "0.94.4", default-features = false, features = [
     "dnn",
     "imgcodecs",
     "imgproc",
     "highgui",
 ] }
-anyhow = "1.0.95"
-log = "0.4.25"
+anyhow = "1.0.98"
+log = "0.4.27"
 rand = { workspace = true }
 rand_distr = "0.5.1"
-rusqlite = { version = "0.33.0", features = ["bundled"] }
+rusqlite = { version = "0.36.0", features = ["bundled"] }
 serde = { workspace = true }
-serde_json = { version = "1.0.138" }
+serde_json = { version = "1.0.140" }
 strum = { workspace = true }
 ordered_hash_map = "0.4.0"
 noise = "0.9"
 dyn-clone = "1.0.19"
-reqwest = { version = "0.12.15", features = ["multipart"] }
+reqwest = { version = "0.12.20", features = ["multipart"] }
 include_dir = "0.7.4"
 
 [build-dependencies]
@@ -37,3 +38,6 @@ tonic-build = "*"
 
 [dev-dependencies]
 mockall = "0.13.1"
+
+[features]
+gpu = []

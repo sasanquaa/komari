@@ -155,7 +155,7 @@ fn update_detecting_context(context: &Context, state: &mut MinimapState) -> Mini
             let tl = anchor_at(detector.mat(), bbox.tl(), size, 1)?;
             let br = anchor_at(detector.mat(), bbox.br(), size, -1)?;
             let anchors = Anchors { tl, br };
-            debug!(target: "minimap", "anchor points: {:?}", anchors);
+            debug!(target: "minimap", "anchor points: {anchors:?}");
             Ok((anchors, bbox))
         })
     else {

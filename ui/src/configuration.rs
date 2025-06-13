@@ -571,10 +571,10 @@ fn ConfigFixedActions(
     let actions_view = use_memo(move || config_view().actions);
 
     use_effect(move || {
-        if let Some(index) = editing_action_index() {
-            if let Some(action) = actions_view.peek().get(index) {
-                editing_action.set(*action);
-            }
+        if let Some(index) = editing_action_index()
+            && let Some(action) = actions_view.peek().get(index)
+        {
+            editing_action.set(*action);
         }
     });
 

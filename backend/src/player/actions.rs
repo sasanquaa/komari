@@ -2,7 +2,7 @@ use opencv::core::{Point, Rect};
 use platforms::windows::KeyKind;
 use strum::Display;
 
-use super::{DOUBLE_JUMP_THRESHOLD, Player, PlayerState, use_key::UseKey};
+use super::{Player, PlayerState, use_key::UseKey};
 use crate::{
     Action, ActionKey, ActionKeyDirection, ActionKeyWith, ActionMove, FamiliarRarity, KeyBinding,
     Position, SwappableFamiliars,
@@ -196,10 +196,8 @@ pub fn on_ping_pong_double_jump_action(
     direction: PingPongDirection,
 ) -> (Player, bool) {
     let hit_x_bound_edge = match direction {
-        PingPongDirection::Left => (cur_pos.x - bound.x).abs() <= DOUBLE_JUMP_THRESHOLD,
-        PingPongDirection::Right => {
-            (cur_pos.x - bound.x - bound.width).abs() <= DOUBLE_JUMP_THRESHOLD
-        }
+        PingPongDirection::Left => cur_pos.x - bound.x <= 0,
+        PingPongDirection::Right => cur_pos.x - bound.x - bound.width >= 0,
     };
     if hit_x_bound_edge {
         return (Player::Idle, true);

@@ -314,8 +314,7 @@ pub fn update_moving_context(
         _ => {
             debug!(
                 target: "player",
-                "reached {:?} with actual position {:?}",
-                dest, cur_pos
+                "reached {dest:?} with actual position {cur_pos:?}"
             );
             if let Some(mut intermediates) = intermediates
                 && let Some((dest, exact)) = intermediates.next()
