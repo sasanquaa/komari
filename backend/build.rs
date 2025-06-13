@@ -335,6 +335,8 @@ fn main() {
         .join(exe_build_type)
         .join("windows")
         .join("app");
+    let _ = fs::create_dir_all(&exe_dir);
+
     fs::copy(
         &onnx_runtime,
         exe_dir.join(onnx_runtime.file_name().unwrap()),
