@@ -11,4 +11,4 @@ dioxus = { version = "0.6.3", features = ["desktop"] }
 backend = { workspace = true }
 serde = { workspace = true }
 tracing-log = "0.2.0"
-num-traits = "0.2"
+num-traits = "0.2.19"
