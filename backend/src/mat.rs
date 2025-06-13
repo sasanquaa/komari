@@ -40,7 +40,7 @@ impl From<Mat> for OwnedMat {
 }
 
 impl ToInputArray for OwnedMat {
-    fn input_array(&self) -> opencv::Result<BoxedRef<_InputArray>> {
+    fn input_array(&self) -> opencv::Result<BoxedRef<'_, _InputArray>> {
         self.mat.input_array()
     }
 }

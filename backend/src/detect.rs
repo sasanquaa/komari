@@ -453,7 +453,7 @@ impl Detector for CachedDetector {
     }
 }
 
-fn crop_to_buffs_region(mat: &impl MatTraitConst) -> BoxedRef<Mat> {
+fn crop_to_buffs_region(mat: &impl MatTraitConst) -> BoxedRef<'_, Mat> {
     let size = mat.size().unwrap();
     // crop to top right of the image for buffs region
     let crop_x = size.width / 3;
@@ -2487,7 +2487,7 @@ fn from_output_value(result: &SessionOutputs) -> Mat {
 /// will panic if not. The `Mat` is reshaped to single channel, tranposed to `[1, 3, H, W]` and
 /// converted to `SessionInputValue`.
 #[inline]
-fn norm_rgb_to_input_value(mat: &impl MatTraitConst) -> SessionInputValue {
+fn norm_rgb_to_input_value(mat: &impl MatTraitConst) -> SessionInputValue<'_> {
     let mat = mat.reshape_nd(1, &[1, mat.rows(), mat.cols(), 3]).unwrap();
     let mut mat_t = Mat::default();
     transpose_nd(&mat, &Vector::from_slice(&[0, 3, 1, 2]), &mut mat_t).unwrap();
