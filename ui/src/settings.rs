@@ -69,6 +69,16 @@ pub fn Settings(
                     value: settings_view().enable_rune_solving,
                 }
                 SettingsCheckbox {
+                    label: "Enable Meet Boss Switch Channel",
+                    on_input: move |enable_meet_boss_switch_channel| {
+                        on_settings(SettingsData {
+                            enable_meet_boss_switch_channel,
+                            ..settings_view.peek().clone()
+                        });
+                    },
+                    value: settings_view().enable_meet_boss_switch_channel,
+                }
+                SettingsCheckbox {
                     label: "Enable Panic Mode",
                     on_input: move |enable_panic_mode| {
                         on_settings(SettingsData {
