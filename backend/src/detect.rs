@@ -38,6 +38,7 @@ use opencv::{
     },
 };
 use ort::{
+    execution_providers::CUDAExecutionProvider,
     session::{Session, SessionInputValue, SessionOutputs},
     value::TensorRef,
 };
@@ -470,8 +471,7 @@ fn detect_mobs(
 ) -> Result<Vec<Point>> {
     static MOB_MODEL: LazyLock<Mutex<Session>> = LazyLock::new(|| {
         Mutex::new(
-            Session::builder()
-                .and_then(|b| b.commit_from_memory(include_bytes!(env!("MOB_MODEL"))))
+            build_session(include_bytes!(env!("MOB_MODEL")))
                 .expect("unable to build mob detection session"),
         )
     });
@@ -652,8 +652,7 @@ fn detect_elite_boss_bar(mat: &impl MatTraitConst) -> bool {
 fn detect_minimap(mat: &impl MatTraitConst, border_threshold: u8) -> Result<Rect> {
     static MINIMAP_MODEL: LazyLock<Mutex<Session>> = LazyLock::new(|| {
         Mutex::new(
-            Session::builder()
-                .and_then(|b| b.commit_from_memory(include_bytes!(env!("MINIMAP_MODEL"))))
+            build_session(include_bytes!(env!("MINIMAP_MODEL")))
                 .expect("unable to build minimap detection session"),
         )
     });
@@ -1243,8 +1242,7 @@ fn detect_player_buff<T: MatTraitConst + ToInputArray>(mat: &T, kind: BuffKind) 
 fn detect_rune_arrows_with_scores_regions(mat: &impl MatTraitConst) -> Vec<(Rect, KeyKind, f32)> {
     static RUNE_MODEL: LazyLock<Mutex<Session>> = LazyLock::new(|| {
         Mutex::new(
-            Session::builder()
-                .and_then(|b| b.commit_from_memory(include_bytes!(env!("RUNE_MODEL"))))
+            build_session(include_bytes!(env!("RUNE_MODEL")))
                 .expect("unable to build rune detection session"),
         )
     });
@@ -2153,8 +2151,7 @@ fn extract_text_bboxes(
     const LINK_SCORE_THRESHOLD: f64 = 0.4;
     static TEXT_DETECTION_MODEL: LazyLock<Mutex<Session>> = LazyLock::new(|| {
         Mutex::new(
-            Session::builder()
-                .and_then(|b| b.commit_from_memory(include_bytes!(env!("TEXT_DETECTION_MODEL"))))
+            build_session(include_bytes!(env!("TEXT_DETECTION_MODEL")))
                 .expect("unable to build minimap name detection session"),
         )
     });
@@ -2503,4 +2500,17 @@ fn norm_rgb_to_input_value(mat: &impl MatTraitConst) -> SessionInputValue<'_> {
     let input = (shape.as_slice(), mat_t.data_typed::<f32>().unwrap());
     let tensor = TensorRef::from_array_view(input).unwrap();
     SessionInputValue::Owned(tensor.clone().into_dyn())
+}
+
+#[inline]
+fn build_session(model: &[u8]) -> Result<Session> {
+    // TODO: ort supports fallback to CPU if GPU is not found. Check if missing GPU-related
+    // TODO: onnxruntime dlls affect this.
+    if cfg!(feature = "gpu") {
+        Ok(Session::builder()?
+            .with_execution_providers([CUDAExecutionProvider::default().build()])?
+            .commit_from_memory(model)?)
+    } else {
+        Ok(Session::builder()?.commit_from_memory(model)?)
+    }
 }

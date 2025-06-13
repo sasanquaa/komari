@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - "master"
+      - "v*.*.*"
     tags:
       - "v*.*.*"
     paths-ignore:
@@ -46,6 +47,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
 
       - uses: actions/cache@v4
         with:
@@ -110,7 +113,9 @@ jobs:
           cargo clippy -- -D warnings
           cargo test --verbose
 
-      - name: Build
+      # Build CPU and upload
+      
+      - name: Build CPU
         shell: pwsh
         run: |
           dx build --verbose --release --package ui
@@ -132,10 +137,29 @@ jobs:
       - if: startsWith(github.ref, 'refs/tags/')
         run: Compress-Archive -Path target/dx/ui/debug/windows/app/* -Destination app-debug.zip
 
+      # Build GPU and upload if release
+
+      - name: Build GPU
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          dx build --verbose --release --package ui -- --features backend/gpu
+          dx build --verbose --package ui -- --features backend/gpu
+
+      - if: startsWith(github.ref, 'refs/tags/')
+        run: Compress-Archive -Path target/dx/ui/release/windows/app/* -Destination app-gpu.zip
+
+      - if: startsWith(github.ref, 'refs/tags/')
+        run: Compress-Archive -Path target/dx/ui/debug/windows/app/* -Destination app-debug-gpu.zip
+
+      # Release
+
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           draft: true
           files: |
             app.zip
+            app-gpu.zip
             app-debug.zip
+            app-debug-gpu.zip

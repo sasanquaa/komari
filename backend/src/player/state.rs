@@ -486,7 +486,7 @@ impl PlayerState {
             *count += 1;
         }
         let count = *count;
-        debug!(target: "player", "last movement {:?}", count_map);
+        debug!(target: "player", "last movement {count_map:?}");
         count >= count_max
     }
 
@@ -1009,7 +1009,7 @@ impl PlayerState {
                 let (current_bar, max_bar) =
                     detector.detect_player_current_max_health_bars(health_bar)?;
                 let health = detector.detect_player_health(current_bar, max_bar)?;
-                debug!(target: "player", "health updated {:?}", health);
+                debug!(target: "player", "health updated {health:?}");
                 Ok(health)
             },
         ) else {
