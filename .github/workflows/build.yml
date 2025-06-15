@@ -40,7 +40,12 @@ permissions:
 jobs:
   test:
     runs-on: windows-latest
+
     steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
       # https://github.com/DioxusLabs/dioxus/issues/3433
       # Need to add dx fmt
       - uses: ./.github/actions/setup
@@ -49,6 +54,7 @@ jobs:
           vcpkg-root: ${{ env.VCPKG_ROOT }}
           protoc-version: ${{ env.PROTOC_VERSION }}
           llvm-version: ${{ env.LLVM_VERSION }}
+
       - run: |
           cargo fmt --check
           cargo clippy -- -D warnings
@@ -56,11 +62,17 @@ jobs:
 
   build:
     runs-on: windows-latest
+
     strategy:
       matrix:
         type: [release, debug]
         feature: [cpu, gpu]
+
     steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
       - uses: ./.github/actions/setup
         with:
           vcpkg-version: ${{ env.VCPKG_VERSION }}
