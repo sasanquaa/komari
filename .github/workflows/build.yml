@@ -83,9 +83,16 @@ jobs:
       - name: Build ${{ matrix.type }} ${{ matrix.feature }}
         shell: pwsh
         run: |
-          $flags = if ("${{ matrix.type }}" -eq "release") { "--release" } else { "" }
-          $features = if ("${{ matrix.feature }}" -eq "gpu") { "--features backend/gpu" } else { "" }
-          dx build --verbose $flags --package ui -- $features
+          $args = "--verbose", "--package", "ui"
+          if ("${{ matrix.type }}" -eq "release") {
+            $args += "--release"
+          }
+          if ("${{ matrix.feature }}" -eq "gpu") {
+            $args += "--"
+            $args += "--features"
+            $args += "backend/gpu"
+          }
+          dx build @args
 
       - uses: actions/upload-artifact@v4
         with:
