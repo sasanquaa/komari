@@ -1,4 +1,4 @@
-name: maple-bot
+name: komari
 
 on:
   workflow_dispatch:
@@ -17,149 +17,94 @@ on:
     paths-ignore:
       - "**/*.md"
 
+env:
+  OPENCV_MSVC_CRT: static
+  OPENCV_DISABLE_PROBES: environment,pkg_config,cmake,vcpkg_cmake
+
+  VCPKG_VERSION: "2025.04.09"
+  VCPKG_ENABLE_METRICS: 0
+  VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+  VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg/installed
+  VCPKGRS_TRIPLET: x64-windows-static
+
+  PROTOC_VERSION: "30.2.0"
+  LLVM_VERSION: "20.1.2"
+  CARGO_TERM_COLOR: always
+  SCCACHE_GHA_ENABLED: "true"
+  RUST_BACKTRACE: 1
+  RUSTC_WRAPPER: "sccache"
+
 permissions:
   contents: write
 
 jobs:
-  windows-x64-static:
-    strategy:
-      fail-fast: false
-
+  test:
     runs-on: windows-latest
-
-    env:
-      OPENCV_MSVC_CRT: static
-      OPENCV_DISABLE_PROBES: environment,pkg_config,cmake,vcpkg_cmake
-
-      VCPKG_VERSION: "2025.04.09"
-      VCPKG_ENABLE_METRICS: 0
-      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
-      VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg/installed
-      VCPKG_DEFAULT_TRIPLET: x64-windows-static
-      VCPKGRS_TRIPLET: x64-windows-static
-
-      PROTOC_VERSION: "30.2.0"
-      LLVM_VERSION: "20.1.2"
-      CARGO_TERM_COLOR: always
-      SCCACHE_GHA_ENABLED: "true"
-      RUST_BACKTRACE: 1
-      RUSTC_WRAPPER: "sccache"
 
     steps:
       - uses: actions/checkout@v4
         with:
           lfs: true
 
-      - uses: actions/cache@v4
+      # https://github.com/DioxusLabs/dioxus/issues/3433
+      # Need to add dx fmt
+      - uses: ./.github/actions/setup
         with:
-          path: ${{ github.workspace }}/vcpkg
-          key: vcpkg-${{ env.VCPKG_VERSION }}
+          vcpkg-version: ${{ env.VCPKG_VERSION }}
+          vcpkg-root: ${{ env.VCPKG_ROOT }}
+          protoc-version: ${{ env.PROTOC_VERSION }}
+          llvm-version: ${{ env.LLVM_VERSION }}
 
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly-x86_64-pc-windows-msvc
-          components: clippy, rustfmt
-
-      - name: Code format
-        # https://github.com/DioxusLabs/dioxus/issues/3433
-        # Need to add dx fmt
-        run: cargo fmt --check
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: latest
-          cache: "npm"
-          cache-dependency-path: "./ui/package-lock.json"
-
-      - uses: mozilla-actions/sccache-action@v0.0.9
-
-      - uses: cargo-bins/cargo-binstall@main
-
-      - name: Install TailwindCSS and Dioxus CLI
-        shell: pwsh
-        run: |
-          cd ui
-          npm install
-          cd ../
-          cargo binstall dioxus-cli --no-confirm
-
-      - name: Install LLVM & protoc
-        shell: pwsh
-        run: |
-          choco install -y protoc --version "$env:PROTOC_VERSION"
-          choco install -y llvm --version "$env:LLVM_VERSION"
-
-      - name: Install vcpkg
-        shell: pwsh
-        run: |
-          git clone https://github.com/Microsoft/vcpkg.git "$env:VCPKG_ROOT"
-          cd "$env:VCPKG_ROOT"
-          git fetch --all --prune --tags
-          git status
-          git checkout .
-          git checkout "$env:VCPKG_VERSION"
-          ./bootstrap-vcpkg.bat -disableMetrics
-          echo "set(VCPKG_BUILD_TYPE release)" >> triplets/x64-windows.cmake
-          echo "set(VCPKG_BUILD_TYPE release)" >> triplets/x64-windows-static.cmake
-
-      - name: Install OpenCV
-        shell: pwsh
-        run: |
-          cd "$env:VCPKG_ROOT"
-          ./vcpkg.exe install --clean-after-build --recurse opencv4[contrib,nonfree]
-
-      - name: Lint & test
-        run: |
+      - run: |
+          cargo fmt --check
           cargo clippy -- -D warnings
           cargo test --verbose
 
-      # Build CPU and upload
-      
-      - name: Build CPU
+  build:
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+        type: [release, debug]
+        feature: [cpu, gpu]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - uses: ./.github/actions/setup
+        with:
+          vcpkg-version: ${{ env.VCPKG_VERSION }}
+          vcpkg-root: ${{ env.VCPKG_ROOT }}
+          protoc-version: ${{ env.PROTOC_VERSION }}
+          llvm-version: ${{ env.LLVM_VERSION }}
+
+      - name: Build ${{ matrix.type }} ${{ matrix.feature }}
         shell: pwsh
         run: |
-          dx build --verbose --release --package ui
-          dx build --verbose --package ui
+          $args = "--verbose", "--package", "ui"
+          if ("${{ matrix.type }}" -eq "release") {
+            $args += "--release"
+          }
+          if ("${{ matrix.feature }}" -eq "gpu") {
+            $args += "--"
+            $args += "--features"
+            $args += "backend/gpu"
+          }
+          dx build @args
 
       - uses: actions/upload-artifact@v4
         with:
-          name: app
-          path: target/dx/ui/release/windows/app
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: app-debug
-          path: target/dx/ui/debug/windows/app
+          name: app-${{ matrix.type }}-${{ matrix.feature }}
+          path: target/dx/ui/${{ matrix.type }}/windows/app
 
       - if: startsWith(github.ref, 'refs/tags/')
-        run: Compress-Archive -Path target/dx/ui/release/windows/app/* -Destination app.zip
-
-      - if: startsWith(github.ref, 'refs/tags/')
-        run: Compress-Archive -Path target/dx/ui/debug/windows/app/* -Destination app-debug.zip
-
-      # Build GPU and upload if release
-
-      - name: Build GPU
-        if: startsWith(github.ref, 'refs/tags/')
-        shell: pwsh
-        run: |
-          dx build --verbose --release --package ui -- --features backend/gpu
-          dx build --verbose --package ui -- --features backend/gpu
-
-      - if: startsWith(github.ref, 'refs/tags/')
-        run: Compress-Archive -Path target/dx/ui/release/windows/app/* -Destination app-gpu.zip
-
-      - if: startsWith(github.ref, 'refs/tags/')
-        run: Compress-Archive -Path target/dx/ui/debug/windows/app/* -Destination app-debug-gpu.zip
-
-      # Release
+        run: Compress-Archive -Path target/dx/ui/${{ matrix.type }}/windows/app/* -Destination app-${{ matrix.type }}-${{ matrix.feature }}.zip
 
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           draft: true
           files: |
-            app.zip
-            app-gpu.zip
-            app-debug.zip
-            app-debug-gpu.zip
+            app-${{ matrix.type }}-${{ matrix.feature }}.zip
