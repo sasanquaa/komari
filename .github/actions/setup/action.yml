@@ -1,0 +1,65 @@
+name: Setup
+inputs:
+  vcpkg-version:
+    required: true
+  vcpkg-root:
+    required: true
+  protoc-version:
+    required: true
+  llvm-version:
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@v4
+      id: cache-vcpkg
+      with:
+        path: ${{ inputs.vcpkg-root }}
+        key: vcpkg-${{ inputs.vcpkg-version }}
+
+    - if: steps.cache-vcpkg.outputs.cache-hit != 'true'
+      shell: pwsh
+      run: |
+        git clone https://github.com/Microsoft/vcpkg.git "${{ inputs.vcpkg-root }}"
+        cd "${{ inputs.vcpkg-root }}"
+        git fetch --all --prune --tags
+        git status
+        git checkout .
+        git checkout "${{ inputs.vcpkg-version }}"
+        ./bootstrap-vcpkg.bat -disableMetrics
+        echo "set(VCPKG_BUILD_TYPE release)" >> triplets/x64-windows.cmake
+        echo "set(VCPKG_BUILD_TYPE release)" >> triplets/x64-windows-static.cmake
+        ./vcpkg.exe install --clean-after-build --recurse x64-windows-static:opencv4[contrib,nonfree]
+
+    - uses: actions/checkout@v4
+      with:
+        lfs: true
+
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: nightly-x86_64-pc-windows-msvc
+        components: clippy, rustfmt
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: latest
+        cache: "npm"
+        cache-dependency-path: "./ui/package-lock.json"
+
+    - uses: mozilla-actions/sccache-action@v0.0.9
+
+    - uses: cargo-bins/cargo-binstall@main
+
+    - name: Install TailwindCSS and Dioxus CLI
+      shell: pwsh
+      run: |
+        cd ui
+        npm install
+        cd ../
+        cargo binstall dioxus-cli --no-confirm
+
+    - name: Install LLVM & protoc
+      shell: pwsh
+      run: |
+        choco install -y protoc --version "${{ inputs.protoc-version }}"
+        choco install -y llvm --version "${{ inputs.llvm-version }}"
