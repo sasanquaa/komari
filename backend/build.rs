@@ -354,6 +354,7 @@ fn main() {
         exe_dir.join(onnx_runtime_shared.file_name().unwrap()),
     )
     .unwrap();
+    println!("cargo:rerun-if-changed={}", exe_dir.to_str().unwrap());
 
     // Detection models
     println!("cargo:rustc-env=MOB_MODEL={}", mob_model.to_str().unwrap());
