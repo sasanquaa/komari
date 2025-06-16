@@ -13,6 +13,7 @@
   - [Capture Modes](#capture-modes)
   - [Familiars Swapping](#familiars-swapping)
   - [Panic Mode](#panic-mode)
+  - [Boss Channel Switch](#boss-channel-switch)
 - [Video guides](#video-guides)
 - [Showcase](#showcase)
   - [Rotation](#rotation)
@@ -231,6 +232,10 @@ Panic mode can be enabled in `Settings` tab and:
     - `GoingToTown`: Uses Maple Guide to go to town
 
 The behavior of `GoingToTown` should be used with `Stop Actions If Fails / Changes Map` enabled or the bot will continue running. However, `CycleChannel` does not affect `Stop Actions If Fails / Changes Map` if the map is changed due to channel changing. When using either of the mode, ensure the key bindings are set up first.
+
+#### Boss Channel Switch
+(From v0.15)
+When this option is enabled in `Settings`, it will queue a channel change action when an elite boss appears.
 
 ## Video guides
 1. [Basic operations](https://youtu.be/8X2CKS7bnHY?si=3yPmVPaMsFEyDD8c)
