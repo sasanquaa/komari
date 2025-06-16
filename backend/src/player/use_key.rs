@@ -18,31 +18,31 @@ use crate::{
     },
 };
 
-/// The total number of ticks for changing direction before timing out
+/// The total number of ticks for changing direction before timing out.
 const CHANGE_DIRECTION_TIMEOUT: u32 = 3;
 
-/// The tick to which the actual key will be pressed for [`LinkKeyBinding::Along`]
+/// The tick to which the actual key will be pressed for [`LinkKeyBinding::Along`].
 const LINK_ALONG_PRESS_TICK: u32 = 2;
 
-/// The different stages of using key
+/// The different stages of using key.
 #[derive(Clone, Copy, Debug)]
 pub enum UseKeyStage {
     /// Checks whether [`ActionKeyWith`] and [`ActionKeyDirection`] are satisfied and stalls
-    /// for [`UseKey::wait_before_use_ticks`]
+    /// for [`UseKey::wait_before_use_ticks`].
     Precondition,
-    /// Changes direction to match [`ActionKeyDirection`]
+    /// Changes direction to match [`ActionKeyDirection`].
     ///
-    /// Returns to [`UseKeyStage::Precondition`] upon timeout
+    /// Returns to [`UseKeyStage::Precondition`] upon timeout.
     ChangingDirection(Timeout),
-    /// Ensures player double jumped or is stationary
+    /// Ensures player double jumped or is stationary.
     ///
     /// Returns to [`UseKeyStage::Precondition`] if player is stationary or
-    /// transfers to [`Player::DoubleJumping`]
+    /// transfers to [`Player::DoubleJumping`].
     EnsuringUseWith,
     /// Uses the actual key with optional [`LinkKeyBinding`] and stalls
-    /// for [`UseKey::wait_after_use_ticks`]
+    /// for [`UseKey::wait_after_use_ticks`].
     Using(Timeout, bool),
-    /// Ensures all [`UseKey::count`] times executed
+    /// Ensures all [`UseKey::count`] times executed.
     Postcondition,
 }
 
@@ -148,7 +148,7 @@ impl UseKey {
     }
 }
 
-/// Updates the [`Player::UseKey`] contextual state
+/// Updates the [`Player::UseKey`] contextual state.
 ///
 /// Like [`Player::SolvingRune`], this state can only be transitioned via a [`PlayerAction`]. It
 /// can be transitioned during any of the movement state. Or if there is no position, it will

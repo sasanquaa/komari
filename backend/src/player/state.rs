@@ -503,7 +503,7 @@ impl PlayerState {
         }
     }
 
-    /// Gets the double jump minimum `x` distance threshold
+    /// Gets the double jump minimum `x` distance threshold.
     ///
     /// In auto mob and final destination, the threshold is relaxed for more
     /// fluid movement. In ping pong, there is no threshold.

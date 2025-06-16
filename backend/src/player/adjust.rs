@@ -16,18 +16,18 @@ use crate::{
     },
 };
 
-/// Minimum x distance from the destination required to perform small movement
+/// Minimum x distance from the destination required to perform small movement.
 pub const ADJUSTING_SHORT_THRESHOLD: i32 = 1;
 
-/// Minimum x distance from the destination required to walk
+/// Minimum x distance from the destination required to walk.
 pub const ADJUSTING_MEDIUM_THRESHOLD: i32 = 3;
 
 const ADJUSTING_SHORT_TIMEOUT: u32 = 3;
 
-/// Minimium y distance required to perform a fall and then walk
+/// Minimium y distance required to perform a fall and then walk.
 const FALLING_THRESHOLD: i32 = 8;
 
-/// Updates the [`Player::Adjusting`] contextual state
+/// Updates the [`Player::Adjusting`] contextual state.
 ///
 /// This state just walks towards the destination. If [`Moving::exact`] is true,
 /// then it will perform small movement to ensure the `x` is as close as possible.
