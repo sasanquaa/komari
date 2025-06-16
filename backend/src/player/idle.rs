@@ -15,7 +15,7 @@ use crate::{
     ActionKeyDirection, ActionKeyWith, Position, context::Context, minimap::Minimap, rng::Rng,
 };
 
-/// Updates [`Player::Idle`] contextual state
+/// Updates [`Player::Idle`] contextual state.
 ///
 /// This state does not do much on its own except when auto mobbing. It acts as entry
 /// to other state when there is an action and helps clearing keys.

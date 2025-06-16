@@ -135,10 +135,20 @@ fn update_changing_channel(
         |timeout| {
             match timeout.current {
                 PRESS_RIGHT_AT => {
-                    let _ = context.keys.send(KeyKind::Right);
+                    if context
+                        .detector_unwrap()
+                        .detect_change_channel_menu_opened()
+                    {
+                        let _ = context.keys.send(KeyKind::Right);
+                    }
                 }
                 PRESS_ENTER_AT => {
-                    let _ = context.keys.send(KeyKind::Enter);
+                    if context
+                        .detector_unwrap()
+                        .detect_change_channel_menu_opened()
+                    {
+                        let _ = context.keys.send(KeyKind::Enter);
+                    }
                 }
                 _ => (),
             }

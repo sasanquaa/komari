@@ -24,7 +24,7 @@ use crate::{
     },
 };
 
-/// Maximum amount of ticks a change in x or y direction must be detected
+/// Maximum amount of ticks a change in x or y direction must be detected.
 pub const MOVE_TIMEOUT: u32 = 5;
 
 const UP_JUMP_THRESHOLD: i32 = 10;
@@ -60,7 +60,7 @@ impl MovingIntermediates {
     }
 }
 
-/// A contextual state that stores moving-related data
+/// A contextual state that stores moving-related data.
 #[derive(Clone, Copy, Debug)]
 #[cfg_attr(test, derive(Default))]
 pub struct Moving {
@@ -228,7 +228,7 @@ impl Moving {
     }
 }
 
-/// Updates the [`Player::Moving`] contextual state
+/// Updates the [`Player::Moving`] contextual state.
 ///
 /// This state does not perform any movement but acts as coordinator
 /// for other movement states. It keeps track of [`PlayerState::unstuck_counter`], avoids
