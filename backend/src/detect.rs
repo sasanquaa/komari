@@ -1703,7 +1703,7 @@ fn detect_erda_shower(mat: &impl MatTraitConst) -> Result<Rect> {
     let crop_y = size.height / 5;
     let crop_bbox = Rect::new(size.width - crop_x, size.height - crop_y, crop_x, crop_y);
     let skill_bar = mat.roi(crop_bbox).unwrap();
-    detect_template(&skill_bar, &*ERDA_SHOWER, crop_bbox.tl(), 0.96)
+    detect_template(&skill_bar, &*ERDA_SHOWER, crop_bbox.tl(), 0.8)
 }
 
 fn detect_familiar_save_button(mat: &impl ToInputArray) -> Result<Rect> {
