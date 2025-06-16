@@ -252,8 +252,12 @@ mod panicking_tests {
     #[test]
     fn update_changing_channel_and_send_keys() {
         let mut keys = MockKeySender::default();
+        let mut detector = MockDetector::default();
+        detector
+            .expect_detect_change_channel_menu_opened()
+            .return_const(true);
         keys.expect_send().times(2).returning(|_| Ok(()));
-        let context = Context::new(Some(keys), None);
+        let context = Context::new(Some(keys), Some(detector));
         let panicking = Panicking::new(PanicTo::Channel);
 
         let timeout = Timeout {
