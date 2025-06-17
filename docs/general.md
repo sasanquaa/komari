@@ -13,7 +13,7 @@
   - [Capture Modes](#capture-modes)
   - [Familiars Swapping](#familiars-swapping)
   - [Panic Mode](#panic-mode)
-  - [Boss Channel Switch](#boss-channel-switch)
+  - [Change Channel On Elite Boss](#change-channel-on-elite-boss)
 - [Video guides](#video-guides)
 - [Showcase](#showcase)
   - [Rotation](#rotation)
