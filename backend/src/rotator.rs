@@ -159,6 +159,7 @@ pub struct RotatorBuildArgs<'a> {
     pub panic_mode: PanicMode,
     pub enable_panic_mode: bool,
     pub enable_rune_solving: bool,
+    pub enable_change_channel_on_elite_boss_appear: bool,
     pub enable_familiars_swapping: bool,
     pub enable_reset_normal_actions_on_erda: bool,
 }
@@ -177,6 +178,7 @@ impl Rotator {
             panic_mode,
             enable_panic_mode,
             enable_rune_solving,
+            enable_change_channel_on_elite_boss_appear,
             enable_familiars_swapping,
             enable_reset_normal_actions_on_erda,
         } = args;
@@ -239,6 +241,12 @@ impl Rotator {
             self.priority_actions.insert(
                 self.id_counter.fetch_add(1, Ordering::Relaxed),
                 solve_rune_priority_action(),
+            );
+        }
+        if enable_change_channel_on_elite_boss_appear {
+            self.priority_actions.insert(
+                self.id_counter.fetch_add(1, Ordering::Relaxed),
+                elite_boss_change_channel_priority_action(),
             );
         }
         if enable_familiars_swapping {
@@ -986,6 +994,29 @@ fn panic_priority_action(mode: PanicMode) -> PriorityAction {
 }
 
 #[inline]
+fn elite_boss_change_channel_priority_action() -> PriorityAction {
+    PriorityAction {
+        condition: Condition(Box::new(|context, _, last_queued_time| {
+            if !at_least_millis_passed_since(last_queued_time, 15000) {
+                return ConditionResult::Skip;
+            }
+            if let Minimap::Idle(idle) = context.minimap && idle.has_elite_boss {
+                ConditionResult::Queue
+            } else {
+                ConditionResult::Skip
+            }
+        })),
+        condition_kind: None,
+        inner: RotatorAction::Single(PlayerAction::Panic(PlayerActionPanic {
+            to: PanicTo::Channel,
+        })),
+        queue_to_front: true,
+        ignoring: false,
+        last_queued_time: None,
+    }
+}
+
+#[inline]
 fn at_least_millis_passed_since(last_queued_time: Option<Instant>, millis: u128) -> bool {
     last_queued_time
         .map(|instant| Instant::now().duration_since(instant).as_millis() >= millis)
@@ -1120,6 +1151,7 @@ mod tests {
             panic_mode: PanicMode::default(),
             enable_panic_mode: false,
             enable_rune_solving: true,
+            enable_change_channel_on_elite_boss_appear: false,
             enable_familiars_swapping: false,
             enable_reset_normal_actions_on_erda: false,
         };

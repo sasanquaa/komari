@@ -137,6 +137,9 @@ impl DefaultRequestHandler<'_> {
             panic_mode: self.settings.panic_mode,
             enable_panic_mode: self.settings.enable_panic_mode,
             enable_rune_solving: self.settings.enable_rune_solving,
+            enable_change_channel_on_elite_boss_appear: self
+                .settings
+                .enable_change_channel_on_elite_boss_appear,
             enable_familiars_swapping: self.settings.familiars.enable_familiars_swapping,
             enable_reset_normal_actions_on_erda: reset_on_erda,
         };
