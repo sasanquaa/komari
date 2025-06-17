@@ -43,8 +43,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          lfs: true
 
       # https://github.com/DioxusLabs/dioxus/issues/3433
       # Need to add dx fmt
@@ -70,8 +68,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - uses: ./.github/actions/setup
         with:
