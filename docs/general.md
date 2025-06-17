@@ -233,7 +233,7 @@ Panic mode can be enabled in `Settings` tab and:
 
 The behavior of `GoingToTown` should be used with `Stop Actions If Fails / Changes Map` enabled or the bot will continue running. However, `CycleChannel` does not affect `Stop Actions If Fails / Changes Map` if the map is changed due to channel changing. When using either of the mode, ensure the key bindings are set up first.
 
-#### Boss Channel Switch
+#### Change Channel On Elite Boss
 (From v0.15)
 When this option is enabled in `Settings`, it will queue a channel change action when an elite boss appears.
 

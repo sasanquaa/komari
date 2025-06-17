@@ -69,14 +69,14 @@ pub fn Settings(
                     value: settings_view().enable_rune_solving,
                 }
                 SettingsCheckbox {
-                    label: "Enable Meet Boss Switch Channel",
-                    on_input: move |enable_meet_boss_switch_channel| {
+                    label: "Enable Change Channel On Elite Boss",
+                    on_input: move |enable_change_channel_on_elite_boss_appear| {
                         on_settings(SettingsData {
-                            enable_meet_boss_switch_channel,
+                            enable_change_channel_on_elite_boss_appear,
                             ..settings_view.peek().clone()
                         });
                     },
-                    value: settings_view().enable_meet_boss_switch_channel,
+                    value: settings_view().enable_change_channel_on_elite_boss_appear,
                 }
                 SettingsCheckbox {
                     label: "Enable Panic Mode",

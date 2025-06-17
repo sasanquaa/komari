@@ -164,7 +164,7 @@ pub struct Settings {
     #[serde(default = "enable_rune_solving_default")]
     pub enable_rune_solving: bool,
     #[serde(default)]
-    pub enable_meet_boss_switch_channel: bool,
+    pub enable_change_channel_on_elite_boss_appear: bool,
     #[serde(default)]
     pub enable_panic_mode: bool,
     #[serde(default)]
@@ -195,7 +195,7 @@ impl Default for Settings {
             id: None,
             capture_mode: CaptureMode::default(),
             enable_rune_solving: enable_rune_solving_default(),
-            enable_meet_boss_switch_channel: false,
+            enable_change_channel_on_elite_boss_appear: false,
             enable_panic_mode: false,
             panic_mode: PanicMode::default(),
             input_method: InputMethod::default(),
