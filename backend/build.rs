@@ -1,3 +1,5 @@
+#[cfg(feature = "gpu")]
+use std::process::Command;
 use std::{env, fs, path::PathBuf};
 
 fn main() {
@@ -342,18 +344,51 @@ fn main() {
         exe_dir.join(onnx_runtime.file_name().unwrap()),
     )
     .unwrap();
+    println!(
+        "cargo:rerun-if-changed={}",
+        exe_dir
+            .join(onnx_runtime.file_name().unwrap())
+            .to_str()
+            .unwrap()
+    );
+
     #[cfg(feature = "gpu")]
-    fs::copy(
-        &onnx_runtime_cuda,
-        exe_dir.join(onnx_runtime_cuda.file_name().unwrap()),
-    )
-    .unwrap();
-    #[cfg(feature = "gpu")]
-    fs::copy(
-        &onnx_runtime_shared,
-        exe_dir.join(onnx_runtime_shared.file_name().unwrap()),
-    )
-    .unwrap();
+    {
+        let tools_dir = env::current_dir().unwrap().parent().unwrap().join("tools");
+        let _ = Command::new("powershell")
+            .arg("-Command")
+            .arg(format!(
+                "& {{ . {}; join {} {}}}",
+                tools_dir.join("join.ps1").to_str().unwrap(),
+                onnx_runtime_cuda.to_str().unwrap(),
+                exe_dir
+                    .join(onnx_runtime_cuda.file_name().unwrap())
+                    .to_str()
+                    .unwrap()
+            ))
+            .spawn()
+            .expect("failed to spawn powershell command");
+
+        fs::copy(
+            &onnx_runtime_shared,
+            exe_dir.join(onnx_runtime_shared.file_name().unwrap()),
+        )
+        .unwrap();
+        println!(
+            "cargo:rerun-if-changed={}",
+            exe_dir
+                .join(onnx_runtime_cuda.file_name().unwrap())
+                .to_str()
+                .unwrap()
+        );
+        println!(
+            "cargo:rerun-if-changed={}",
+            exe_dir
+                .join(onnx_runtime_shared.file_name().unwrap())
+                .to_str()
+                .unwrap()
+        );
+    }
 
     // Detection models
     println!("cargo:rustc-env=MOB_MODEL={}", mob_model.to_str().unwrap());
