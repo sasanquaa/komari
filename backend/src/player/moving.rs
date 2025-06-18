@@ -257,6 +257,7 @@ pub fn update_moving_context(
     }
 
     let cur_pos = state.last_known_pos.unwrap();
+    let disable_adjusting = state.config.disable_adjusting;
     let moving = Moving::new(cur_pos, dest, exact, intermediates);
     let (x_distance, _) = moving.x_distance_direction_from(true, cur_pos);
     let (y_distance, y_direction) = moving.y_distance_direction_from(true, cur_pos);
@@ -276,8 +277,10 @@ pub fn update_moving_context(
                 state,
             )
         }
+        // Allows disabling adjusting only if `exact` is false
         (false, d, _, _)
-            if d >= ADJUSTING_MEDIUM_THRESHOLD || (exact && d >= ADJUSTING_SHORT_THRESHOLD) =>
+            if (!disable_adjusting && d >= ADJUSTING_MEDIUM_THRESHOLD)
+                || (exact && d >= ADJUSTING_SHORT_THRESHOLD) =>
         {
             abort_action_on_state_repeat(Player::Adjusting(moving), context, state)
         }
