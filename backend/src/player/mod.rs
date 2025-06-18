@@ -97,16 +97,26 @@ pub enum Player {
 
 impl Player {
     #[inline]
-    pub fn can_action_override_current_state(&self) -> bool {
+    pub fn can_action_override_current_state(&self, cur_pos: Option<Point>) -> bool {
         const OVERRIDABLE_DISTANCE: i32 = DOUBLE_JUMP_THRESHOLD / 2;
 
         match self {
-            Player::Detecting
-            | Player::Idle
-            | Player::Moving(_, _, _)
-            | Player::DoubleJumping(DoubleJumping { forced: false, .. }) => true,
-            Player::Adjusting(moving) => {
-                let (distance, _) = moving.x_distance_direction_from(true, moving.pos);
+            Player::Detecting | Player::Idle => true,
+            Player::Moving(dest, _, _) => {
+                if let Some(pos) = cur_pos {
+                    (dest.x - pos.x).abs() >= OVERRIDABLE_DISTANCE
+                } else {
+                    true
+                }
+            }
+            Player::DoubleJumping(DoubleJumping {
+                moving,
+                forced: false,
+                ..
+            })
+            | Player::Adjusting(moving) => {
+                let (distance, _) =
+                    moving.x_distance_direction_from(true, cur_pos.unwrap_or(moving.pos));
                 distance >= OVERRIDABLE_DISTANCE
             }
             Player::Grappling(moving)

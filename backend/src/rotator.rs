@@ -182,7 +182,6 @@ impl Rotator {
             enable_familiars_swapping,
             enable_reset_normal_actions_on_erda,
         } = args;
-
         debug!(target: "rotator", "preparing actions {actions:?} {buffs:?}");
         self.reset_queue();
         self.normal_actions.clear();
@@ -471,7 +470,9 @@ impl Rotator {
         if self.priority_actions_queue.is_empty() && self.priority_queuing_linked_action.is_none() {
             return;
         }
-        if !context.player.can_action_override_current_state()
+        if !context
+            .player
+            .can_action_override_current_state(player.last_known_pos)
             || has_normal_linked_action_queuing_or_executing(self, player)
             || has_priority_linked_action_executing(self, player)
         {
@@ -499,6 +500,7 @@ impl Rotator {
         if player.has_priority_action() && !action.queue_to_front {
             return;
         }
+
         self.priority_actions_queue.pop_front();
         match action.inner.clone() {
             RotatorAction::Single(inner) => {
@@ -729,6 +731,10 @@ fn rotator_action(
     start_index: usize,
     actions: &[Action],
 ) -> (RotatorAction, usize) {
+    if start_index == actions.len() - 1 {
+        // Last action cannot be a linked action
+        return (RotatorAction::Single(start_action.into()), 1);
+    }
     if start_index + 1 < actions.len() {
         match actions[start_index + 1] {
             Action::Move(ActionMove {
@@ -1000,7 +1006,9 @@ fn elite_boss_change_channel_priority_action() -> PriorityAction {
             if !at_least_millis_passed_since(last_queued_time, 15000) {
                 return ConditionResult::Skip;
             }
-            if let Minimap::Idle(idle) = context.minimap && idle.has_elite_boss {
+            if let Minimap::Idle(idle) = context.minimap
+                && idle.has_elite_boss
+            {
                 ConditionResult::Queue
             } else {
                 ConditionResult::Skip

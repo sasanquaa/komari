@@ -1530,7 +1530,7 @@ fn calibrate_for_spin_arrows(
     }
 
     if spin_arrows.len() == MAX_SPIN_ARROWS {
-        debug!(target: "rune", "{} spinning rune arrows detected, calibrating...", spin_arrows.len());
+        info!(target: "rune", "{} spinning rune arrows detected, calibrating...", spin_arrows.len());
         calibrating.spin_arrows = Some(spin_arrows);
     }
 
@@ -1656,7 +1656,7 @@ fn detect_spin_arrow(mat: &impl MatTraitConst, spin_arrow: &mut SpinArrow) -> Re
             3 => KeyKind::Right,
             _ => unreachable!(),
         };
-        debug!(target: "rune", "spinning arrow result {arrow:?} {results:?}");
+        info!(target: "rune", "spinning arrow result {arrow:?} {results:?}");
         spin_arrow.final_arrow = Some(arrow);
     }
     spin_arrow.last_arrow_head = Some(collinear);

@@ -10,5 +10,8 @@ tokio = { workspace = true }
 dioxus = { version = "0.6.3", features = ["desktop"] }
 backend = { workspace = true }
 serde = { workspace = true }
-tracing-log = "0.2.0"
+humantime = "2.2.0"
 num-traits = "0.2.19"
+fern = "0.7.1"
+log = { workspace = true }
+log-panics = "2.1.0"
