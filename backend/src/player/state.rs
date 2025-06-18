@@ -88,7 +88,12 @@ pub enum LastMovement {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PlayerConfiguration {
+    /// The player class.
+    ///
+    /// Only uses for determine linked key/action timing.
     pub class: Class,
+    /// Whether to disable [`Player::Adjusting`].
+    pub disable_adjusting: bool,
     /// Enables platform pathing for rune.
     pub rune_platforms_pathing: bool,
     /// Uses only up jump(s) in rune platform pathing.
@@ -513,6 +518,8 @@ impl PlayerState {
             DOUBLE_JUMP_AUTO_MOB_THRESHOLD
         } else if self.has_ping_pong_action_only() {
             0 // Ping pong double jumps forever
+        } else if self.config.teleport_key.is_some() {
+            DOUBLE_JUMP_THRESHOLD / 2 // Half the threshold for mage
         } else {
             DOUBLE_JUMP_THRESHOLD
         }

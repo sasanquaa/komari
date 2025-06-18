@@ -199,6 +199,7 @@ impl RequestHandler for DefaultRequestHandler<'_> {
         *self.buffs = config_buffs(self.config);
         self.player.reset();
         self.player.config.class = self.config.class;
+        self.player.config.disable_adjusting = self.config.disable_adjusting;
         self.player.config.interact_key = self.config.interact_key.key.into();
         self.player.config.grappling_key = self.config.ropelift_key.map(|key| key.key.into());
         self.player.config.teleport_key = self.config.teleport_key.map(|key| key.key.into());

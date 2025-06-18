@@ -42,6 +42,10 @@ pub fn update_solving_rune_context(
     // debug_assert!(state.rune_failed_count < MAX_RUNE_FAILED_COUNT);
     // debug_assert!(!state.rune_cash_shop);
 
+    if !solving_rune.timeout.started && !state.is_stationary {
+        return Player::SolvingRune(solving_rune);
+    }
+
     let update_timeout = |timeout| {
         Player::SolvingRune(SolvingRune {
             timeout,

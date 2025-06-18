@@ -363,6 +363,25 @@ fn ConfigGameKeyBindings(
                     selected: config_view().class,
                 }
             }
+            div { class: "space-y-2 mt-1",
+                p { class: "font-normal italic text-xs text-gray-400 mb-1",
+                    "This option will disable walking only if 'Adjust position' is also disabled."
+                }
+                Checkbox {
+                    label: "Disable Adjusting/Walking",
+                    label_class: LABEL_CLASS,
+                    div_class: DIV_CLASS,
+                    input_class: "w-44 h-6 align-middle",
+                    disabled: is_disabled(),
+                    on_input: move |disable_adjusting| {
+                        on_config(ConfigurationData {
+                            disable_adjusting,
+                            ..config_view.peek().clone()
+                        });
+                    },
+                    value: config_view().disable_adjusting,
+                }
+            }
         }
     }
 }

@@ -305,6 +305,8 @@ pub struct Configuration {
     #[serde(default)]
     pub class: Class,
     #[serde(default)]
+    pub disable_adjusting: bool,
+    #[serde(default)]
     pub actions: Vec<ActionConfiguration>,
 }
 
@@ -358,6 +360,7 @@ impl Default for Configuration {
             extreme_green_potion_key: KeyBindingConfiguration::default(),
             extreme_gold_potion_key: KeyBindingConfiguration::default(),
             class: Class::default(),
+            disable_adjusting: false,
             actions: vec![],
         }
     }
