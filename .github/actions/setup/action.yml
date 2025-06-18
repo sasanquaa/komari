@@ -29,7 +29,7 @@ runs:
         ./bootstrap-vcpkg.bat -disableMetrics
         echo "set(VCPKG_BUILD_TYPE release)" >> triplets/x64-windows.cmake
         echo "set(VCPKG_BUILD_TYPE release)" >> triplets/x64-windows-static.cmake
-        ./vcpkg.exe install --clean-after-build --recurse x64-windows-static[contrib,nonfree]:opencv4
+        ./vcpkg.exe install --clean-after-build --recurse opencv4[contrib,nonfree]:x64-windows-static
 
     - uses: dtolnay/rust-toolchain@master
       with:
