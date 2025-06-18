@@ -106,12 +106,13 @@ fn update_changing_channel(
     timeout: Timeout,
     retry_count: u32,
 ) -> Panicking {
-    const PRESS_RIGHT_AT: u32 = 15;
-    const PRESS_ENTER_AT: u32 = 30;
+    const TIMEOUT: u32 = 220;
+    const PRESS_RIGHT_AT: u32 = 170;
+    const PRESS_ENTER_AT: u32 = 200;
 
     update_with_timeout(
         timeout,
-        50,
+        TIMEOUT,
         |timeout| {
             if !context
                 .detector_unwrap()
@@ -261,7 +262,7 @@ mod panicking_tests {
         let panicking = Panicking::new(PanicTo::Channel);
 
         let timeout = Timeout {
-            current: 14,
+            current: 169,
             started: true,
             ..Default::default()
         };
@@ -269,7 +270,7 @@ mod panicking_tests {
         assert_matches!(result.stage, PanickingStage::ChangingChannel(_, _));
 
         let timeout = Timeout {
-            current: 29,
+            current: 199,
             started: true,
             ..Default::default()
         };
@@ -283,7 +284,7 @@ mod panicking_tests {
         context.minimap = Minimap::Detecting;
         let panicking = Panicking::new(PanicTo::Channel);
         let timeout = Timeout {
-            current: 50,
+            current: 220,
             started: true,
             ..Default::default()
         };
