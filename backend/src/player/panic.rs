@@ -106,12 +106,13 @@ fn update_changing_channel(
     timeout: Timeout,
     retry_count: u32,
 ) -> Panicking {
-    const PRESS_RIGHT_AT: u32 = 15;
-    const PRESS_ENTER_AT: u32 = 30;
+    const TIMEOUT: u32 = 220;
+    const PRESS_RIGHT_AT: u32 = 170;
+    const PRESS_ENTER_AT: u32 = 200;
 
     update_with_timeout(
         timeout,
-        50,
+        TIMEOUT,
         |timeout| {
             if !context
                 .detector_unwrap()
@@ -135,10 +136,20 @@ fn update_changing_channel(
         |timeout| {
             match timeout.current {
                 PRESS_RIGHT_AT => {
-                    let _ = context.keys.send(KeyKind::Right);
+                    if context
+                        .detector_unwrap()
+                        .detect_change_channel_menu_opened()
+                    {
+                        let _ = context.keys.send(KeyKind::Right);
+                    }
                 }
                 PRESS_ENTER_AT => {
-                    let _ = context.keys.send(KeyKind::Enter);
+                    if context
+                        .detector_unwrap()
+                        .detect_change_channel_menu_opened()
+                    {
+                        let _ = context.keys.send(KeyKind::Enter);
+                    }
                 }
                 _ => (),
             }
@@ -242,12 +253,16 @@ mod panicking_tests {
     #[test]
     fn update_changing_channel_and_send_keys() {
         let mut keys = MockKeySender::default();
+        let mut detector = MockDetector::default();
+        detector
+            .expect_detect_change_channel_menu_opened()
+            .return_const(true);
         keys.expect_send().times(2).returning(|_| Ok(()));
-        let context = Context::new(Some(keys), None);
+        let context = Context::new(Some(keys), Some(detector));
         let panicking = Panicking::new(PanicTo::Channel);
 
         let timeout = Timeout {
-            current: 14,
+            current: 169,
             started: true,
             ..Default::default()
         };
@@ -255,7 +270,7 @@ mod panicking_tests {
         assert_matches!(result.stage, PanickingStage::ChangingChannel(_, _));
 
         let timeout = Timeout {
-            current: 29,
+            current: 199,
             started: true,
             ..Default::default()
         };
@@ -269,7 +284,7 @@ mod panicking_tests {
         context.minimap = Minimap::Detecting;
         let panicking = Panicking::new(PanicTo::Channel);
         let timeout = Timeout {
-            current: 50,
+            current: 220,
             started: true,
             ..Default::default()
         };

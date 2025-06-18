@@ -10,17 +10,17 @@ use crate::array::Array;
 
 pub const MAX_PLATFORMS_COUNT: usize = 24;
 
-/// The kind of movement the player should perform
+/// The kind of movement the player should perform.
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum MovementHint {
-    /// Infers the movement needed
+    /// Infers the movement needed.
     Infer,
-    /// Performs a walk and then jump
+    /// Performs a walk and then jump.
     WalkAndJump,
 }
 
-/// A platform where player can stand on
+/// A platform where player can stand on.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Platform {
     xs: Range<i32>,
@@ -33,7 +33,7 @@ impl Platform {
     }
 }
 
-/// A platform along with its reachable neighbor platforms
+/// A platform along with its reachable neighbor platforms.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct PlatformWithNeighbors {
     inner: Platform,
@@ -52,7 +52,7 @@ impl PlatformWithNeighbors {
     }
 }
 
-/// The platform being visited during path finding
+/// The platform being visited during path finding.
 #[derive(PartialEq, Eq)]
 struct VisitingPlatform {
     score: u32,
@@ -73,7 +73,7 @@ impl Ord for VisitingPlatform {
 
 /// Finds the smallest bounding rectangle that contains all given platforms.
 ///
-/// Returns [`None`] if the list of platforms is empty
+/// Returns [`None`] if the list of platforms is empty.
 pub fn find_platforms_bound(
     minimap: Rect,
     platforms: &Array<PlatformWithNeighbors, MAX_PLATFORMS_COUNT>,
@@ -249,8 +249,13 @@ fn points_from(
         // Check if the current platform overlap with the next platform
         if ranges_overlap(next.xs, current.xs) {
             if (start_max..end_min).contains(&last_point.x) {
-                // Already inside intersection range, add a point to move up or down
-                points.push((Point::new(last_point.x, next.y), MovementHint::Infer));
+                if last_point.y <= next.y {
+                    // Already inside intersection range, add a point to move up.
+                    points.push((Point::new(last_point.x, next.y), MovementHint::Infer));
+                } else {
+                    // Moving down is skipped but last_point is updated as if already moved.
+                    last_point = Point::new(last_point.x, next.y);
+                }
             } else {
                 // Outside intersection range, add 2 points to move inside and then up or down
                 // TODO: Replace rand with Rng
@@ -289,7 +294,11 @@ fn points_from(
             points.push((from_point, hint));
         }
 
-        last_point = points.last().copied().unwrap().0;
+        last_point = points
+            .last()
+            .copied()
+            .map(|point| point.0)
+            .unwrap_or(last_point);
         current = next;
     }
 

@@ -65,7 +65,7 @@ const PING_PONG_IGNORE_RANDOMIZE_Y_THRESHOLD: i32 = 9;
 
 #[derive(Copy, Clone, Debug)]
 pub struct DoubleJumping {
-    moving: Moving,
+    pub moving: Moving,
     /// Whether to force a double jump even when the player current position is already close to
     /// the destination.
     pub forced: bool,

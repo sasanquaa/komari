@@ -2,7 +2,7 @@
 #![feature(variant_count)]
 #![feature(map_try_insert)]
 
-use std::{string::ToString, sync::Arc};
+use std::{env::current_exe, io::stdout, string::ToString, sync::Arc};
 
 use action::Actions;
 use backend::{
@@ -20,7 +20,9 @@ use dioxus::{
     prelude::*,
 };
 use familiar::Familiars;
+use fern::Dispatch;
 use futures_util::StreamExt;
+use log::LevelFilter;
 use minimap::{Minimap, MinimapMessage};
 use notification::Notifications;
 use rand::distr::{Alphanumeric, SampleString};
@@ -33,7 +35,6 @@ use tokio::{
     },
     task::spawn_blocking,
 };
-use tracing_log::LogTracer;
 
 mod action;
 mod configuration;
@@ -55,7 +56,28 @@ const AUTO_NUMERIC_JS: Asset = asset!("assets/autoNumeric.min.js");
 // TODO: Fix spaghetti UI
 // TODO: I give up on UI, it is whatever
 fn main() {
-    LogTracer::init().unwrap();
+    let level = if cfg!(debug_assertions) {
+        LevelFilter::Debug
+    } else {
+        LevelFilter::Info
+    };
+    Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "[{} {} {}] {}",
+                humantime::format_rfc3339(std::time::SystemTime::now()),
+                record.level(),
+                record.target(),
+                message
+            ))
+        })
+        .level(level)
+        .chain(stdout())
+        .chain(fern::log_file(current_exe().unwrap().parent().unwrap().join("log.txt")).unwrap())
+        .apply()
+        .unwrap();
+    log_panics::init();
+
     backend::init();
     let window = WindowBuilder::new()
         .with_inner_size(Size::Physical(PhysicalSize::new(540, 864)))
