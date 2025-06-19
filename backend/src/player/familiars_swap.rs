@@ -636,6 +636,7 @@ fn update_saving(
                     swapping.mouse_rest.y,
                     MouseAction::Move,
                 );
+                let _ = context.keys.send(KeyKind::Esc);
             }
             swapping.stage_saving(timeout, retry_count)
         },
