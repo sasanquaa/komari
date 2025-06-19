@@ -129,7 +129,6 @@ impl DefaultRequestHandler<'_> {
             mode,
             actions: actions.as_slice(),
             buffs: self.buffs,
-            potion_key: self.config.potion_key.key,
             familiar_essence_key: self.config.familiar_essence_key.key,
             familiar_swappable_slots: self.settings.familiars.swappable_familiars,
             familiar_swappable_rarities: &self.settings.familiars.swappable_rarities,

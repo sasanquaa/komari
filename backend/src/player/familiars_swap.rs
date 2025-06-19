@@ -42,7 +42,7 @@ enum SwappingStage {
     /// Scrolling the familiar cards list to find more cards.
     Scrolling(Timeout, Option<Rect>, u32),
     /// Saving the familiar setup.
-    Saving(Timeout),
+    Saving(Timeout, u32),
     Completing(Timeout, bool),
 }
 
@@ -75,7 +75,7 @@ impl Display for FamiliarsSwapping {
             SwappingStage::FindCards => write!(f, "Finding Cards"),
             SwappingStage::Swapping(_, _) => write!(f, "Swapping"),
             SwappingStage::Scrolling(_, _, _) => write!(f, "Scrolling"),
-            SwappingStage::Saving(_) => write!(f, "Saving"),
+            SwappingStage::Saving(_, _) => write!(f, "Saving"),
             SwappingStage::Completing(_, _) => write!(f, "Completing"),
         }
     }
@@ -139,8 +139,8 @@ impl FamiliarsSwapping {
     }
 
     #[inline]
-    fn stage_saving(self, timeout: Timeout) -> FamiliarsSwapping {
-        self.stage(SwappingStage::Saving(timeout))
+    fn stage_saving(self, timeout: Timeout, retry_count: u32) -> FamiliarsSwapping {
+        self.stage(SwappingStage::Saving(timeout, retry_count))
     }
 
     #[inline]
@@ -186,7 +186,9 @@ pub fn update_familiars_swapping_context(
             SwappingStage::Scrolling(timeout, scrollbar, retry_count) => {
                 update_scrolling(context, swapping, timeout, scrollbar, retry_count)
             }
-            SwappingStage::Saving(timeout) => update_saving(context, swapping, timeout),
+            SwappingStage::Saving(timeout, retry_count) => {
+                update_saving(context, swapping, timeout, retry_count)
+            }
             SwappingStage::Completing(timeout, completed) => {
                 update_completing(context, swapping, timeout, completed)
             }
@@ -484,7 +486,7 @@ fn update_swapping(
 
             if swapping.slots.iter().all(|slot| !slot.1) {
                 // Save if all slots are occupied. Could also mean UI is already closed.
-                swapping.stage(SwappingStage::Saving(Timeout::default()))
+                swapping.stage(SwappingStage::Saving(Timeout::default(), 0))
             } else if index + 1 < swapping.cards.len() {
                 // At least one slot is free and there are more cards. Could mean double click
                 // failed or familiar already level 5, advances either way.
@@ -594,9 +596,11 @@ fn update_saving(
     context: &Context,
     swapping: FamiliarsSwapping,
     timeout: Timeout,
+    retry_count: u32,
 ) -> FamiliarsSwapping {
     /// Timeout for saving familiars setup.
-    const SAVING_TIMEOUT: u32 = 10;
+    const SAVING_TIMEOUT: u32 = 30;
+    const PRESS_OK_AT: u32 = 15;
 
     update_with_timeout(
         timeout,
@@ -610,17 +614,32 @@ fn update_saving(
             let (x, y) = bbox_click_point(button);
             let _ = context.keys.send_mouse(x, y, MouseAction::Click);
 
-            swapping.stage_saving(timeout)
+            swapping.stage_saving(timeout, retry_count)
         },
         || {
-            if let Ok(button) = context.detector_unwrap().detect_esc_ok_button() {
+            if context.detector_unwrap().detect_familiar_menu_opened()
+                && retry_count + 1 < MAX_RETRY
+            {
+                swapping.stage_saving(Timeout::default(), retry_count + 1)
+            } else {
+                swapping.stage_completing(Timeout::default(), false)
+            }
+        },
+        |timeout| {
+            if timeout.current == PRESS_OK_AT
+                && let Ok(button) = context.detector_unwrap().detect_esc_confirm_button()
+            {
                 let (x, y) = bbox_click_point(button);
                 let _ = context.keys.send_mouse(x, y, MouseAction::Click);
+                let _ = context.keys.send_mouse(
+                    swapping.mouse_rest.x,
+                    swapping.mouse_rest.y,
+                    MouseAction::Move,
+                );
+                let _ = context.keys.send(KeyKind::Esc);
             }
-
-            swapping.stage_completing(Timeout::default(), false)
+            swapping.stage_saving(timeout, retry_count)
         },
-        |timeout| swapping.stage_saving(timeout),
     )
 }
 
@@ -869,6 +888,53 @@ mod tests {
 
         let result = update_swapping(&context, swapping, timeout, 0);
         assert_matches!(result.stage, SwappingStage::Scrolling(_, None, 0));
+    }
+
+    #[test]
+    fn update_saving_detect_and_click_save_button() {
+        let mut keys = MockKeySender::default();
+        keys.expect_send_mouse().once().returning(|_, _, _| Ok(()));
+
+        let mut detector = MockDetector::default();
+        detector
+            .expect_detect_familiar_save_button()
+            .once()
+            .returning(|| Ok(Default::default()));
+
+        let context = Context::new(Some(keys), Some(detector));
+        let swapping = FamiliarsSwapping::new(SwappableFamiliars::All, Array::new());
+
+        let timeout = Timeout::default();
+        let result = update_saving(&context, swapping, timeout, 0);
+
+        assert_matches!(result.stage, SwappingStage::Saving(_, 0));
+    }
+
+    #[test]
+    fn update_saving_press_ok_button() {
+        let mut keys = MockKeySender::default();
+        keys.expect_send_mouse()
+            .times(2) // one for OK button click, one for mouse move
+            .returning(|_, _, _| Ok(()));
+        keys.expect_send().once().returning(|_| Ok(()));
+
+        let mut detector = MockDetector::default();
+        detector
+            .expect_detect_esc_confirm_button()
+            .once()
+            .returning(|| Ok(Default::default()));
+
+        let context = Context::new(Some(keys), Some(detector));
+        let swapping = FamiliarsSwapping::new(SwappableFamiliars::All, Array::new());
+
+        let timeout = Timeout {
+            current: 14, // PRESS_OK_AT
+            started: true,
+            ..Default::default()
+        };
+
+        let result = update_saving(&context, swapping, timeout, 0);
+        assert_matches!(result.stage, SwappingStage::Saving(_, 0));
     }
 
     // TODO: more tests

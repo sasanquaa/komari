@@ -125,8 +125,8 @@ pub trait Detector: 'static + Send + DynClone + Debug {
     /// Detects whether to press ESC for unstucking.
     fn detect_esc_settings(&self) -> bool;
 
-    /// Detects the ESC ok button.
-    fn detect_esc_ok_button(&self) -> Result<Rect>;
+    /// Detects the ESC confirm button.
+    fn detect_esc_confirm_button(&self) -> Result<Rect>;
 
     /// Detects the Tomb ok button.
     fn detect_tomb_ok_button(&self) -> Result<Rect>;
@@ -232,7 +232,7 @@ mock! {
         fn mat(&self) -> &OwnedMat;
         fn detect_mobs(&self, minimap: Rect, bound: Rect, player: Point) -> Result<Vec<Point>>;
         fn detect_esc_settings(&self) -> bool;
-        fn detect_esc_ok_button(&self) -> Result<Rect>;
+        fn detect_esc_confirm_button(&self) -> Result<Rect>;
         fn detect_tomb_ok_button(&self) -> Result<Rect>;
         fn detect_elite_boss_bar(&self) -> bool;
         fn detect_minimap(&self, border_threshold: u8) -> Result<Rect>;
@@ -321,8 +321,8 @@ impl Detector for CachedDetector {
         detect_esc_settings(&**self.grayscale)
     }
 
-    fn detect_esc_ok_button(&self) -> Result<Rect> {
-        detect_esc_ok_button(&**self.grayscale)
+    fn detect_esc_confirm_button(&self) -> Result<Rect> {
+        detect_esc_confirm_button(&**self.grayscale)
     }
 
     fn detect_tomb_ok_button(&self) -> Result<Rect> {
@@ -562,7 +562,7 @@ fn detect_mobs(
 }
 
 /// TODO: Support default ratio
-static ESC_SETTINGS: LazyLock<[Mat; 9]> = LazyLock::new(|| {
+static ESC_SETTINGS: LazyLock<[Mat; 11]> = LazyLock::new(|| {
     [
         imgcodecs::imdecode(
             include_bytes!(env!("ESC_SETTING_TEMPLATE")),
@@ -583,7 +583,17 @@ static ESC_SETTINGS: LazyLock<[Mat; 9]> = LazyLock::new(|| {
         .unwrap(),
         imgcodecs::imdecode(include_bytes!(env!("ESC_OK_TEMPLATE")), IMREAD_GRAYSCALE).unwrap(),
         imgcodecs::imdecode(
+            include_bytes!(env!("ESC_CONFIRM_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap(),
+        imgcodecs::imdecode(
             include_bytes!(env!("ESC_CANCEL_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap(),
+        imgcodecs::imdecode(
+            include_bytes!(env!("ESC_CANCEL_NEW_TEMPLATE")),
             IMREAD_GRAYSCALE,
         )
         .unwrap(),
@@ -605,8 +615,8 @@ fn detect_esc_settings(mat: &impl ToInputArray) -> bool {
     false
 }
 
-fn detect_esc_ok_button(mat: &impl ToInputArray) -> Result<Rect> {
-    detect_template(mat, &ESC_SETTINGS[5], Point::default(), 0.75)
+fn detect_esc_confirm_button(mat: &impl ToInputArray) -> Result<Rect> {
+    detect_template(mat, &ESC_SETTINGS[6], Point::default(), 0.75)
 }
 
 fn detect_tomb_ok_button(mat: &impl ToInputArray) -> Result<Rect> {
@@ -1143,7 +1153,7 @@ fn detect_player_buff<T: MatTraitConst + ToInputArray>(mat: &T, kind: BuffKind) 
     let threshold = match kind {
         BuffKind::AureliaElixir => 0.8,
         BuffKind::LegionWealth | BuffKind::LegionLuck => 0.73,
-        BuffKind::WealthAcquisitionPotion | BuffKind::ExpAccumulationPotion => 0.7,
+        BuffKind::WealthAcquisitionPotion | BuffKind::ExpAccumulationPotion => 0.65,
         BuffKind::Rune
         | BuffKind::Familiar
         | BuffKind::SayramElixir

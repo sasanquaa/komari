@@ -29,7 +29,6 @@ use crate::{
 };
 
 const COOLDOWN_BETWEEN_QUEUE_MILLIS: u128 = 20_000;
-const COOLDOWN_BETWEEN_POTION_QUEUE_MILLIS: u128 = 2_000;
 
 /// [`Condition`] evaluation result.
 enum ConditionResult {
@@ -151,7 +150,6 @@ pub struct RotatorBuildArgs<'a> {
     pub mode: RotatorMode,
     pub actions: &'a [Action],
     pub buffs: &'a [(BuffKind, KeyBinding)],
-    pub potion_key: KeyBinding,
     pub familiar_essence_key: KeyBinding,
     pub familiar_swappable_slots: SwappableFamiliars,
     pub familiar_swappable_rarities: &'a HashSet<FamiliarRarity>,
@@ -170,7 +168,6 @@ impl Rotator {
             mode,
             actions,
             buffs,
-            potion_key,
             familiar_essence_key,
             familiar_swappable_slots,
             familiar_swappable_rarities,
@@ -223,10 +220,6 @@ impl Rotator {
             }
         }
 
-        self.priority_actions.insert(
-            self.id_counter.fetch_add(1, Ordering::Relaxed),
-            elite_boss_potion_spam_priority_action(potion_key),
-        );
         if buffs
             .iter()
             .any(|(buff, _)| matches!(buff, BuffKind::Familiar))
@@ -672,18 +665,22 @@ impl Rotator {
         if self.rotate_queuing_linked_action(player, false) {
             return;
         }
+
         debug_assert!(self.normal_index < self.normal_actions.len());
         let len = self.normal_actions.len();
+        if (self.normal_index + 1) == len {
+            self.normal_actions_backward = !self.normal_actions_backward;
+            self.normal_index = 0;
+        }
+
         let i = if self.normal_actions_backward {
             (len - self.normal_index).saturating_sub(1)
         } else {
             self.normal_index
         };
-        if (self.normal_index + 1) == len {
-            self.normal_actions_backward = !self.normal_actions_backward
-        }
         let (id, action) = self.normal_actions[i].clone();
-        self.normal_index = (self.normal_index + 1) % len;
+
+        self.normal_index += 1;
         match action {
             RotatorAction::Single(action) => {
                 player.set_normal_action(id, action);
@@ -799,47 +796,6 @@ fn priority_action(
         })),
         condition_kind: Some(condition),
         queue_to_front,
-        ignoring: false,
-        last_queued_time: None,
-    }
-}
-
-/// Creates a [`PlayerAction::Key`] priority action that automatically spams a potion key
-/// when an elite boss is detected.
-///
-/// The action will only queue if:
-/// - Enough time has passed since the last time this action was queued (debounced).
-/// - The current minimap state is [`Minimap::Idle`] and an elite boss is present.
-#[inline]
-fn elite_boss_potion_spam_priority_action(key: KeyBinding) -> PriorityAction {
-    PriorityAction {
-        condition: Condition(Box::new(|context, _, last_queued_time| {
-            if !at_least_millis_passed_since(last_queued_time, COOLDOWN_BETWEEN_POTION_QUEUE_MILLIS)
-            {
-                return ConditionResult::Skip;
-            }
-            if let Minimap::Idle(idle) = context.minimap
-                && idle.has_elite_boss
-            {
-                ConditionResult::Queue
-            } else {
-                ConditionResult::Skip
-            }
-        })),
-        condition_kind: None,
-        inner: RotatorAction::Single(PlayerAction::Key(PlayerActionKey {
-            key,
-            link_key: None,
-            count: 1,
-            position: None,
-            direction: ActionKeyDirection::Any,
-            with: ActionKeyWith::Any,
-            wait_before_use_ticks: 5,
-            wait_before_use_ticks_random_range: 0,
-            wait_after_use_ticks: 0,
-            wait_after_use_ticks_random_range: 0,
-        })),
-        queue_to_front: true,
         ignoring: false,
         last_queued_time: None,
     }
@@ -1151,7 +1107,6 @@ mod tests {
             mode: RotatorMode::default(),
             actions: &actions,
             buffs: &buffs,
-            potion_key: KeyBinding::default(),
             familiar_essence_key: KeyBinding::default(),
             familiar_swappable_slots: SwappableFamiliars::default(),
             familiar_swappable_rarities: &HashSet::default(),
@@ -1165,7 +1120,7 @@ mod tests {
         };
 
         rotator.build_actions(args);
-        assert_eq!(rotator.priority_actions.len(), 7);
+        assert_eq!(rotator.priority_actions.len(), 6);
         assert_eq!(rotator.normal_actions.len(), 2);
     }
 
@@ -1175,23 +1130,40 @@ mod tests {
         let mut player = PlayerState::default();
         let context = Context::new(None, None);
         rotator.normal_rotate_mode = RotatorMode::StartToEndThenReverse;
-        for i in 0..2 {
+        for i in 0..3 {
             rotator
                 .normal_actions
                 .push((i, RotatorAction::Single(NORMAL_ACTION.into())));
         }
 
         rotator.rotate_action(&context, &mut player);
-        assert!(player.has_normal_action());
+        assert_eq!(player.normal_action_id(), Some(0));
         assert!(!rotator.normal_actions_backward);
         assert_eq!(rotator.normal_index, 1);
 
         player.clear_actions_aborted();
-
         rotator.rotate_action(&context, &mut player);
-        assert!(player.has_normal_action());
+        assert_eq!(player.normal_action_id(), Some(1));
+        assert!(!rotator.normal_actions_backward);
+        assert_eq!(rotator.normal_index, 2);
+
+        player.clear_actions_aborted();
+        rotator.rotate_action(&context, &mut player);
+        assert_eq!(player.normal_action_id(), Some(2));
         assert!(rotator.normal_actions_backward);
-        assert_eq!(rotator.normal_index, 0);
+        assert_eq!(rotator.normal_index, 1);
+
+        player.clear_actions_aborted();
+        rotator.rotate_action(&context, &mut player);
+        assert_eq!(player.normal_action_id(), Some(1));
+        assert!(rotator.normal_actions_backward);
+        assert_eq!(rotator.normal_index, 2);
+
+        player.clear_actions_aborted();
+        rotator.rotate_action(&context, &mut player);
+        assert_eq!(player.normal_action_id(), Some(0));
+        assert!(!rotator.normal_actions_backward);
+        assert_eq!(rotator.normal_index, 1);
     }
 
     #[test]
