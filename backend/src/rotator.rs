@@ -665,18 +665,22 @@ impl Rotator {
         if self.rotate_queuing_linked_action(player, false) {
             return;
         }
+
         debug_assert!(self.normal_index < self.normal_actions.len());
         let len = self.normal_actions.len();
+        if (self.normal_index + 1) == len {
+            self.normal_actions_backward = !self.normal_actions_backward;
+            self.normal_index = 0;
+        }
+
         let i = if self.normal_actions_backward {
             (len - self.normal_index).saturating_sub(1)
         } else {
             self.normal_index
         };
-        if (self.normal_index + 1) == len {
-            self.normal_actions_backward = !self.normal_actions_backward
-        }
         let (id, action) = self.normal_actions[i].clone();
-        self.normal_index = (self.normal_index + 1) % len;
+
+        self.normal_index += 1;
         match action {
             RotatorAction::Single(action) => {
                 player.set_normal_action(id, action);
@@ -1126,23 +1130,40 @@ mod tests {
         let mut player = PlayerState::default();
         let context = Context::new(None, None);
         rotator.normal_rotate_mode = RotatorMode::StartToEndThenReverse;
-        for i in 0..2 {
+        for i in 0..3 {
             rotator
                 .normal_actions
                 .push((i, RotatorAction::Single(NORMAL_ACTION.into())));
         }
 
         rotator.rotate_action(&context, &mut player);
-        assert!(player.has_normal_action());
+        assert_eq!(player.normal_action_id(), Some(0));
         assert!(!rotator.normal_actions_backward);
         assert_eq!(rotator.normal_index, 1);
 
         player.clear_actions_aborted();
-
         rotator.rotate_action(&context, &mut player);
-        assert!(player.has_normal_action());
+        assert_eq!(player.normal_action_id(), Some(1));
+        assert!(!rotator.normal_actions_backward);
+        assert_eq!(rotator.normal_index, 2);
+
+        player.clear_actions_aborted();
+        rotator.rotate_action(&context, &mut player);
+        assert_eq!(player.normal_action_id(), Some(2));
         assert!(rotator.normal_actions_backward);
-        assert_eq!(rotator.normal_index, 0);
+        assert_eq!(rotator.normal_index, 1);
+
+        player.clear_actions_aborted();
+        rotator.rotate_action(&context, &mut player);
+        assert_eq!(player.normal_action_id(), Some(1));
+        assert!(rotator.normal_actions_backward);
+        assert_eq!(rotator.normal_index, 2);
+
+        player.clear_actions_aborted();
+        rotator.rotate_action(&context, &mut player);
+        assert_eq!(player.normal_action_id(), Some(0));
+        assert!(!rotator.normal_actions_backward);
+        assert_eq!(rotator.normal_index, 1);
     }
 
     #[test]

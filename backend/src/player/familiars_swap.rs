@@ -916,6 +916,7 @@ mod tests {
         keys.expect_send_mouse()
             .times(2) // one for OK button click, one for mouse move
             .returning(|_, _, _| Ok(()));
+        keys.expect_send().once().returning(|_| Ok(()));
 
         let mut detector = MockDetector::default();
         detector
