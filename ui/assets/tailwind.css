@@ -41,6 +41,14 @@ body {
         @apply button-base text-red-500 bg-red-100 enabled:hover:bg-red-200 disabled:text-red-300;
     }
 
+    .title {
+        @apply text-base text-gray-700;
+    }
+
+    .paragraph {
+        @apply text-sm text-gray-700;
+    }
+
     .scrollbar::-webkit-scrollbar {
         width: 2px;
         height: 2px;
