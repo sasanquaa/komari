@@ -139,7 +139,7 @@ pub fn Minimap() -> Element {
     let mut detected_minimap_size = use_signal::<Option<(usize, usize)>>(|| None);
 
     rsx! {
-        div { class: "flex flex-col w-2xs",
+        div { class: "flex flex-col min-w-2xs max-w-2xs",
             Canvas { state, detected_minimap_size }
             Info { state, detected_minimap_size }
             Buttons {}

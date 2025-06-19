@@ -41,8 +41,12 @@ body {
         @apply button-base text-red-500 bg-red-100 enabled:hover:bg-red-200 disabled:text-red-300;
     }
 
+    .title-xs {
+        @apply text-xs text-gray-700 font-medium;
+    }
+
     .title {
-        @apply text-base text-gray-700;
+        @apply text-base text-gray-700 font-medium;
     }
 
     .paragraph-xs {

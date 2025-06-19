@@ -15,6 +15,7 @@ use backend::{
     query_configs, query_settings, update_configuration, update_settings, upsert_config,
     upsert_settings,
 };
+use characters::Characters;
 use configuration::Configuration;
 use dioxus::{
     desktop::{
@@ -41,6 +42,7 @@ use tokio::{
 };
 
 mod action;
+mod characters;
 mod configuration;
 mod familiar;
 mod icons;
@@ -84,10 +86,10 @@ fn main() {
 
     backend::init();
     let window = WindowBuilder::new()
-        .with_inner_size(Size::Physical(PhysicalSize::new(773, 500)))
+        .with_inner_size(Size::Physical(PhysicalSize::new(773, 364)))
         .with_inner_size_constraints(WindowSizeConstraints::new(
             Some(PixelUnit::Physical(773.into())),
-            Some(PixelUnit::Physical(500.into())),
+            Some(PixelUnit::Physical(364.into())),
             None,
             None,
         ))
@@ -217,11 +219,15 @@ fn App() -> Element {
                     },
                     selected_tab: selected_tab(),
                 }
-                match selected_tab() {
-                    TAB_ACTIONS => {}
-                    TAB_CHARACTERS => {}
-                    TAB_SETTINGS => {}
-                    _ => unreachable!(),
+                div { class: "w-full max-w-md overflow-y-auto scrollbar",
+                    match selected_tab().as_str() {
+                        TAB_ACTIONS => rsx! {},
+                        TAB_CHARACTERS => rsx! {
+                            Characters {}
+                        },
+                        TAB_SETTINGS => rsx! {},
+                        _ => unreachable!(),
+                    }
                 }
             }
         }

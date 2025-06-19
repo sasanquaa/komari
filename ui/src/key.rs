@@ -118,35 +118,26 @@ pub fn KeyInput(
 ) -> Element {
     let mut has_error = use_signal(|| false);
     let mut input_element = use_signal(|| None);
-    let border = if is_active {
-        if has_error() {
-            "border-red-500 ring-1 ring-red-200"
-        } else {
-            "border-blue-500 ring-1 ring-blue-200"
-        }
-    } else {
-        "border-gray-300"
-    };
-    let active_background = if has_error() {
+    let active_background_color = if has_error() {
         "bg-red-50"
     } else {
         "bg-blue-50"
     };
-    let active_color = if has_error() {
+    let active_text_color = if has_error() {
         "text-red-700"
     } else {
         "text-blue-700"
     };
 
     rsx! {
-        div { class: "relative",
+        div { class: "relative {class}",
             input {
                 r#type: "text",
                 disabled,
                 onmounted: move |e| {
                     input_element.set(Some(e.data()));
                 },
-                class: "outline-none {class} {border} text-xs text-center text-gray-700",
+                class: "outline-none w-full h-full paragraph-xs text-center",
                 readonly: true,
                 onfocus: move |_| {
                     on_active(true);
@@ -172,7 +163,7 @@ pub fn KeyInput(
                 value: value.map(|key| key.to_string()),
             }
             if is_active {
-                div { class: "absolute inset-0 flex items-center justify-center rounded {active_background} bg-opacity-50 text-xs {active_color}",
+                div { class: "absolute inset-0 flex items-center justify-center {active_background_color} text-xs {active_text_color}",
                     "Press any key..."
                 }
             }
