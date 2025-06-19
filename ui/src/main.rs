@@ -23,7 +23,7 @@ use familiar::Familiars;
 use fern::Dispatch;
 use futures_util::StreamExt;
 use log::LevelFilter;
-use minimap::{Minimap, MinimapMessage};
+use minimap::Minimap;
 use notification::Notifications;
 use rand::distr::{Alphanumeric, SampleString};
 use settings::Settings;
@@ -80,10 +80,10 @@ fn main() {
 
     backend::init();
     let window = WindowBuilder::new()
-        .with_inner_size(Size::Physical(PhysicalSize::new(540, 864)))
+        .with_inner_size(Size::Physical(PhysicalSize::new(773, 500)))
         .with_inner_size_constraints(WindowSizeConstraints::new(
-            Some(PixelUnit::Physical(540.into())),
-            Some(PixelUnit::Physical(864.into())),
+            Some(PixelUnit::Physical(773.into())),
+            Some(PixelUnit::Physical(500.into())),
             None,
             None,
         ))
@@ -105,75 +105,75 @@ pub enum AppMessage {
 
 #[component]
 fn App() -> Element {
-    const TAB_CONFIGURATION: &str = "Configuration";
-    const TAB_ACTIONS: &str = "Actions";
-    const TAB_SETTINGS: &str = "Settings";
-    const TAB_SETTINGS_NOTIFICATIONS: &str = "Notifications";
-    const TAB_SETTINGS_FAMILIARS: &str = "Familiars";
+    // const TAB_CONFIGURATION: &str = "Configuration";
+    // const TAB_ACTIONS: &str = "Actions";
+    // const TAB_SETTINGS: &str = "Settings";
+    // const TAB_SETTINGS_NOTIFICATIONS: &str = "Notifications";
+    // const TAB_SETTINGS_FAMILIARS: &str = "Familiars";
 
-    // TODO: Move to AppMessage?
-    let (minimap_tx, minimap_rx) = mpsc::channel::<MinimapMessage>(1);
-    let minimap_rx = use_signal(move || Arc::new(Mutex::new(minimap_rx)));
-    let minimap = use_signal::<Option<MinimapData>>(|| None);
-    let preset = use_signal::<Option<String>>(|| None);
-    let mut config = use_signal::<Option<ConfigurationData>>(|| None);
-    let mut configs = use_resource(move || async move {
-        let configs = spawn_blocking(|| query_configs().unwrap()).await.unwrap();
-        if config.peek().is_none() {
-            config.set(configs.first().cloned());
-            update_configuration(config.peek().clone().unwrap()).await;
-        }
-        configs
-    });
-    let mut settings = use_resource(|| async { spawn_blocking(query_settings).await.unwrap() });
-    let copy_position = use_signal::<Option<(i32, i32)>>(|| None);
-    let coroutine = use_coroutine(move |mut rx: UnboundedReceiver<AppMessage>| {
-        let minimap_tx = minimap_tx.clone();
-        async move {
-            while let Some(msg) = rx.next().await {
-                match msg {
-                    AppMessage::UpdateConfig(mut new_config, save) => {
-                        let mut id = None;
-                        if save {
-                            let mut new_config = new_config.clone();
-                            id = spawn_blocking(move || {
-                                upsert_config(&mut new_config).unwrap();
-                                new_config.id
-                            })
-                            .await
-                            .unwrap();
-                        }
-                        if id.is_some() && new_config.id.is_none() {
-                            new_config.id = id;
-                        }
-                        config.set(Some(new_config.clone()));
-                        update_configuration(new_config.clone()).await;
-                        configs.restart();
-                    }
-                    AppMessage::UpdateMinimap(minimap) => {
-                        let _ = minimap_tx
-                            .send(MinimapMessage::UpdateMinimap(minimap, true))
-                            .await;
-                    }
-                    AppMessage::UpdatePreset(preset) => {
-                        let _ = minimap_tx
-                            .send(MinimapMessage::UpdateMinimapPreset(preset))
-                            .await;
-                    }
-                    AppMessage::UpdateSettings(mut new_settings) => {
-                        update_settings(new_settings.clone()).await;
-                        spawn_blocking(move || {
-                            upsert_settings(&mut new_settings).unwrap();
-                        })
-                        .await
-                        .unwrap();
-                        settings.restart();
-                    }
-                }
-            }
-        }
-    });
-    let mut active_tab = use_signal(|| TAB_CONFIGURATION.to_string());
+    // // TODO: Move to AppMessage?
+    // let (minimap_tx, minimap_rx) = mpsc::channel::<MinimapMessage>(1);
+    // let minimap_rx = use_signal(move || Arc::new(Mutex::new(minimap_rx)));
+    // let minimap = use_signal::<Option<MinimapData>>(|| None);
+    // let preset = use_signal::<Option<String>>(|| None);
+    // let mut config = use_signal::<Option<ConfigurationData>>(|| None);
+    // let mut configs = use_resource(move || async move {
+    //     let configs = spawn_blocking(|| query_configs().unwrap()).await.unwrap();
+    //     if config.peek().is_none() {
+    //         config.set(configs.first().cloned());
+    //         update_configuration(config.peek().clone().unwrap()).await;
+    //     }
+    //     configs
+    // });
+    // let mut settings = use_resource(|| async { spawn_blocking(query_settings).await.unwrap() });
+    // let copy_position = use_signal::<Option<(i32, i32)>>(|| None);
+    // let coroutine = use_coroutine(move |mut rx: UnboundedReceiver<AppMessage>| {
+    //     let minimap_tx = minimap_tx.clone();
+    //     async move {
+    //         while let Some(msg) = rx.next().await {
+    //             match msg {
+    //                 AppMessage::UpdateConfig(mut new_config, save) => {
+    //                     let mut id = None;
+    //                     if save {
+    //                         let mut new_config = new_config.clone();
+    //                         id = spawn_blocking(move || {
+    //                             upsert_config(&mut new_config).unwrap();
+    //                             new_config.id
+    //                         })
+    //                         .await
+    //                         .unwrap();
+    //                     }
+    //                     if id.is_some() && new_config.id.is_none() {
+    //                         new_config.id = id;
+    //                     }
+    //                     config.set(Some(new_config.clone()));
+    //                     update_configuration(new_config.clone()).await;
+    //                     configs.restart();
+    //                 }
+    //                 AppMessage::UpdateMinimap(minimap) => {
+    //                     let _ = minimap_tx
+    //                         .send(MinimapMessage::UpdateMinimap(minimap, true))
+    //                         .await;
+    //                 }
+    //                 AppMessage::UpdatePreset(preset) => {
+    //                     let _ = minimap_tx
+    //                         .send(MinimapMessage::UpdateMinimapPreset(preset))
+    //                         .await;
+    //                 }
+    //                 AppMessage::UpdateSettings(mut new_settings) => {
+    //                     update_settings(new_settings.clone()).await;
+    //                     spawn_blocking(move || {
+    //                         upsert_settings(&mut new_settings).unwrap();
+    //                     })
+    //                     .await
+    //                     .unwrap();
+    //                     settings.restart();
+    //                 }
+    //             }
+    //         }
+    //     }
+    // });
+    // let mut active_tab = use_signal(|| TAB_CONFIGURATION.to_string());
     let mut script_loaded = use_signal(|| false);
 
     // Thanks dioxus
@@ -197,54 +197,7 @@ fn App() -> Element {
         document::Link { rel: "stylesheet", href: TAILWIND_CSS }
         document::Script { src: AUTO_NUMERIC_JS }
         if script_loaded() {
-            div { class: "flex flex-col max-w-2xl h-screen mx-auto space-y-2",
-                Minimap {
-                    minimap_rx,
-                    minimap,
-                    preset,
-                    copy_position,
-                }
-                Tab {
-                    tabs: vec![
-                        TAB_CONFIGURATION.to_string(),
-                        TAB_ACTIONS.to_string(),
-                        TAB_SETTINGS.to_string(),
-                        TAB_SETTINGS_NOTIFICATIONS.to_string(),
-                        TAB_SETTINGS_FAMILIARS.to_string(),
-                    ],
-                    class: "py-2 px-3 font-medium text-sm focus:outline-none",
-                    selected_class: "bg-white text-gray-800",
-                    unselected_class: "hover:text-gray-700 text-gray-400 bg-gray-100",
-                    on_tab: move |tab| {
-                        active_tab.set(tab);
-                    },
-                    tab: active_tab(),
-                }
-                match active_tab().as_str() {
-                    TAB_CONFIGURATION => rsx! {
-                        Configuration { app_coroutine: coroutine, configs, config }
-                    },
-                    TAB_ACTIONS => rsx! {
-                        Actions {
-                            app_coroutine: coroutine,
-                            minimap,
-                            settings,
-                            preset,
-                            copy_position,
-                        }
-                    },
-                    TAB_SETTINGS => rsx! {
-                        Settings { app_coroutine: coroutine, settings }
-                    },
-                    TAB_SETTINGS_NOTIFICATIONS => rsx! {
-                        Notifications { app_coroutine: coroutine, settings }
-                    },
-                    TAB_SETTINGS_FAMILIARS => rsx! {
-                        Familiars { app_coroutine: coroutine, settings }
-                    },
-                    _ => unreachable!(),
-                }
-            }
+            Minimap {}
         }
     }
 }

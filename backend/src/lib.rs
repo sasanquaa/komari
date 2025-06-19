@@ -240,7 +240,7 @@ pub async fn redetect_minimap() {
     )
 }
 
-pub async fn player_state() -> GameState {
+pub async fn game_state() -> GameState {
     expect_value_variant!(request(Request::GameState).await, Response::GameState)
 }
 
