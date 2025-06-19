@@ -627,7 +627,7 @@ fn update_saving(
         },
         |timeout| {
             if timeout.current == PRESS_OK_AT
-                && let Ok(button) = context.detector_unwrap().detect_esc_ok_button()
+                && let Ok(button) = context.detector_unwrap().detect_esc_confirm_button()
             {
                 let (x, y) = bbox_click_point(button);
                 let _ = context.keys.send_mouse(x, y, MouseAction::Click);
@@ -918,7 +918,7 @@ mod tests {
 
         let mut detector = MockDetector::default();
         detector
-            .expect_detect_esc_ok_button()
+            .expect_detect_esc_confirm_button()
             .once()
             .returning(|| Ok(Default::default()));
 

@@ -10,7 +10,9 @@ fn main() {
     let esc_community = dir.join("esc_community_ideal_ratio.png");
     let esc_character = dir.join("esc_character_ideal_ratio.png");
     let esc_ok = dir.join("esc_ok_ideal_ratio.png");
-    let esc_cancel = dir.join("esc_ok_ideal_ratio.png");
+    let esc_confirm = dir.join("esc_confirm_ideal_ratio.png");
+    let esc_cancel = dir.join("esc_cancel_ideal_ratio.png");
+    let esc_cancel_new = dir.join("esc_cancel_new_ideal_ratio.png");
     let esc_end_chat = dir.join("esc_end_chat_ideal_ratio.png");
     let esc_next = dir.join("esc_next_ideal_ratio.png");
     let tomb = dir.join("tomb_ideal_ratio.png");
@@ -105,8 +107,16 @@ fn main() {
         esc_ok.to_str().unwrap()
     );
     println!(
+        "cargo:rustc-env=ESC_CONFIRM_TEMPLATE={}",
+        esc_confirm.to_str().unwrap()
+    );
+    println!(
         "cargo:rustc-env=ESC_CANCEL_TEMPLATE={}",
         esc_cancel.to_str().unwrap()
+    );
+    println!(
+        "cargo:rustc-env=ESC_CANCEL_NEW_TEMPLATE={}",
+        esc_cancel_new.to_str().unwrap()
     );
     println!(
         "cargo:rustc-env=ESC_END_CHAT_TEMPLATE={}",
