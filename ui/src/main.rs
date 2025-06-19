@@ -2,7 +2,12 @@
 #![feature(variant_count)]
 #![feature(map_try_insert)]
 
-use std::{env::current_exe, io::stdout, string::ToString, sync::Arc};
+use std::{
+    env::current_exe,
+    io::stdout,
+    string::ToString,
+    sync::{Arc, LazyLock},
+};
 
 use action::Actions;
 use backend::{
@@ -27,7 +32,6 @@ use minimap::Minimap;
 use notification::Notifications;
 use rand::distr::{Alphanumeric, SampleString};
 use settings::Settings;
-use tab::Tab;
 use tokio::{
     sync::{
         Mutex,
@@ -105,9 +109,16 @@ pub enum AppMessage {
 
 #[component]
 fn App() -> Element {
-    // const TAB_CONFIGURATION: &str = "Configuration";
-    // const TAB_ACTIONS: &str = "Actions";
-    // const TAB_SETTINGS: &str = "Settings";
+    const TAB_ACTIONS: &str = "Actions";
+    const TAB_CHARACTERS: &str = "Characters";
+    const TAB_SETTINGS: &str = "Settings";
+    static TABS: LazyLock<Vec<String>> = LazyLock::new(|| {
+        vec![
+            TAB_ACTIONS.to_string(),
+            TAB_CHARACTERS.to_string(),
+            TAB_SETTINGS.to_string(),
+        ]
+    });
     // const TAB_SETTINGS_NOTIFICATIONS: &str = "Notifications";
     // const TAB_SETTINGS_FAMILIARS: &str = "Familiars";
 
@@ -173,7 +184,7 @@ fn App() -> Element {
     //         }
     //     }
     // });
-    // let mut active_tab = use_signal(|| TAB_CONFIGURATION.to_string());
+    let mut selected_tab = use_signal(|| TAB_ACTIONS.to_string());
     let mut script_loaded = use_signal(|| false);
 
     // Thanks dioxus
@@ -197,7 +208,65 @@ fn App() -> Element {
         document::Link { rel: "stylesheet", href: TAILWIND_CSS }
         document::Script { src: AUTO_NUMERIC_JS }
         if script_loaded() {
-            Minimap {}
+            div { class: "flex",
+                Minimap {}
+                Tabs {
+                    tabs: TABS.clone(),
+                    on_select_tab: move |tab| {
+                        selected_tab.set(tab);
+                    },
+                    selected_tab: selected_tab(),
+                }
+                match selected_tab() {
+                    TAB_ACTIONS => {}
+                    TAB_CHARACTERS => {}
+                    TAB_SETTINGS => {}
+                    _ => unreachable!(),
+                }
+            }
+        }
+    }
+}
+
+#[derive(PartialEq, Props, Clone)]
+struct TabsProps {
+    tabs: Vec<String>,
+    on_select_tab: EventHandler<String>,
+    selected_tab: String,
+}
+
+#[component]
+fn Tabs(
+    TabsProps {
+        tabs,
+        on_select_tab,
+        selected_tab,
+    }: TabsProps,
+) -> Element {
+    rsx! {
+        div { class: "flex flex-col px-2 gap-3",
+            for tab in tabs {
+                Tab {
+                    name: tab.clone(),
+                    on_click: move |_| {
+                        on_select_tab(tab.clone());
+                    },
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn Tab(name: String, on_click: EventHandler) -> Element {
+    rsx! {
+        button {
+            class: "flex items-center gap-2 w-32 h-10 bg-red-300",
+            onclick: move |_| {
+                on_click(());
+            },
+            div { class: "w-[20px] h-[20px] bg-blue-300" }
+            p { class: "title", {name} }
         }
     }
 }
