@@ -9,14 +9,12 @@ use std::{
     sync::{Arc, LazyLock},
 };
 
-use action::Actions;
 use backend::{
     Configuration as ConfigurationData, Minimap as MinimapData, Settings as SettingsData,
     query_configs, query_settings, update_configuration, update_settings, upsert_config,
     upsert_settings,
 };
 use characters::Characters;
-use configuration::Configuration;
 use dioxus::{
     desktop::{
         WindowBuilder,
@@ -25,14 +23,11 @@ use dioxus::{
     },
     prelude::*,
 };
-use familiar::Familiars;
 use fern::Dispatch;
 use futures_util::StreamExt;
 use log::LevelFilter;
 use minimap::Minimap;
-use notification::Notifications;
 use rand::distr::{Alphanumeric, SampleString};
-use settings::Settings;
 use tokio::{
     sync::{
         Mutex,
@@ -41,20 +36,12 @@ use tokio::{
     task::spawn_blocking,
 };
 
-mod action;
 mod characters;
-mod configuration;
-mod familiar;
 mod icons;
-mod input;
+mod inputs;
 mod key;
 mod minimap;
-mod notification;
-mod platform;
-mod rotation;
 mod select;
-mod settings;
-mod tab;
 
 const TAILWIND_CSS: Asset = asset!("public/tailwind.css");
 const AUTO_NUMERIC_JS: Asset = asset!("assets/autoNumeric.min.js");
