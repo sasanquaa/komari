@@ -13,7 +13,7 @@ body {
 }
 
 @utility button-base {
-    @apply rounded text-xs text-center font-medium px-2 disabled:cursor-not-allowed;
+    @apply rounded text-xs text-center font-medium px-2 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-100;
 }
 
 @layer base {
@@ -26,35 +26,27 @@ body {
 
 @layer utilities {
     .button-primary {
-        @apply button-base text-blue-700 bg-blue-100 enabled:hover:bg-blue-200 disabled:bg-gray-100 disabled:text-gray-500;
-    }
-
-    .button-secondary {
-        @apply button-base text-gray-700 enabled:hover:bg-gray-100 disabled:text-gray-500;
-    }
-
-    .button-tertiary {
-        @apply button-base text-gray-500 bg-gray-100 enabled:hover:bg-gray-200 disabled:text-gray-300;
+        @apply button-base text-gray-50 bg-gray-900 enabled:hover:bg-gray-800;
     }
 
     .button-danger {
-        @apply button-base text-red-500 bg-red-100 enabled:hover:bg-red-200 disabled:text-red-300;
+        @apply button-base text-red-400 bg-gray-900 enabled:hover:bg-gray-800;
     }
 
     .title-xs {
-        @apply text-xs text-gray-700 font-medium;
+        @apply text-xs text-gray-50 font-medium;
     }
 
     .title {
-        @apply text-base text-gray-700 font-medium;
+        @apply text-base text-gray-50 font-medium;
     }
 
     .paragraph-xs {
-        @apply text-xs text-gray-700;
+        @apply text-xs text-gray-50;
     }
 
     .paragraph {
-        @apply text-sm text-gray-700;
+        @apply text-sm text-gray-50;
     }
 
     .scrollbar::-webkit-scrollbar {

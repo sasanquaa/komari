@@ -10,9 +10,8 @@ use std::{
 };
 
 use backend::{
-    Configuration as ConfigurationData, Minimap as MinimapData, Settings as SettingsData,
-    query_configs, query_settings, update_configuration, update_settings, upsert_config,
-    upsert_settings,
+    Configuration, Minimap as MinimapData, Settings as SettingsData, query_configs, query_settings,
+    update_configuration, update_settings, upsert_config, upsert_settings,
 };
 use characters::Characters;
 use dioxus::{
@@ -39,7 +38,6 @@ use tokio::{
 mod characters;
 mod icons;
 mod inputs;
-mod key;
 mod minimap;
 mod select;
 
@@ -73,14 +71,8 @@ fn main() {
 
     backend::init();
     let window = WindowBuilder::new()
-        .with_inner_size(Size::Physical(PhysicalSize::new(773, 364)))
-        .with_inner_size_constraints(WindowSizeConstraints::new(
-            Some(PixelUnit::Physical(773.into())),
-            Some(PixelUnit::Physical(364.into())),
-            None,
-            None,
-        ))
-        .with_resizable(true)
+        .with_inner_size(Size::Physical(PhysicalSize::new(773, 480)))
+        .with_resizable(false)
         .with_drag_and_drop(false)
         .with_title(Alphanumeric.sample_string(&mut rand::rng(), 16));
     let cfg = dioxus::desktop::Config::default()
@@ -89,11 +81,9 @@ fn main() {
     dioxus::LaunchBuilder::desktop().with_cfg(cfg).launch(App);
 }
 
-pub enum AppMessage {
-    UpdateConfig(ConfigurationData, bool),
-    UpdateMinimap(MinimapData),
-    UpdatePreset(String),
-    UpdateSettings(SettingsData),
+#[derive(Clone, Copy)]
+pub struct AppState {
+    config: Signal<Option<Configuration>>,
 }
 
 #[component]
@@ -108,73 +98,13 @@ fn App() -> Element {
             TAB_SETTINGS.to_string(),
         ]
     });
-    // const TAB_SETTINGS_NOTIFICATIONS: &str = "Notifications";
-    // const TAB_SETTINGS_FAMILIARS: &str = "Familiars";
 
-    // // TODO: Move to AppMessage?
-    // let (minimap_tx, minimap_rx) = mpsc::channel::<MinimapMessage>(1);
-    // let minimap_rx = use_signal(move || Arc::new(Mutex::new(minimap_rx)));
-    // let minimap = use_signal::<Option<MinimapData>>(|| None);
-    // let preset = use_signal::<Option<String>>(|| None);
-    // let mut config = use_signal::<Option<ConfigurationData>>(|| None);
-    // let mut configs = use_resource(move || async move {
-    //     let configs = spawn_blocking(|| query_configs().unwrap()).await.unwrap();
-    //     if config.peek().is_none() {
-    //         config.set(configs.first().cloned());
-    //         update_configuration(config.peek().clone().unwrap()).await;
-    //     }
-    //     configs
-    // });
-    // let mut settings = use_resource(|| async { spawn_blocking(query_settings).await.unwrap() });
-    // let copy_position = use_signal::<Option<(i32, i32)>>(|| None);
-    // let coroutine = use_coroutine(move |mut rx: UnboundedReceiver<AppMessage>| {
-    //     let minimap_tx = minimap_tx.clone();
-    //     async move {
-    //         while let Some(msg) = rx.next().await {
-    //             match msg {
-    //                 AppMessage::UpdateConfig(mut new_config, save) => {
-    //                     let mut id = None;
-    //                     if save {
-    //                         let mut new_config = new_config.clone();
-    //                         id = spawn_blocking(move || {
-    //                             upsert_config(&mut new_config).unwrap();
-    //                             new_config.id
-    //                         })
-    //                         .await
-    //                         .unwrap();
-    //                     }
-    //                     if id.is_some() && new_config.id.is_none() {
-    //                         new_config.id = id;
-    //                     }
-    //                     config.set(Some(new_config.clone()));
-    //                     update_configuration(new_config.clone()).await;
-    //                     configs.restart();
-    //                 }
-    //                 AppMessage::UpdateMinimap(minimap) => {
-    //                     let _ = minimap_tx
-    //                         .send(MinimapMessage::UpdateMinimap(minimap, true))
-    //                         .await;
-    //                 }
-    //                 AppMessage::UpdatePreset(preset) => {
-    //                     let _ = minimap_tx
-    //                         .send(MinimapMessage::UpdateMinimapPreset(preset))
-    //                         .await;
-    //                 }
-    //                 AppMessage::UpdateSettings(mut new_settings) => {
-    //                     update_settings(new_settings.clone()).await;
-    //                     spawn_blocking(move || {
-    //                         upsert_settings(&mut new_settings).unwrap();
-    //                     })
-    //                     .await
-    //                     .unwrap();
-    //                     settings.restart();
-    //                 }
-    //             }
-    //         }
-    //     }
-    // });
     let mut selected_tab = use_signal(|| TAB_ACTIONS.to_string());
     let mut script_loaded = use_signal(|| false);
+
+    use_context_provider(|| AppState {
+        config: Signal::new(None),
+    });
 
     // Thanks dioxus
     use_future(move || async move {
@@ -197,7 +127,7 @@ fn App() -> Element {
         document::Link { rel: "stylesheet", href: TAILWIND_CSS }
         document::Script { src: AUTO_NUMERIC_JS }
         if script_loaded() {
-            div { class: "flex",
+            div { class: "flex max-h-120 bg-gray-950",
                 Minimap {}
                 Tabs {
                     tabs: TABS.clone(),
@@ -206,7 +136,7 @@ fn App() -> Element {
                     },
                     selected_tab: selected_tab(),
                 }
-                div { class: "w-full max-w-md overflow-y-auto scrollbar",
+                div { class: "relative w-full max-w-md",
                     match selected_tab().as_str() {
                         TAB_ACTIONS => rsx! {},
                         TAB_CHARACTERS => rsx! {
@@ -254,11 +184,11 @@ fn Tabs(
 fn Tab(name: String, on_click: EventHandler) -> Element {
     rsx! {
         button {
-            class: "flex items-center gap-2 w-32 h-10 bg-red-300",
+            class: "flex items-center gap-2 w-32 h-10 hover:bg-gray-900",
             onclick: move |_| {
                 on_click(());
             },
-            div { class: "w-[20px] h-[20px] bg-blue-300" }
+            div { class: "w-[20px] h-[20px] bg-zinc-700" }
             p { class: "title", {name} }
         }
     }

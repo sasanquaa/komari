@@ -185,10 +185,8 @@ fn Canvas(
     });
 
     rsx! {
-        div { class: "p-2 bg-blue-300",
-            div { class: "h-31",
-                canvas { class: "w-full h-full", id: "canvas-minimap" }
-            }
+        div { class: "h-31 rounded-2xl bg-gray-900",
+            canvas { class: "rounded-2xl w-full h-full", id: "canvas-minimap" }
         }
     }
 }
@@ -247,7 +245,7 @@ fn Info(
     });
 
     rsx! {
-        div { class: "flex flex-col px-4 py-3 bg-green-300",
+        div { class: "flex-grow flex flex-col justify-center px-4 py-3 gap-3 border-b border-gray-600",
             InfoItem { name: "State", value: info().state }
             InfoItem { name: "Position", value: info().position }
             InfoItem { name: "Health", value: info().health }
@@ -282,7 +280,7 @@ fn Buttons() -> Element {
     });
 
     rsx! {
-        div { class: "flex h-10 justify-center items-center gap-4 bg-red-300",
+        div { class: "flex h-10 justify-center items-center gap-4",
             Button {
                 text: if halting() { "Start" } else { "Stop" },
                 on_click: move || async move {
@@ -303,7 +301,7 @@ fn Buttons() -> Element {
 fn Button(text: String, on_click: EventHandler) -> Element {
     rsx! {
         button {
-            class: "px-2 h-6 paragraph-xs bg-blue-300",
+            class: "px-2 w-20 h-6 paragraph-xs button-primary",
             onclick: move |e| {
                 e.stop_propagation();
                 on_click(());

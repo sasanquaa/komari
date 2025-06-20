@@ -1,6 +1,7 @@
 use backend::KeyBinding;
 use dioxus::{events::Key, prelude::*};
 
+use super::GenericInputProps;
 use crate::inputs::LabeledInput;
 
 #[component]
@@ -13,7 +14,7 @@ pub fn KeyBindingInput(
         disabled,
         on_input,
         value,
-    }: GenericInputProps<KeyBinding>,
+    }: GenericInputProps<Option<KeyBinding>>,
 ) -> Element {
     let mut is_active = use_signal(|| false);
 
@@ -30,7 +31,9 @@ pub fn KeyBindingInput(
                 on_active: move |active| {
                     is_active.set(active);
                 },
-                on_input,
+                on_input: move |key| {
+                    on_input(Some(key));
+                },
                 value,
             }
         }
@@ -61,26 +64,21 @@ pub fn KeyInput(
 ) -> Element {
     let mut has_error = use_signal(|| false);
     let mut input_element = use_signal(|| None);
-    let active_background_color = if has_error() {
-        "bg-red-50"
-    } else {
-        "bg-blue-50"
-    };
     let active_text_color = if has_error() {
-        "text-red-700"
+        "text-red-600"
     } else {
-        "text-blue-700"
+        "text-gray-50"
     };
 
     rsx! {
-        div { class: "relative {class}",
+        div { class: "relative bg-gray-900 {class}",
             input {
                 r#type: "text",
                 disabled,
                 onmounted: move |e| {
                     input_element.set(Some(e.data()));
                 },
-                class: "outline-none w-full h-full paragraph-xs text-center",
+                class: "outline-none w-full h-full placeholder:text-center placeholder:text-xs placeholder:text-gray-400",
                 readonly: true,
                 onfocus: move |_| {
                     on_active(true);
@@ -106,7 +104,7 @@ pub fn KeyInput(
                 value: value.map(|key| key.to_string()),
             }
             if is_active {
-                div { class: "absolute inset-0 flex items-center justify-center {active_background_color} text-xs {active_text_color}",
+                div { class: "absolute inset-0 flex items-center justify-center bg-gray-900 text-xs {active_text_color}",
                     "Press any key..."
                 }
             }
