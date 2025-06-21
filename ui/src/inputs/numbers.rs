@@ -69,7 +69,7 @@ pub fn MillisInput(
         div_class,
         input_class,
         disabled,
-        on_input,
+        on_value,
         value,
     }: GenericInputProps<u64>,
 ) -> Element {
@@ -80,7 +80,7 @@ pub fn MillisInput(
             div_class,
             input_class,
             disabled,
-            on_input,
+            on_value,
             value,
             suffix: "ms",
         }
@@ -96,7 +96,7 @@ pub fn PercentageInput(
         div_class,
         input_class,
         disabled,
-        on_input,
+        on_value,
         value,
     }: GenericInputProps<f32>,
 ) -> Element {
@@ -106,7 +106,7 @@ pub fn PercentageInput(
         value.to_string(),
         Some(EventHandler::new(move |value: String| {
             if let Ok(value) = value.parse::<f32>() {
-                on_input(value)
+                on_value(value)
             }
         })),
         "0".to_string(),
@@ -125,7 +125,7 @@ pub fn PercentageInput(
     }
 }
 
-// Please https://github.com/DioxusLabs/dioxus/issues/3938
+// TODO: Please https://github.com/DioxusLabs/dioxus/issues/3938
 #[component]
 pub fn NumberInputU32(
     label: String,
@@ -134,7 +134,7 @@ pub fn NumberInputU32(
     #[props(default = String::default())] input_class: String,
     #[props(default = false)] disabled: bool,
     minimum_value: u32,
-    on_input: EventHandler<u32>,
+    on_value: EventHandler<u32>,
     value: u32,
 ) -> Element {
     rsx! {
@@ -145,7 +145,7 @@ pub fn NumberInputU32(
             input_class,
             minimum_value,
             disabled,
-            on_input,
+            on_value,
             value,
         }
     }
@@ -159,7 +159,7 @@ pub fn NumberInputI32(
         div_class,
         input_class,
         disabled,
-        on_input,
+        on_value,
         value,
     }: GenericInputProps<i32>,
 ) -> Element {
@@ -171,7 +171,7 @@ pub fn NumberInputI32(
             input_class,
             minimum_value: 0,
             disabled,
-            on_input,
+            on_value,
             value,
         }
     }
@@ -187,7 +187,7 @@ fn PrimIntInput<T: 'static + IntoAttributeValue + PrimInt + FromStr + Display>(
     #[props(default = T::min_value())] minimum_value: T,
     #[props(default = String::default())] suffix: String,
     #[props(default = false)] disabled: bool,
-    on_input: EventHandler<T>,
+    on_value: EventHandler<T>,
     value: T,
 ) -> Element {
     let input_id = use_memo(|| Alphanumeric.sample_string(&mut rand::rng(), 8));
@@ -196,7 +196,7 @@ fn PrimIntInput<T: 'static + IntoAttributeValue + PrimInt + FromStr + Display>(
         value.to_string(),
         Some(EventHandler::new(move |value: String| {
             if let Ok(value) = value.parse::<T>() {
-                on_input(value)
+                on_value(value)
             }
         })),
         minimum_value.to_string(),

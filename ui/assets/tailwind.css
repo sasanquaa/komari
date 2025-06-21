@@ -1,60 +1,96 @@
 @import "tailwindcss";
 
+select,
+::picker(select) {
+	appearance: base-select;
+}
+
+select:open::picker-icon {
+	rotate: 180deg;
+}
+
+::picker(select) {
+    border: none;
+    top: calc(anchor(bottom) + 1px);
+}
+
+::picker(select)::-webkit-scrollbar-track {
+    background: var(--color-gray-800);
+}
+
+::picker(select)::-webkit-scrollbar {
+    width: 2px;
+    height: 2px;
+}
+
+::picker(select)::-webkit-scrollbar-thumb {
+    background: var(--color-gray-500);
+}
+
+option::checkmark {
+    order: 1;
+    margin-left: auto;
+    content: "✓";
+}
+
 html,
-body {
-    overflow-x: hidden;
+body,
+#main {
+	overflow-x: hidden;
+	height: 100%;
 }
 
 [type="checkbox"]:checked {
-    background-image: url("data:image/svg+xml,%3csvg aria-hidden='true' xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 16 12'%3e %3cpath stroke='white' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='M1 5.917 5.724 10.5 15 1.5'/%3e %3c/svg%3e");
-    background-repeat: no-repeat;
-    background-size: 0.6em 0.6em;
-    background-position: center;
+	background-image: url("data:image/svg+xml,%3csvg aria-hidden='true' xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 16 12'%3e %3cpath stroke='white' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='M1 5.917 5.724 10.5 15 1.5'/%3e %3c/svg%3e");
+	background-repeat: no-repeat;
+	background-size: 0.6em 0.6em;
+	background-position: center;
 }
 
 @utility button-base {
-    @apply rounded text-xs text-center font-medium px-2 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-100;
+	@apply rounded text-xs text-center font-medium px-2 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-100;
 }
 
 @layer base {
-    input[type="number"]::-webkit-inner-spin-button,
-    input[type="number"]::-webkit-outer-spin-button {
-        -webkit-appearance: none;
-        margin: 0;
-    }
+
+	input[type="number"]::-webkit-inner-spin-button,
+	input[type="number"]::-webkit-outer-spin-button {
+		-webkit-appearance: none;
+		margin: 0;
+	}
 }
 
 @layer utilities {
-    .button-primary {
-        @apply button-base text-gray-50 bg-gray-900 enabled:hover:bg-gray-800;
-    }
+	.button-primary {
+		@apply button-base text-gray-50 bg-gray-900 enabled:hover:bg-gray-800;
+	}
 
-    .button-danger {
-        @apply button-base text-red-400 bg-gray-900 enabled:hover:bg-gray-800;
-    }
+	.button-danger {
+		@apply button-base text-red-400 bg-gray-900 enabled:hover:bg-gray-800;
+	}
 
-    .title-xs {
-        @apply text-xs text-gray-50 font-medium;
-    }
+	.title-xs {
+		@apply text-xs text-gray-50 font-medium;
+	}
 
-    .title {
-        @apply text-base text-gray-50 font-medium;
-    }
+	.title {
+		@apply text-base text-gray-50 font-medium;
+	}
 
-    .paragraph-xs {
-        @apply text-xs text-gray-50;
-    }
+	.paragraph-xs {
+		@apply text-xs text-gray-50;
+	}
 
-    .paragraph {
-        @apply text-sm text-gray-50;
-    }
+	.paragraph {
+		@apply text-sm text-gray-50;
+	}
 
-    .scrollbar::-webkit-scrollbar {
-        width: 2px;
-        height: 2px;
-    }
+	.scrollbar::-webkit-scrollbar {
+		width: 2px;
+		height: 2px;
+	}
 
-    .scrollbar::-webkit-scrollbar-thumb {
-        background: var(--color-gray-500);
-    }
+	.scrollbar::-webkit-scrollbar-thumb {
+		background: var(--color-gray-500);
+	}
 }

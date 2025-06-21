@@ -1,20 +1,19 @@
 use backend::KeyBinding;
 use dioxus::{events::Key, prelude::*};
 
-use super::GenericInputProps;
-use crate::inputs::LabeledInput;
+use crate::{icons::XIcon, inputs::LabeledInput};
 
+// TODO: Please https://github.com/DioxusLabs/dioxus/issues/3938
 #[component]
 pub fn KeyBindingInput(
-    GenericInputProps {
-        label,
-        label_class,
-        div_class,
-        input_class,
-        disabled,
-        on_input,
-        value,
-    }: GenericInputProps<Option<KeyBinding>>,
+    label: String,
+    #[props(default = String::default())] label_class: String,
+    #[props(default = String::default())] div_class: String,
+    #[props(default = String::default())] input_class: String,
+    #[props(default = false)] disabled: bool,
+    #[props(default = false)] optional: bool,
+    on_value: EventHandler<Option<KeyBinding>>,
+    value: Option<KeyBinding>,
 ) -> Element {
     let mut is_active = use_signal(|| false);
 
@@ -27,12 +26,13 @@ pub fn KeyBindingInput(
             KeyInput {
                 class: input_class,
                 disabled,
-                is_active: is_active(),
+                optional,
+                active: is_active(),
                 on_active: move |active| {
                     is_active.set(active);
                 },
-                on_input: move |key| {
-                    on_input(Some(key));
+                on_value: move |key| {
+                    on_value(key);
                 },
                 value,
             }
@@ -45,9 +45,11 @@ pub struct KeyInputProps {
     #[props(default = String::default())]
     class: String,
     disabled: bool,
-    is_active: bool,
+    #[props(default = false)]
+    optional: bool,
+    active: bool,
     on_active: EventHandler<bool>,
-    on_input: EventHandler<KeyBinding>,
+    on_value: EventHandler<Option<KeyBinding>>,
     value: Option<KeyBinding>,
 }
 
@@ -56,9 +58,10 @@ pub fn KeyInput(
     KeyInputProps {
         class,
         disabled,
-        is_active,
+        optional,
+        active,
         on_active,
-        on_input,
+        on_value,
         value,
     }: KeyInputProps,
 ) -> Element {
@@ -78,7 +81,7 @@ pub fn KeyInput(
                 onmounted: move |e| {
                     input_element.set(Some(e.data()));
                 },
-                class: "outline-none w-full h-full placeholder:text-center placeholder:text-xs placeholder:text-gray-400",
+                class: "absolute inset-0 outline-none w-full h-full text-center text-xs text-gray-400",
                 readonly: true,
                 onfocus: move |_| {
                     on_active(true);
@@ -95,7 +98,7 @@ pub fn KeyInput(
                         }
                         has_error.set(false);
                         on_active(false);
-                        on_input(key);
+                        on_value(Some(key));
                     } else {
                         has_error.set(true);
                     }
@@ -103,9 +106,20 @@ pub fn KeyInput(
                 placeholder: "Click to set",
                 value: value.map(|key| key.to_string()),
             }
-            if is_active {
+            if active {
                 div { class: "absolute inset-0 flex items-center justify-center bg-gray-900 text-xs {active_text_color}",
                     "Press any key..."
+                }
+            }
+            if optional && !active && value.is_some() {
+                div { class: "absolute flex flex-col items-end justify-center inset-0",
+                    div {
+                        class: "hover:bg-gray-800",
+                        onclick: move |_| {
+                            on_value(None);
+                        },
+                        XIcon { class: "p-1.5 text-red-500 fill-current" }
+                    }
                 }
             }
         }

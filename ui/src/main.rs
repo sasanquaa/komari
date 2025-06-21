@@ -35,6 +35,7 @@ use tokio::{
     task::spawn_blocking,
 };
 
+mod actions;
 mod characters;
 mod icons;
 mod inputs;
@@ -71,8 +72,9 @@ fn main() {
 
     backend::init();
     let window = WindowBuilder::new()
-        .with_inner_size(Size::Physical(PhysicalSize::new(773, 480)))
+        .with_inner_size(Size::Physical(PhysicalSize::new(896, 480)))
         .with_resizable(false)
+        .with_maximizable(false)
         .with_drag_and_drop(false)
         .with_title(Alphanumeric.sample_string(&mut rand::rng(), 16));
     let cfg = dioxus::desktop::Config::default()
@@ -127,7 +129,7 @@ fn App() -> Element {
         document::Link { rel: "stylesheet", href: TAILWIND_CSS }
         document::Script { src: AUTO_NUMERIC_JS }
         if script_loaded() {
-            div { class: "flex max-h-120 bg-gray-950",
+            div { class: "flex min-w-4xl min-h-120 h-full bg-gray-950",
                 Minimap {}
                 Tabs {
                     tabs: TABS.clone(),
@@ -136,7 +138,7 @@ fn App() -> Element {
                     },
                     selected_tab: selected_tab(),
                 }
-                div { class: "relative w-full max-w-md",
+                div { class: "relative w-full",
                     match selected_tab().as_str() {
                         TAB_ACTIONS => rsx! {},
                         TAB_CHARACTERS => rsx! {

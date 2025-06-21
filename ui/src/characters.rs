@@ -1,13 +1,28 @@
-use backend::{Configuration, delete_config, query_configs, update_configuration, upsert_config};
+use std::fmt::Display;
+
+use backend::{
+    Class, Configuration, IntoEnumIterator, KeyBinding, KeyBindingConfiguration, PotionMode,
+    delete_config, query_configs, update_configuration, upsert_config,
+};
 use dioxus::prelude::*;
 use futures_util::StreamExt;
 use tokio::task::spawn_blocking;
 
-use crate::{AppState, inputs::KeyBindingInput, select::TextSelect};
+use crate::{
+    AppState,
+    inputs::{Checkbox, KeyBindingInput, MillisInput, PercentageInput},
+    select::{EnumSelect, TextSelect},
+};
+
+const INPUT_LABEL_CLASS: &str = "text-[11px] text-gray-400";
+const INPUT_DIV_CLASS: &str = "flex flex-col gap-1";
+const KEY_INPUT_CLASS: &str = "h-6";
+const INPUT_CLASS: &str = "h-6 px-1 w-full paragraph-xs outline-none border border-gray-600";
 
 #[derive(Debug)]
 enum ConfigurationUpdate {
     Set,
+    Save,
     Create(String),
     Delete,
 }
@@ -38,13 +53,25 @@ pub fn Characters() -> Element {
                 .map(|(i, _)| i)
         })
     });
+    // Default config if `config` is `None`
+    let config_view = use_memo(move || config().unwrap_or_default());
     // Handles async operations for configuration-related
     let coroutine = use_coroutine(
         move |mut rx: UnboundedReceiver<ConfigurationUpdate>| async move {
             while let Some(message) = rx.next().await {
                 match message {
                     ConfigurationUpdate::Set => {
-                        update_configuration(config().expect("config must be arleady set")).await;
+                        update_configuration(config().expect("config must be already set")).await;
+                    }
+                    ConfigurationUpdate::Save => {
+                        let mut config = config().expect("config must be already set");
+                        debug_assert!(config.id.is_some(), "saving invalid config");
+
+                        spawn_blocking(move || {
+                            upsert_config(&mut config).unwrap();
+                        })
+                        .await
+                        .unwrap();
                     }
                     ConfigurationUpdate::Create(name) => {
                         let mut new_config = Configuration {
@@ -79,7 +106,11 @@ pub fn Characters() -> Element {
             }
         },
     );
-    let active_key_label = use_signal(|| None);
+    let save_config = use_callback(move |new_config: Configuration| {
+        config.set(Some(new_config));
+        coroutine.send(ConfigurationUpdate::Save);
+        coroutine.send(ConfigurationUpdate::Set);
+    });
 
     // Sets a configuration if there is not one
     use_effect(move || {
@@ -92,27 +123,10 @@ pub fn Characters() -> Element {
     });
 
     rsx! {
-        div { class: "flex flex-col mb-10 h-110 overflow-y-auto scrollbar",
-            Section { name: "Key Bindings",
-                div { class: "grid grid-cols-2 gap-3",
-                    KeyBinding { label: "Rope Lift", active_key_label }
-                    KeyBinding { label: "Teleport", active_key_label }
-                    KeyBinding { label: "Jump", active_key_label }
-                    KeyBinding { label: "Up Jump", active_key_label }
-                    KeyBinding { label: "Interact", active_key_label }
-                    KeyBinding { label: "Cash Shop", active_key_label }
-                    KeyBinding { label: "Maple Guide", active_key_label }
-                    KeyBinding { label: "Change Channel", active_key_label }
-                    KeyBinding { label: "Potion", active_key_label }
-                    div { class: "col-span-full flex gap-2",
-                        KeyBinding { label: "Familiar Menu", active_key_label }
-                        KeyBinding { label: "Familiar Skill", active_key_label }
-                        KeyBinding { label: "Familiar Essence", active_key_label }
-                    }
-                }
-            }
+        div { class: "flex flex-col pb-15 h-full overflow-y-auto scrollbar",
+            SectionKeyBindings { config_view, save_config }
             Section { name: "Buffs",
-                div { class: "grid grid-cols-5 gap-3",
+                div { class: "grid grid-cols-5 gap-4",
                     Buff {}
                     Buff {}
                     Buff {}
@@ -122,10 +136,10 @@ pub fn Characters() -> Element {
                     Buff {}
                 }
             }
-            Section { name: "Fixed Actions" }
-            Section { name: "Others" }
+            Section { name: "Fixed actions" }
+            SectionOthers { config_view, save_config }
         }
-        div { class: "flex items-center w-full h-10 absolute bottom-0",
+        div { class: "flex items-center w-full h-10 bg-gray-950 absolute bottom-0",
             TextSelect {
                 class: "h-6 flex-grow",
                 options: config_names(),
@@ -149,11 +163,241 @@ pub fn Characters() -> Element {
 }
 
 #[component]
-fn Section(name: String, children: Element) -> Element {
+fn Section(name: &'static str, children: Element) -> Element {
     rsx! {
-        div { class: "flex flex-col px-4 pb-3",
+        div { class: "flex flex-col pr-4 pb-3",
             div { class: "flex items-center title-xs h-10", {name} }
             {children}
+        }
+    }
+}
+
+#[component]
+fn SectionKeyBindings(
+    config_view: Memo<Configuration>,
+    save_config: Callback<Configuration>,
+) -> Element {
+    rsx! {
+        Section { name: "Key bindings",
+            div { class: "grid grid-cols-2 gap-4",
+                KeyBindingConfigurationInput {
+                    label: "Rope lift",
+                    optional: true,
+                    on_value: move |ropelift_key| {
+                        save_config(Configuration {
+                            ropelift_key,
+                            ..config_view.peek().clone()
+                        });
+                    },
+                    value: config_view().ropelift_key,
+                }
+                KeyBindingConfigurationInput {
+                    label: "Teleport",
+                    optional: true,
+                    on_value: move |teleport_key| {
+                        save_config(Configuration {
+                            teleport_key,
+                            ..config_view.peek().clone()
+                        });
+                    },
+                    value: config_view().teleport_key,
+                }
+                KeyBindingConfigurationInput {
+                    label: "Jump",
+                    on_value: move |key_config: Option<KeyBindingConfiguration>| {
+                        save_config(Configuration {
+                            jump_key: key_config.expect("not optional"),
+                            ..config_view.peek().clone()
+                        });
+                    },
+                    value: config_view().jump_key,
+                }
+                KeyBindingConfigurationInput {
+                    label: "Up jump",
+                    optional: true,
+                    on_value: move |up_jump_key| {
+                        save_config(Configuration {
+                            up_jump_key,
+                            ..config_view.peek().clone()
+                        });
+                    },
+                    value: config_view().up_jump_key,
+                }
+                KeyBindingConfigurationInput {
+                    label: "Interact",
+                    on_value: move |key_config: Option<KeyBindingConfiguration>| {
+                        save_config(Configuration {
+                            interact_key: key_config.expect("not optional"),
+                            ..config_view.peek().clone()
+                        });
+                    },
+                    value: config_view().interact_key,
+                }
+                KeyBindingConfigurationInput {
+                    label: "Cash shop",
+                    on_value: move |key_config: Option<KeyBindingConfiguration>| {
+                        save_config(Configuration {
+                            cash_shop_key: key_config.expect("not optional"),
+                            ..config_view.peek().clone()
+                        });
+                    },
+                    value: config_view().cash_shop_key,
+                }
+                KeyBindingConfigurationInput {
+                    label: "Maple guide",
+                    on_value: move |key_config: Option<KeyBindingConfiguration>| {
+                        save_config(Configuration {
+                            maple_guide_key: key_config.expect("not optional"),
+                            ..config_view.peek().clone()
+                        });
+                    },
+                    value: config_view().maple_guide_key,
+                }
+                KeyBindingConfigurationInput {
+                    label: "Change channel",
+                    on_value: move |key_config: Option<KeyBindingConfiguration>| {
+                        save_config(Configuration {
+                            change_channel_key: key_config.expect("not optional"),
+                            ..config_view.peek().clone()
+                        });
+                    },
+                    value: config_view().change_channel_key,
+                }
+                KeyBindingConfigurationInput {
+                    label: "Feed pet",
+                    on_value: move |key_config: Option<KeyBindingConfiguration>| {
+                        save_config(Configuration {
+                            feed_pet_key: key_config.expect("not optional"),
+                            ..config_view.peek().clone()
+                        });
+                    },
+                    value: config_view().feed_pet_key,
+                }
+                KeyBindingConfigurationInput {
+                    label: "Potion",
+                    on_value: move |key_config: Option<KeyBindingConfiguration>| {
+                        save_config(Configuration {
+                            potion_key: key_config.expect("not optional"),
+                            ..config_view.peek().clone()
+                        });
+                    },
+                    value: config_view().potion_key,
+                }
+                div { class: "col-span-full grid-cols-3 grid gap-2 justify-items-stretch",
+                    KeyBindingConfigurationInput {
+                        label: "Familiar menu",
+                        on_value: move |key_config: Option<KeyBindingConfiguration>| {
+                            save_config(Configuration {
+                                familiar_menu_key: key_config.expect("not optional"),
+                                ..config_view.peek().clone()
+                            });
+                        },
+                        value: config_view().familiar_menu_key,
+                    }
+                    KeyBindingConfigurationInput {
+                        label: "Familiar skill",
+                        on_value: move |key_config: Option<KeyBindingConfiguration>| {
+                            save_config(Configuration {
+                                familiar_buff_key: key_config.expect("not optional"),
+                                ..config_view.peek().clone()
+                            });
+                        },
+                        value: config_view().familiar_buff_key,
+                    }
+                    KeyBindingConfigurationInput {
+                        label: "Familiar essence",
+                        on_value: move |key_config: Option<KeyBindingConfiguration>| {
+                            save_config(Configuration {
+                                familiar_essence_key: key_config.expect("not optional"),
+                                ..config_view.peek().clone()
+                            });
+                        },
+                        value: config_view().familiar_essence_key,
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn SectionOthers(
+    config_view: Memo<Configuration>,
+    save_config: Callback<Configuration>,
+) -> Element {
+    rsx! {
+        Section { name: "Others",
+            div { class: "grid grid-cols-2 gap-4",
+                CharactersMillisInput {
+                    label: "Feed pet every milliseconds",
+                    on_value: move |feed_pet_millis| {
+                        save_config(Configuration {
+                            feed_pet_millis,
+                            ..config_view.peek().clone()
+                        });
+                    },
+                    value: config_view().feed_pet_millis,
+                }
+                div {} // Spacer
+
+                CharactersSelect::<PotionMode> {
+                    label: "Use potion mode",
+                    on_select: move |potion_mode| {
+                        save_config(Configuration {
+                            potion_mode,
+                            ..config_view.peek().clone()
+                        });
+                    },
+                    selected: config_view().potion_mode,
+                }
+                match config_view().potion_mode {
+                    PotionMode::EveryMillis(millis) => rsx! {
+                        CharactersMillisInput {
+                            label: "Use potion every milliseconds",
+                            on_value: move |millis| {
+                                save_config(Configuration {
+                                    potion_mode: PotionMode::EveryMillis(millis),
+                                    ..config_view.peek().clone()
+                                });
+                            },
+                            value: millis,
+                        }
+                    },
+                    PotionMode::Percentage(percent) => rsx! {
+                        CharactersPercentageInput {
+                            label: "Use potion health below percentage",
+                            on_value: move |percent| {
+                                save_config(Configuration {
+                                    potion_mode: PotionMode::Percentage(percent),
+                                    ..config_view.peek().clone()
+                                });
+                            },
+                            value: percent,
+                        }
+                    },
+                }
+
+                CharactersSelect::<Class> {
+                    label: "Link key timing class",
+                    on_select: move |class| {
+                        save_config(Configuration {
+                            class,
+                            ..config_view.peek().clone()
+                        });
+                    },
+                    selected: config_view().class,
+                }
+                CharactersCheckbox {
+                    label: "Disable walking",
+                    on_value: move |disable_adjusting| {
+                        save_config(Configuration {
+                            disable_adjusting,
+                            ..config_view.peek().clone()
+                        });
+                    },
+                    value: config_view().disable_adjusting,
+                }
+            }
         }
     }
 }
@@ -166,18 +410,100 @@ fn Buff() -> Element {
 }
 
 #[component]
-fn KeyBinding(label: &'static str, active_key_label: Signal<Option<&'static str>>) -> Element {
-    let is_active = use_memo(move || active_key_label() == Some(label));
+fn KeyBindingConfigurationInput(
+    label: &'static str,
+    #[props(default = false)] optional: bool,
+    on_value: EventHandler<Option<KeyBindingConfiguration>>,
+    value: Option<KeyBindingConfiguration>,
+) -> Element {
+    let label = if optional {
+        format!("{label} (optional)")
+    } else {
+        label.to_string()
+    };
 
     rsx! {
         KeyBindingInput {
             label,
-            label_class: "text-[11px] text-gray-400",
-            div_class: "flex flex-col gap-1",
-            input_class: "h-6",
-            disabled: false,
-            on_input: |key| {},
-            value: None,
+            label_class: INPUT_LABEL_CLASS,
+            div_class: INPUT_DIV_CLASS,
+            input_class: KEY_INPUT_CLASS,
+            optional,
+            on_value: move |new_value: Option<KeyBinding>| {
+                let new_value = new_value
+                    .map(|key| {
+                        let mut config = value.unwrap_or_default();
+                        config.key = key;
+                        config
+                    });
+                on_value(new_value);
+            },
+            value: value.map(|config| config.key),
+        }
+    }
+}
+
+#[component]
+fn CharactersCheckbox(label: &'static str, on_value: EventHandler<bool>, value: bool) -> Element {
+    rsx! {
+        Checkbox {
+            label,
+            label_class: INPUT_LABEL_CLASS,
+            div_class: INPUT_DIV_CLASS,
+            input_class: "w-6 h-6 border border-gray-600",
+            on_value,
+            value,
+        }
+    }
+}
+
+#[component]
+fn CharactersSelect<T: 'static + Clone + PartialEq + Display + IntoEnumIterator>(
+    label: &'static str,
+    on_select: EventHandler<T>,
+    selected: T,
+) -> Element {
+    rsx! {
+        EnumSelect {
+            label,
+            label_class: INPUT_LABEL_CLASS,
+            div_class: INPUT_DIV_CLASS,
+            select_class: format!("{INPUT_CLASS} items-center picker:scrollbar"),
+            option_class: "bg-gray-900 paragraph-xs pl-1 pr-2 hover:bg-gray-800",
+            on_select,
+            selected,
+        }
+    }
+}
+
+#[component]
+fn CharactersPercentageInput(
+    label: &'static str,
+    on_value: EventHandler<f32>,
+    value: f32,
+) -> Element {
+    rsx! {
+        PercentageInput {
+            label,
+            label_class: INPUT_LABEL_CLASS,
+            div_class: INPUT_DIV_CLASS,
+            input_class: INPUT_CLASS,
+            on_value,
+            value,
+        }
+    }
+}
+
+#[component]
+fn CharactersMillisInput(label: &'static str, on_value: EventHandler<u64>, value: u64) -> Element {
+    rsx! {
+        MillisInput {
+            label,
+            label_class: INPUT_LABEL_CLASS,
+            div_class: INPUT_DIV_CLASS,
+            input_class: INPUT_CLASS,
+            on_value,
+            value,
         }
     }
 }

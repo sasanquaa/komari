@@ -245,7 +245,7 @@ fn Info(
     });
 
     rsx! {
-        div { class: "flex-grow flex flex-col justify-center px-4 py-3 gap-3 border-b border-gray-600",
+        div { class: "flex-grow flex flex-col justify-center px-4 py-3 gap-1 border-b border-gray-600",
             InfoItem { name: "State", value: info().state }
             InfoItem { name: "Position", value: info().position }
             InfoItem { name: "Health", value: info().health }
@@ -261,7 +261,7 @@ fn Info(
 #[component]
 fn InfoItem(name: String, value: String) -> Element {
     rsx! {
-        div { class: "flex paragraph", "{name} : {value}" }
+        div { class: "flex paragraph font-mono", "{name} : {value}" }
     }
 }
 

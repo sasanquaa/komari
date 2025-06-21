@@ -16,7 +16,7 @@ pub struct GenericInputProps<T: 'static + Clone + PartialEq> {
     input_class: String,
     #[props(default = false)]
     disabled: bool,
-    on_input: EventHandler<T>,
+    on_value: EventHandler<T>,
     value: T,
 }
 
@@ -28,7 +28,7 @@ pub fn Checkbox(
         div_class,
         input_class,
         disabled,
-        on_input,
+        on_value,
         value,
     }: GenericInputProps<bool>,
 ) -> Element {
@@ -40,11 +40,11 @@ pub fn Checkbox(
             disabled,
             div { class: input_class,
                 input {
-                    class: "appearance-none h-4 w-4 border border-gray-300 rounded checked:bg-gray-400",
+                    class: "appearance-none w-full h-full",
                     disabled,
                     r#type: "checkbox",
                     oninput: move |e| {
-                        on_input(e.parsed::<bool>().unwrap());
+                        on_value(e.parsed::<bool>().unwrap());
                     },
                     checked: value,
                 }

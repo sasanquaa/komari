@@ -1,4 +1,4 @@
-use std::{fmt::Display, str::FromStr};
+use std::{fmt::Display, mem::discriminant};
 
 use backend::IntoEnumIterator;
 use dioxus::prelude::*;
@@ -15,6 +15,8 @@ pub struct SelectProps<T: 'static + Clone + PartialEq + Display> {
     div_class: String,
     #[props(default = String::default())]
     select_class: String,
+    #[props(default = String::default())]
+    option_class: String,
     #[props(default = false)]
     disabled: bool,
     options: Vec<T>,
@@ -22,40 +24,45 @@ pub struct SelectProps<T: 'static + Clone + PartialEq + Display> {
     selected: usize,
 }
 
-// #[component]
-// pub fn EnumSelect<T: 'static + Clone + PartialEq + Display + FromStr + IntoEnumIterator>(
-//     #[props(default = String::default())] label: String,
-//     #[props(default = String::from("collapse"))] label_class: String,
-//     #[props(default = String::default())] div_class: String,
-//     #[props(default = String::default())] select_class: String,
-//     #[props(default = false)] disabled: bool,
-//     on_select: EventHandler<T>,
-//     selected: T,
-//     #[props(default = Vec::new())] excludes: Vec<T>,
-// ) -> Element {
-//     let options = T::iter()
-//         .filter(|variant| !excludes.contains(variant))
-//         .map(|variant| (variant.to_string(), variant.to_string()))
-//         .collect::<Vec<_>>();
-//     let selected = selected.to_string();
+// TODO: Please https://github.com/DioxusLabs/dioxus/issues/3938
+#[component]
+pub fn EnumSelect<T: 'static + Clone + PartialEq + Display + IntoEnumIterator>(
+    #[props(default = String::default())] label: String,
+    #[props(default = String::from("collapse"))] label_class: String,
+    #[props(default = String::default())] div_class: String,
+    #[props(default = String::default())] select_class: String,
+    #[props(default = String::default())] option_class: String,
+    #[props(default = false)] disabled: bool,
+    on_select: EventHandler<T>,
+    selected: T,
+    #[props(default = Vec::new())] excludes: Vec<T>,
+) -> Element {
+    let options = T::iter()
+        .filter(|variant| !excludes.contains(variant))
+        .collect::<Vec<_>>();
+    let selected = options
+        .iter()
+        .enumerate()
+        .find(|(_, option)| discriminant(&selected) == discriminant(option))
+        .map(|(i, _)| i)
+        .unwrap_or_default();
 
-//     rsx! {
-//         Select {
-//             label,
-//             disabled,
-//             div_class,
-//             label_class,
-//             select_class,
-//             options,
-//             on_select: move |(_, variant): (usize, String)| {
-//                 if let Ok(value) = T::from_str(variant.as_str()) {
-//                     on_select(value);
-//                 }
-//             },
-//             selected,
-//         }
-//     }
-// }
+    rsx! {
+        Select {
+            label,
+            disabled,
+            div_class,
+            label_class,
+            select_class,
+            option_class,
+            options,
+            on_select: move |(_, variant): (usize, T)| {
+                on_select(variant);
+            },
+            selected,
+        }
+    }
+}
 
 #[component]
 pub fn TextSelect(
@@ -86,11 +93,11 @@ pub fn TextSelect(
     }));
 
     rsx! {
-        div { class: "flex gap-1 {class}",
+        div { class: "flex gap-3 {class}",
             div { class: "flex-grow",
                 if let Some(text) = creating_text() {
                     input {
-                        class: "rounded w-full h-full px-1 border border-gray-300 paragraph-xs",
+                        class: "w-full h-full px-1 border border-gray-600 paragraph-xs outline-none",
                         placeholder: "Enter a name...",
                         onchange: move |e| {
                             creating_text.set(Some(e.value()));
@@ -100,7 +107,8 @@ pub fn TextSelect(
                 } else {
                     Select {
                         div_class: "h-full",
-                        select_class: "w-full h-full border border-gray-600 paragraph-xs outline-none",
+                        select_class: "px-1 w-full h-full border border-gray-600 paragraph-xs outline-none items-center",
+                        option_class: "paragraph-xs bg-gray-900 px-2 hover:bg-gray-800",
                         disabled,
                         options,
                         on_select: move |(usize, text)| {
@@ -157,6 +165,7 @@ pub fn Select<T>(
         div_class,
         label_class,
         select_class,
+        option_class,
         options,
         disabled,
         on_select,
@@ -182,6 +191,7 @@ where
                 },
                 for (i , option) in options.iter().enumerate() {
                     option {
+                        class: option_class.clone(),
                         disabled,
                         selected: i == selected,
                         value: i.to_string(),

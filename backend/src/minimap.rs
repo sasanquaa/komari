@@ -340,7 +340,7 @@ fn update_other_player_task(
     kind: OtherPlayerKind,
 ) -> Threshold<bool> {
     let has_player = threshold.value.unwrap_or_default();
-    let threshold = update_threshold_detection(context, 2000, threshold, task, move |detector| {
+    let threshold = update_threshold_detection(context, 3000, threshold, task, move |detector| {
         Ok(detector.detect_player_kind(minimap, kind))
     });
     if !context.halting && !has_player && threshold.value.unwrap_or_default() {
