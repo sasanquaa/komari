@@ -180,11 +180,10 @@ fn Tab(name: String, selected: bool, on_click: EventHandler) -> Element {
 
     rsx! {
         button {
-            class: "flex items-center gap-2 w-32 h-10 {selected_class} hover:bg-gray-900",
+            class: "flex items-center pl-2 w-32 h-10 {selected_class} hover:bg-gray-900",
             onclick: move |_| {
                 on_click(());
             },
-            div { class: "w-[20px] h-[20px] bg-zinc-700" }
             p { class: "title", {name} }
         }
     }
