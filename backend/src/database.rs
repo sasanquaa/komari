@@ -980,6 +980,10 @@ pub fn upsert_config(config: &mut Configuration) -> Result<()> {
     upsert_to_table("configurations", config)
 }
 
+pub fn delete_config(config: &Configuration) -> Result<()> {
+    delete_from_table("configurations", config)
+}
+
 pub fn query_maps() -> Result<Vec<Minimap>> {
     query_from_table("maps")
 }

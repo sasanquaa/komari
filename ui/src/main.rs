@@ -2,53 +2,30 @@
 #![feature(variant_count)]
 #![feature(map_try_insert)]
 
-use std::{env::current_exe, io::stdout, string::ToString, sync::Arc};
+use std::{env::current_exe, io::stdout, string::ToString, sync::LazyLock};
 
-use action::Actions;
-use backend::{
-    Configuration as ConfigurationData, Minimap as MinimapData, Settings as SettingsData,
-    query_configs, query_settings, update_configuration, update_settings, upsert_config,
-    upsert_settings,
-};
-use configuration::Configuration;
+use actions::Actions;
+use backend::{Configuration, Minimap as MinimapData};
+use characters::Characters;
 use dioxus::{
     desktop::{
         WindowBuilder,
-        tao::{platform::windows::WindowBuilderExtWindows, window::WindowSizeConstraints},
-        wry::dpi::{PhysicalSize, PixelUnit, Size},
+        tao::platform::windows::WindowBuilderExtWindows,
+        wry::dpi::{PhysicalSize, Size},
     },
     prelude::*,
 };
-use familiar::Familiars;
 use fern::Dispatch;
-use futures_util::StreamExt;
 use log::LevelFilter;
-use minimap::{Minimap, MinimapMessage};
-use notification::Notifications;
+use minimap::Minimap;
 use rand::distr::{Alphanumeric, SampleString};
-use settings::Settings;
-use tab::Tab;
-use tokio::{
-    sync::{
-        Mutex,
-        mpsc::{self},
-    },
-    task::spawn_blocking,
-};
 
-mod action;
-mod configuration;
-mod familiar;
+mod actions;
+mod characters;
 mod icons;
-mod input;
-mod key;
+mod inputs;
 mod minimap;
-mod notification;
-mod platform;
-mod rotation;
 mod select;
-mod settings;
-mod tab;
 
 const TAILWIND_CSS: Asset = asset!("public/tailwind.css");
 const AUTO_NUMERIC_JS: Asset = asset!("assets/autoNumeric.min.js");
@@ -80,14 +57,9 @@ fn main() {
 
     backend::init();
     let window = WindowBuilder::new()
-        .with_inner_size(Size::Physical(PhysicalSize::new(540, 864)))
-        .with_inner_size_constraints(WindowSizeConstraints::new(
-            Some(PixelUnit::Physical(540.into())),
-            Some(PixelUnit::Physical(864.into())),
-            None,
-            None,
-        ))
-        .with_resizable(true)
+        .with_inner_size(Size::Physical(PhysicalSize::new(896, 480)))
+        .with_resizable(false)
+        .with_maximizable(false)
         .with_drag_and_drop(false)
         .with_title(Alphanumeric.sample_string(&mut rand::rng(), 16));
     let cfg = dioxus::desktop::Config::default()
@@ -96,85 +68,34 @@ fn main() {
     dioxus::LaunchBuilder::desktop().with_cfg(cfg).launch(App);
 }
 
-pub enum AppMessage {
-    UpdateConfig(ConfigurationData, bool),
-    UpdateMinimap(MinimapData),
-    UpdatePreset(String),
-    UpdateSettings(SettingsData),
+#[derive(Clone, Copy)]
+pub struct AppState {
+    minimap: Signal<Option<MinimapData>>,
+    minimap_preset: Signal<Option<String>>,
+    config: Signal<Option<Configuration>>,
 }
 
 #[component]
 fn App() -> Element {
-    const TAB_CONFIGURATION: &str = "Configuration";
     const TAB_ACTIONS: &str = "Actions";
+    const TAB_CHARACTERS: &str = "Characters";
     const TAB_SETTINGS: &str = "Settings";
-    const TAB_SETTINGS_NOTIFICATIONS: &str = "Notifications";
-    const TAB_SETTINGS_FAMILIARS: &str = "Familiars";
+    static TABS: LazyLock<Vec<String>> = LazyLock::new(|| {
+        vec![
+            TAB_ACTIONS.to_string(),
+            TAB_CHARACTERS.to_string(),
+            TAB_SETTINGS.to_string(),
+        ]
+    });
 
-    // TODO: Move to AppMessage?
-    let (minimap_tx, minimap_rx) = mpsc::channel::<MinimapMessage>(1);
-    let minimap_rx = use_signal(move || Arc::new(Mutex::new(minimap_rx)));
-    let minimap = use_signal::<Option<MinimapData>>(|| None);
-    let preset = use_signal::<Option<String>>(|| None);
-    let mut config = use_signal::<Option<ConfigurationData>>(|| None);
-    let mut configs = use_resource(move || async move {
-        let configs = spawn_blocking(|| query_configs().unwrap()).await.unwrap();
-        if config.peek().is_none() {
-            config.set(configs.first().cloned());
-            update_configuration(config.peek().clone().unwrap()).await;
-        }
-        configs
-    });
-    let mut settings = use_resource(|| async { spawn_blocking(query_settings).await.unwrap() });
-    let copy_position = use_signal::<Option<(i32, i32)>>(|| None);
-    let coroutine = use_coroutine(move |mut rx: UnboundedReceiver<AppMessage>| {
-        let minimap_tx = minimap_tx.clone();
-        async move {
-            while let Some(msg) = rx.next().await {
-                match msg {
-                    AppMessage::UpdateConfig(mut new_config, save) => {
-                        let mut id = None;
-                        if save {
-                            let mut new_config = new_config.clone();
-                            id = spawn_blocking(move || {
-                                upsert_config(&mut new_config).unwrap();
-                                new_config.id
-                            })
-                            .await
-                            .unwrap();
-                        }
-                        if id.is_some() && new_config.id.is_none() {
-                            new_config.id = id;
-                        }
-                        config.set(Some(new_config.clone()));
-                        update_configuration(new_config.clone()).await;
-                        configs.restart();
-                    }
-                    AppMessage::UpdateMinimap(minimap) => {
-                        let _ = minimap_tx
-                            .send(MinimapMessage::UpdateMinimap(minimap, true))
-                            .await;
-                    }
-                    AppMessage::UpdatePreset(preset) => {
-                        let _ = minimap_tx
-                            .send(MinimapMessage::UpdateMinimapPreset(preset))
-                            .await;
-                    }
-                    AppMessage::UpdateSettings(mut new_settings) => {
-                        update_settings(new_settings.clone()).await;
-                        spawn_blocking(move || {
-                            upsert_settings(&mut new_settings).unwrap();
-                        })
-                        .await
-                        .unwrap();
-                        settings.restart();
-                    }
-                }
-            }
-        }
-    });
-    let mut active_tab = use_signal(|| TAB_CONFIGURATION.to_string());
+    let mut selected_tab = use_signal(|| TAB_ACTIONS.to_string());
     let mut script_loaded = use_signal(|| false);
+
+    use_context_provider(|| AppState {
+        minimap: Signal::new(None),
+        minimap_preset: Signal::new(None),
+        config: Signal::new(None),
+    });
 
     // Thanks dioxus
     use_future(move || async move {
@@ -197,54 +118,73 @@ fn App() -> Element {
         document::Link { rel: "stylesheet", href: TAILWIND_CSS }
         document::Script { src: AUTO_NUMERIC_JS }
         if script_loaded() {
-            div { class: "flex flex-col max-w-2xl h-screen mx-auto space-y-2",
-                Minimap {
-                    minimap_rx,
-                    minimap,
-                    preset,
-                    copy_position,
+            div { class: "flex min-w-4xl min-h-120 h-full bg-gray-950",
+                Minimap {}
+                Tabs {
+                    tabs: TABS.clone(),
+                    on_select_tab: move |tab| {
+                        selected_tab.set(tab);
+                    },
+                    selected_tab: selected_tab(),
                 }
-                Tab {
-                    tabs: vec![
-                        TAB_CONFIGURATION.to_string(),
-                        TAB_ACTIONS.to_string(),
-                        TAB_SETTINGS.to_string(),
-                        TAB_SETTINGS_NOTIFICATIONS.to_string(),
-                        TAB_SETTINGS_FAMILIARS.to_string(),
-                    ],
-                    class: "py-2 px-3 font-medium text-sm focus:outline-none",
-                    selected_class: "bg-white text-gray-800",
-                    unselected_class: "hover:text-gray-700 text-gray-400 bg-gray-100",
-                    on_tab: move |tab| {
-                        active_tab.set(tab);
-                    },
-                    tab: active_tab(),
-                }
-                match active_tab().as_str() {
-                    TAB_CONFIGURATION => rsx! {
-                        Configuration { app_coroutine: coroutine, configs, config }
-                    },
-                    TAB_ACTIONS => rsx! {
-                        Actions {
-                            app_coroutine: coroutine,
-                            minimap,
-                            settings,
-                            preset,
-                            copy_position,
-                        }
-                    },
-                    TAB_SETTINGS => rsx! {
-                        Settings { app_coroutine: coroutine, settings }
-                    },
-                    TAB_SETTINGS_NOTIFICATIONS => rsx! {
-                        Notifications { app_coroutine: coroutine, settings }
-                    },
-                    TAB_SETTINGS_FAMILIARS => rsx! {
-                        Familiars { app_coroutine: coroutine, settings }
-                    },
-                    _ => unreachable!(),
+                div { class: "relative w-full",
+                    match selected_tab().as_str() {
+                        TAB_ACTIONS => rsx! {
+                            Actions {}
+                        },
+                        TAB_CHARACTERS => rsx! {
+                            Characters {}
+                        },
+                        TAB_SETTINGS => rsx! {},
+                        _ => unreachable!(),
+                    }
                 }
             }
+        }
+    }
+}
+
+#[derive(PartialEq, Props, Clone)]
+struct TabsProps {
+    tabs: Vec<String>,
+    on_select_tab: EventHandler<String>,
+    selected_tab: String,
+}
+
+#[component]
+fn Tabs(
+    TabsProps {
+        tabs,
+        on_select_tab,
+        selected_tab,
+    }: TabsProps,
+) -> Element {
+    rsx! {
+        div { class: "flex flex-col px-2 gap-3",
+            for tab in tabs {
+                Tab {
+                    name: tab.clone(),
+                    selected: selected_tab == tab,
+                    on_click: move |_| {
+                        on_select_tab(tab.clone());
+                    },
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn Tab(name: String, selected: bool, on_click: EventHandler) -> Element {
+    let selected_class = if selected { "bg-gray-900" } else { "" };
+
+    rsx! {
+        button {
+            class: "flex items-center pl-2 w-32 h-10 {selected_class} hover:bg-gray-900",
+            onclick: move |_| {
+                on_click(());
+            },
+            p { class: "title", {name} }
         }
     }
 }

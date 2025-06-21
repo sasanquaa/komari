@@ -14,6 +14,7 @@ fn main() {
         "cargo:rustc-env=TAILWIND_CSS={}",
         tailwind_out.to_str().unwrap()
     );
+    println!("cargo:rerun-if-changed={}", public.to_str().unwrap());
     Command::new(NPX)
         .arg("@tailwindcss/cli")
         .arg("-i")
