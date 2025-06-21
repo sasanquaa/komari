@@ -8,12 +8,9 @@ use backend::{
 use dioxus::{document::EvalError, prelude::*};
 use futures_util::StreamExt;
 use serde::Serialize;
-use tokio::{
-    sync::{Mutex, mpsc::Receiver},
-    task::spawn_blocking,
-};
+use tokio::task::spawn_blocking;
 
-use crate::{icons::XIcon, select::TextSelect};
+use crate::{AppState, select::TextSelect};
 
 const MINIMAP_JS: &str = r#"
     const canvas = document.getElementById("canvas-minimap");
@@ -133,16 +130,121 @@ struct ActionView {
     condition: String,
 }
 
+#[derive(Debug)]
+enum MinimapUpdate {
+    Set,
+    Create(String),
+    Delete,
+}
+
 #[component]
 pub fn Minimap() -> Element {
+    let mut minimap = use_context::<AppState>().minimap;
+    let mut minimaps = use_resource(|| async {
+        spawn_blocking(|| query_maps().expect("failed to query maps"))
+            .await
+            .unwrap()
+    });
+    // Maps queried `minimaps` to names
+    let minimap_names = use_memo(move || {
+        minimaps()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|minimap| minimap.name)
+            .collect()
+    });
+    // Maps currently selected `minimap` to the index in `minimaps`
+    let minimap_index = use_memo(move || {
+        minimaps().zip(minimap()).and_then(|(minimaps, minimap)| {
+            minimaps
+                .iter()
+                .enumerate()
+                .find(|(_, data)| minimap.id == data.id)
+                .map(|(i, _)| i)
+        })
+    });
+
+    // Game state for displaying info
     let mut state = use_signal::<Option<GameState>>(|| None);
     let mut detected_minimap_size = use_signal::<Option<(usize, usize)>>(|| None);
+    // Handles async operations for minimap-related
+    let coroutine = use_coroutine(move |mut rx: UnboundedReceiver<MinimapUpdate>| async move {
+        while let Some(message) = rx.next().await {
+            match message {
+                MinimapUpdate::Set => {
+                    update_minimap(None, minimap().expect("minimap must be already set")).await;
+                }
+                MinimapUpdate::Create(name) => {
+                    let Some(mut new_minimap) = create_minimap(name).await else {
+                        return;
+                    };
+                    let mut save_minimap = new_minimap.clone();
+                    let save_id = spawn_blocking(move || {
+                        upsert_map(&mut save_minimap).unwrap();
+                        save_minimap
+                            .id
+                            .expect("minimap id must be valid after creation")
+                    })
+                    .await
+                    .unwrap();
+
+                    new_minimap.id = Some(save_id);
+                    minimap.set(Some(new_minimap));
+                    minimaps.restart();
+                }
+                MinimapUpdate::Delete => {
+                    if let Some(minimap) = minimap.take() {
+                        spawn_blocking(move || {
+                            delete_map(&minimap).expect("failed to delete minimap");
+                        })
+                        .await
+                        .unwrap();
+                        minimaps.restart();
+                    }
+                }
+            }
+        }
+    });
+
+    // Sets a minimap if there is not one
+    use_effect(move || {
+        if let Some(minimaps) = minimaps()
+            && !minimaps.is_empty()
+            && minimap.peek().is_none()
+        {
+            minimap.set(minimaps.into_iter().next());
+            coroutine.send(MinimapUpdate::Set);
+        }
+    });
 
     rsx! {
-        div { class: "flex flex-col min-w-2xs max-w-2xs",
+        div { class: "flex flex-col min-w-xs max-w-xs",
             Canvas { state, detected_minimap_size }
-            Info { state, detected_minimap_size }
             Buttons {}
+            Info { state, detected_minimap_size, minimap }
+            div { class: "flex-grow flex items-end px-2",
+                div { class: "h-10 w-full flex items-center",
+                    TextSelect {
+                        class: "h-6 w-full",
+                        options: minimap_names(),
+                        disabled: false,
+                        placeholder: "Create a map...",
+                        on_create: move |name| {
+                            coroutine.send(MinimapUpdate::Create(name));
+                            coroutine.send(MinimapUpdate::Set);
+                        },
+                        on_delete: move |_| {
+                            coroutine.send(MinimapUpdate::Delete);
+                        },
+                        on_select: move |(index, _)| {
+                            let selected = minimaps.peek().as_ref().unwrap().get(index).cloned().unwrap();
+                            minimap.set(Some(selected));
+                            coroutine.send(MinimapUpdate::Set);
+                        },
+                        selected: minimap_index(),
+                    }
+                }
+            }
         }
     }
 }
@@ -195,6 +297,7 @@ fn Canvas(
 fn Info(
     state: ReadOnlySignal<Option<GameState>>,
     detected_minimap_size: ReadOnlySignal<Option<(usize, usize)>>,
+    minimap: ReadOnlySignal<Option<MinimapData>>
 ) -> Element {
     #[derive(Debug, PartialEq, Clone)]
     struct GameStateInfo {
@@ -219,6 +322,10 @@ fn Info(
             detected_minimap_size: "Unknown".to_string(),
             selected_minimap_size: "Unknown".to_string(),
         };
+
+        if let Some(minimap) = minimap() {
+            info.selected_minimap_size = format!("{}px x {}px", minimap.width, minimap.height);
+        }
 
         if let Some((width, height)) = detected_minimap_size() {
             info.detected_minimap_size = format!("{width}px x {height}px")
@@ -245,7 +352,7 @@ fn Info(
     });
 
     rsx! {
-        div { class: "flex-grow flex flex-col justify-center px-4 py-3 gap-1 border-b border-gray-600",
+        div { class: "flex flex-col justify-center px-4 py-3 gap-1 border-b border-gray-600",
             InfoItem { name: "State", value: info().state }
             InfoItem { name: "Position", value: info().position }
             InfoItem { name: "Health", value: info().health }

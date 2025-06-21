@@ -5,13 +5,8 @@ select,
 	appearance: base-select;
 }
 
-select:open::picker-icon {
-	rotate: 180deg;
-}
-
 ::picker(select) {
     border: none;
-    top: calc(anchor(bottom) + 1px);
 }
 
 ::picker(select)::-webkit-scrollbar-track {
@@ -48,7 +43,7 @@ body,
 }
 
 @utility button-base {
-	@apply rounded text-xs text-center font-medium px-2 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-100;
+	@apply text-xs text-center font-medium px-2 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-100;
 }
 
 @layer base {

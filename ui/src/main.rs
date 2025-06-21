@@ -85,6 +85,7 @@ fn main() {
 
 #[derive(Clone, Copy)]
 pub struct AppState {
+    minimap: Signal<Option<MinimapData>>,
     config: Signal<Option<Configuration>>,
 }
 
@@ -105,6 +106,7 @@ fn App() -> Element {
     let mut script_loaded = use_signal(|| false);
 
     use_context_provider(|| AppState {
+        minimap: Signal::new(None),
         config: Signal::new(None),
     });
 
@@ -173,6 +175,7 @@ fn Tabs(
             for tab in tabs {
                 Tab {
                     name: tab.clone(),
+                    selected: selected_tab == tab,
                     on_click: move |_| {
                         on_select_tab(tab.clone());
                     },
@@ -183,10 +186,12 @@ fn Tabs(
 }
 
 #[component]
-fn Tab(name: String, on_click: EventHandler) -> Element {
+fn Tab(name: String, selected: bool, on_click: EventHandler) -> Element {
+    let selected_class = if selected { "bg-gray-900" } else { "" };
+
     rsx! {
         button {
-            class: "flex items-center gap-2 w-32 h-10 hover:bg-gray-900",
+            class: "flex items-center gap-2 w-32 h-10 {selected_class} hover:bg-gray-900",
             onclick: move |_| {
                 on_click(());
             },

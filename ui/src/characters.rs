@@ -55,6 +55,7 @@ pub fn Characters() -> Element {
     });
     // Default config if `config` is `None`
     let config_view = use_memo(move || config().unwrap_or_default());
+
     // Handles async operations for configuration-related
     let coroutine = use_coroutine(
         move |mut rx: UnboundedReceiver<ConfigurationUpdate>| async move {
@@ -117,7 +118,7 @@ pub fn Characters() -> Element {
         if let Some(configs) = configs()
             && config.peek().is_none()
         {
-            config.set(configs.first().cloned());
+            config.set(configs.into_iter().next());
             coroutine.send(ConfigurationUpdate::Set);
         }
     });
