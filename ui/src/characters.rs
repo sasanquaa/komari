@@ -14,7 +14,7 @@ use crate::{
     select::{EnumSelect, TextSelect},
 };
 
-const INPUT_LABEL_CLASS: &str = "text-[11px] text-gray-400";
+const INPUT_LABEL_CLASS: &str = "label";
 const INPUT_DIV_CLASS: &str = "flex flex-col gap-1";
 const KEY_INPUT_CLASS: &str = "h-6";
 const INPUT_CLASS: &str = "h-6 px-1 w-full paragraph-xs outline-none border border-gray-600";
@@ -47,7 +47,7 @@ pub fn Characters() -> Element {
     let config_index = use_memo(move || {
         configs().zip(config()).and_then(|(configs, config)| {
             configs
-                .iter()
+                .into_iter()
                 .enumerate()
                 .find(|(_, cfg)| config.id == cfg.id)
                 .map(|(i, _)| i)

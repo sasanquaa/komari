@@ -2,38 +2,23 @@
 #![feature(variant_count)]
 #![feature(map_try_insert)]
 
-use std::{
-    env::current_exe,
-    io::stdout,
-    string::ToString,
-    sync::{Arc, LazyLock},
-};
+use std::{env::current_exe, io::stdout, string::ToString, sync::LazyLock};
 
-use backend::{
-    Configuration, Minimap as MinimapData, Settings as SettingsData, query_configs, query_settings,
-    update_configuration, update_settings, upsert_config, upsert_settings,
-};
+use actions::Actions;
+use backend::{Configuration, Minimap as MinimapData};
 use characters::Characters;
 use dioxus::{
     desktop::{
         WindowBuilder,
-        tao::{platform::windows::WindowBuilderExtWindows, window::WindowSizeConstraints},
-        wry::dpi::{PhysicalSize, PixelUnit, Size},
+        tao::platform::windows::WindowBuilderExtWindows,
+        wry::dpi::{PhysicalSize, Size},
     },
     prelude::*,
 };
 use fern::Dispatch;
-use futures_util::StreamExt;
 use log::LevelFilter;
 use minimap::Minimap;
 use rand::distr::{Alphanumeric, SampleString};
-use tokio::{
-    sync::{
-        Mutex,
-        mpsc::{self},
-    },
-    task::spawn_blocking,
-};
 
 mod actions;
 mod characters;
@@ -86,6 +71,7 @@ fn main() {
 #[derive(Clone, Copy)]
 pub struct AppState {
     minimap: Signal<Option<MinimapData>>,
+    minimap_preset: Signal<Option<String>>,
     config: Signal<Option<Configuration>>,
 }
 
@@ -107,6 +93,7 @@ fn App() -> Element {
 
     use_context_provider(|| AppState {
         minimap: Signal::new(None),
+        minimap_preset: Signal::new(None),
         config: Signal::new(None),
     });
 
@@ -142,7 +129,9 @@ fn App() -> Element {
                 }
                 div { class: "relative w-full",
                     match selected_tab().as_str() {
-                        TAB_ACTIONS => rsx! {},
+                        TAB_ACTIONS => rsx! {
+                            Actions {}
+                        },
                         TAB_CHARACTERS => rsx! {
                             Characters {}
                         },

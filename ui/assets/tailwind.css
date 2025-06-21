@@ -72,6 +72,10 @@ body,
 		@apply text-base text-gray-50 font-medium;
 	}
 
+    .label {
+		@apply text-[11px] text-gray-400;
+    }
+
 	.paragraph-xs {
 		@apply text-xs text-gray-50;
 	}

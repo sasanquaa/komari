@@ -157,7 +157,7 @@ pub fn Minimap() -> Element {
     let minimap_index = use_memo(move || {
         minimaps().zip(minimap()).and_then(|(minimaps, minimap)| {
             minimaps
-                .iter()
+                .into_iter()
                 .enumerate()
                 .find(|(_, data)| minimap.id == data.id)
                 .map(|(i, _)| i)
@@ -165,8 +165,8 @@ pub fn Minimap() -> Element {
     });
 
     // Game state for displaying info
-    let mut state = use_signal::<Option<GameState>>(|| None);
-    let mut detected_minimap_size = use_signal::<Option<(usize, usize)>>(|| None);
+    let state = use_signal::<Option<GameState>>(|| None);
+    let detected_minimap_size = use_signal::<Option<(usize, usize)>>(|| None);
     // Handles async operations for minimap-related
     let coroutine = use_coroutine(move |mut rx: UnboundedReceiver<MinimapUpdate>| async move {
         while let Some(message) = rx.next().await {
@@ -356,11 +356,11 @@ fn Info(
             InfoItem { name: "State", value: info().state }
             InfoItem { name: "Position", value: info().position }
             InfoItem { name: "Health", value: info().health }
-            InfoItem { name: "Priority Action", value: info().priority_action }
-            InfoItem { name: "Normal Action", value: info().normal_action }
+            InfoItem { name: "Priority action", value: info().priority_action }
+            InfoItem { name: "Normal action", value: info().normal_action }
             InfoItem { name: "Erda Shower", value: info().erda_shower_state }
-            InfoItem { name: "Detected Size", value: info().detected_minimap_size }
-            InfoItem { name: "Selected Size", value: info().selected_minimap_size }
+            InfoItem { name: "Detected size", value: info().detected_minimap_size }
+            InfoItem { name: "Selected size", value: info().selected_minimap_size }
         }
     }
 }
