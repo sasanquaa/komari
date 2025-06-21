@@ -123,10 +123,10 @@ fn ActionList() -> Element {
             ActionKeyItem {
                 action: ActionKey {
                     position: Some(Position {
-                        x: 100,
+                        x: 100000,
                         x_random_range: 10,
-                        y: 100,
-                        ..Position::default()
+                        y: 10000,
+                        allow_adjusting: true,
                     }),
                     queue_to_front: Some(true),
                     link_key: Some(LinkKeyBinding::Before(KeyBinding::B)),
@@ -175,6 +175,10 @@ fn ActionList() -> Element {
 
 #[component]
 fn ActionKeyItem(action: ActionKey) -> Element {
+    const TEXT_CLASS: &str =
+        "text-center inline-block text-ellipsis overflow-hidden whitespace-nowrap";
+    const BORDER_CLASS: &str = "border-r-2 border-gray-900";
+
     let ActionKey {
         key,
         link_key,
@@ -220,25 +224,21 @@ fn ActionKeyItem(action: ActionKey) -> Element {
     };
 
     rsx! {
-        div { class: "grid grid-cols-7 h-4 label hover:bg-gray-800",
-            div { class: "border-r-2 border-gray-900 flex justify-center col-span-2",
-                "{queue_to_front}{position}"
-            }
-            div { class: "border-r-2 border-gray-900 flex justify-center col-span-2",
-                "{link_key}{key} × {count}"
-            }
-            div { class: "border-r-2 border-gray-900 flex justify-center col-span-1",
+        div { class: "grid grid-cols-[160px_70px_30px_auto] h-4 label hover:bg-gray-800",
+            div { class: "{BORDER_CLASS} {TEXT_CLASS}", "{queue_to_front}{position}" }
+            div { class: "{BORDER_CLASS} {TEXT_CLASS}", "{link_key}{key} × {count}" }
+            div { class: "{BORDER_CLASS} {TEXT_CLASS}",
                 match direction {
                     ActionKeyDirection::Any => "⇆",
                     ActionKeyDirection::Left => "←",
                     ActionKeyDirection::Right => "→",
                 }
             }
-            div { class: "flex justify-center col-span-2",
+            div { class: "flex justify-center",
                 match with {
                     ActionKeyWith::Any => "Any",
                     ActionKeyWith::Stationary => "Stationary",
-                    ActionKeyWith::DoubleJump => "Double Jump",
+                    ActionKeyWith::DoubleJump => "Double jump",
                 }
             }
         }
