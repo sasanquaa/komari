@@ -48,11 +48,10 @@ fn main() {
     let extreme_green_potion_buff = dir.join("extreme_green_potion_ideal_ratio.png");
     let extreme_gold_potion_buff = dir.join("extreme_gold_potion_ideal_ratio.png");
     let cash_shop = dir.join("cash_shop.png");
-    let hp_start = dir.join("hp_start_ideal_ratio.png");
+    let hp_bar_anchor = dir.join("hp_bar_anchor_ideal_ratio.png");
     let hp_separator_1 = dir.join("hp_separator_ideal_ratio_1.png");
     let hp_separator_2 = dir.join("hp_separator_ideal_ratio_2.png");
     let hp_shield = dir.join("hp_shield_ideal_ratio.png");
-    let hp_end = dir.join("hp_end_ideal_ratio.png");
     let spin_test = dir.join("spin_test_2");
     let familiar_button_save = dir.join("familiar_button_save_ideal_ratio.png");
     let familiar_button_setup = dir.join("familiar_button_setup_ideal_ratio.png");
@@ -256,8 +255,8 @@ fn main() {
         cash_shop.to_str().unwrap()
     );
     println!(
-        "cargo:rustc-env=HP_START_TEMPLATE={}",
-        hp_start.to_str().unwrap()
+        "cargo:rustc-env=HP_BAR_ANCHOR_TEMPLATE={}",
+        hp_bar_anchor.to_str().unwrap()
     );
     println!(
         "cargo:rustc-env=HP_SEPARATOR_1_TEMPLATE={}",
@@ -270,10 +269,6 @@ fn main() {
     println!(
         "cargo:rustc-env=HP_SHIELD_TEMPLATE={}",
         hp_shield.to_str().unwrap()
-    );
-    println!(
-        "cargo:rustc-env=HP_END_TEMPLATE={}",
-        hp_end.to_str().unwrap()
     );
     println!(
         "cargo:rustc-env=SPIN_TEST_DIR={}",

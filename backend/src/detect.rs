@@ -1098,24 +1098,41 @@ fn detect_player_in_cash_shop(mat: &impl ToInputArray) -> bool {
     detect_template(mat, &*CASH_SHOP, Point::default(), 0.7).is_ok()
 }
 
-fn detect_player_health_bar(mat: &impl ToInputArray) -> Result<Rect> {
+fn detect_player_health_bar<T: MatTraitConst + ToInputArray>(mat: &T) -> Result<Rect> {
     /// TODO: Support default ratio
-    static HP_START: LazyLock<Mat> = LazyLock::new(|| {
-        imgcodecs::imdecode(include_bytes!(env!("HP_START_TEMPLATE")), IMREAD_GRAYSCALE).unwrap()
+    static HP_BAR_ANCHOR: LazyLock<Mat> = LazyLock::new(|| {
+        imgcodecs::imdecode(
+            include_bytes!(env!("HP_BAR_ANCHOR_TEMPLATE")),
+            IMREAD_GRAYSCALE,
+        )
+        .unwrap()
     });
-    static HP_END: LazyLock<Mat> = LazyLock::new(|| {
-        imgcodecs::imdecode(include_bytes!(env!("HP_END_TEMPLATE")), IMREAD_GRAYSCALE).unwrap()
-    });
+    const HP_BAR_X_OFFSET_FROM_ANCHOR_CENTER: i32 = 122;
+    const HP_BAR_Y_OFFSET_FROM_ANCHOR_CENTER: i32 = 19;
+    const HP_BAR_HALF_WIDTH: i32 = 100;
+    const HP_BAR_HALF_HEIGHT: i32 = 10;
 
-    let hp_start = detect_template(mat, &*HP_START, Point::default(), 0.8)?;
-    let hp_start_to_edge_x = hp_start.x + hp_start.width;
-    let hp_end = detect_template(mat, &*HP_END, Point::default(), 0.8)?;
-    Ok(Rect::new(
-        hp_start_to_edge_x,
-        hp_start.y,
-        hp_end.x - hp_start_to_edge_x,
-        hp_start.height,
-    ))
+    let anchor = detect_template(mat, &*HP_BAR_ANCHOR, Point::default(), 0.75)?;
+    let size = mat.size().expect("has size");
+    let hp_bar_x_center = anchor.x + anchor.width / 2 + HP_BAR_X_OFFSET_FROM_ANCHOR_CENTER;
+    let hp_bar_y_center = anchor.y + anchor.height / 2 - HP_BAR_Y_OFFSET_FROM_ANCHOR_CENTER;
+    if hp_bar_x_center > size.width || hp_bar_y_center < 0 {
+        bail!("failed to determine HP bar center");
+    }
+
+    let hp_bar_tl = Point::new(
+        hp_bar_x_center - HP_BAR_HALF_WIDTH,
+        hp_bar_y_center - HP_BAR_HALF_HEIGHT,
+    );
+    let hp_bar_br = Point::new(
+        hp_bar_x_center + HP_BAR_HALF_WIDTH,
+        hp_bar_y_center + HP_BAR_HALF_HEIGHT,
+    );
+    if hp_bar_tl.x < 0 || hp_bar_tl.y < 0 || hp_bar_br.x > size.width || hp_bar_br.y > size.height {
+        bail!("failed to determine HP bar");
+    }
+
+    Ok(Rect::from_points(hp_bar_tl, hp_bar_br))
 }
 
 fn detect_player_current_max_health_bars(
@@ -1158,6 +1175,7 @@ fn detect_player_current_max_health_bars(
     .inspect_err(|_| {
         HP_SEPARATOR_TYPE_1.store(!hp_separator_type_1, Ordering::Release);
     })?;
+
     let hp_shield = detect_template(
         &grayscale.roi(hp_bar).unwrap(),
         &*HP_SHIELD,
@@ -1165,6 +1183,7 @@ fn detect_player_current_max_health_bars(
         0.8,
     )
     .ok();
+
     let left = mat
         .roi(Rect::new(
             hp_bar.x,
@@ -1187,6 +1206,7 @@ fn detect_player_current_max_health_bars(
         hp_separator.x - left_bbox_x + 1, // Help thin character like '1' detectable
         left_bbox.height + 2,
     );
+
     let right = mat
         .roi(Rect::new(
             hp_separator.x + hp_separator.width,
@@ -1206,6 +1226,7 @@ fn detect_player_current_max_health_bars(
     .into_iter()
     .reduce(|acc, cur| acc | cur)
     .ok_or(anyhow!("failed to detect max health bar"))?;
+
     Ok((left_bbox, right_bbox))
 }
 
