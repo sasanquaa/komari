@@ -654,7 +654,7 @@ fn Info(state: ReadSignal<Option<MinimapState>>, map: ReadSignal<Option<Map>>) -
         div { class: "grid grid-cols-2 items-center justify-center px-4 py-3 gap-1",
             InfoItem { name: "State", value: info().state }
             InfoItem { name: "Position", value: info().position }
-            InfoItem { name: "Health", value: info().health }
+            InfoItem { name: "HP", value: info().health }
             InfoItem { name: "Priority action", value: info().priority_action }
             InfoItem { name: "Normal action", value: info().normal_action }
             InfoItem { name: "Erda Shower", value: info().erda_shower_state }

@@ -15,6 +15,7 @@ use crate::{
         ContentAlign, ContentSide,
         button::Button,
         checkbox::Checkbox,
+        duration::{DurationInput, DurationParts},
         file::{FileInput, FileOutput},
         key::KeyInput,
         labeled::Labeled,
@@ -207,10 +208,9 @@ fn FeedPet() -> Element {
     let save_character = context.save_character;
 
     rsx! {
-        div { class: "grid grid-cols-3 gap-4",
+        div { class: "grid grid-cols-4 gap-4",
             CharactersKeyBindingConfigurationInput {
                 label: "Feed key",
-                label_class: "col-span-2",
                 disabled: character().id.is_none(),
                 on_value: move |key_config: Option<KeyBindingConfiguration>| {
                     save_character(Character {
@@ -219,6 +219,28 @@ fn FeedPet() -> Element {
                     });
                 },
                 value: character().feed_pet_key,
+            }
+            CharactersNumberU32Input {
+                label: "Count",
+                disabled: character().id.is_none(),
+                on_value: move |feed_pet_count| {
+                    save_character(Character {
+                        feed_pet_count,
+                        ..character.peek().clone()
+                    });
+                },
+                value: character().feed_pet_count,
+            }
+            CharactersDurationInput {
+                label: "Every (mm:ss)",
+                disabled: character().id.is_none(),
+                on_value: move |feed_pet_millis| {
+                    save_character(Character {
+                        feed_pet_millis,
+                        ..character.peek().clone()
+                    });
+                },
+                value: character().feed_pet_millis,
             }
             CharactersCheckbox {
                 label: "Enabled",
@@ -235,28 +257,6 @@ fn FeedPet() -> Element {
                 },
                 checked: character().feed_pet_key.enabled,
             }
-            CharactersNumberU32Input {
-                label: "Count",
-                disabled: character().id.is_none(),
-                on_value: move |feed_pet_count| {
-                    save_character(Character {
-                        feed_pet_count,
-                        ..character.peek().clone()
-                    });
-                },
-                value: character().feed_pet_count,
-            }
-            CharactersMillisInput {
-                label: "Every",
-                disabled: character().id.is_none(),
-                on_value: move |feed_pet_millis| {
-                    save_character(Character {
-                        feed_pet_millis,
-                        ..character.peek().clone()
-                    });
-                },
-                value: character().feed_pet_millis,
-            }
         }
     }
 }
@@ -268,10 +268,9 @@ fn UsePotion() -> Element {
     let save_character = context.save_character;
 
     rsx! {
-        div { class: "grid grid-cols-3 gap-4",
+        div { class: "grid grid-cols-4 gap-4",
             CharactersKeyBindingConfigurationInput {
                 label: "Potion key",
-                label_class: "col-span-2",
                 disabled: character().id.is_none(),
                 on_value: move |key_config: Option<KeyBindingConfiguration>| {
                     save_character(Character {
@@ -280,6 +279,58 @@ fn UsePotion() -> Element {
                     });
                 },
                 value: character().potion_key,
+            }
+            CharactersSelect::<PotionMode> {
+                label: "Mode",
+                disabled: character().id.is_none(),
+                on_selected: move |potion_mode| {
+                    save_character(Character {
+                        potion_mode,
+                        ..character.peek().clone()
+                    });
+                },
+                selected: character().potion_mode,
+            }
+            match character().potion_mode {
+                PotionMode::EveryMillis(millis) => rsx! {
+                    CharactersDurationInput {
+                        label: "Every (mm:ss)",
+                        disabled: character().id.is_none(),
+                        on_value: move |millis| {
+                            save_character(Character {
+                                potion_mode: PotionMode::EveryMillis(millis),
+                                ..character.peek().clone()
+                            });
+                        },
+                        value: millis,
+                    }
+                },
+                PotionMode::Percentage(percent) => rsx! {
+                    div { class: "grid grid-cols-2 gap-2",
+                        CharactersPercentageInput {
+                            label: "HP below",
+                            disabled: character().id.is_none(),
+                            on_value: move |percent| {
+                                save_character(Character {
+                                    potion_mode: PotionMode::Percentage(percent as f32),
+                                    ..character.peek().clone()
+                                });
+                            },
+                            value: percent as u32,
+                        }
+                        CharactersMillisInput {
+                            label: "HP update every",
+                            disabled: character().id.is_none(),
+                            on_value: move |millis| {
+                                save_character(Character {
+                                    health_update_millis: millis,
+                                    ..character.peek().clone()
+                                });
+                            },
+                            value: character().health_update_millis,
+                        }
+                    }
+                },
             }
             CharactersCheckbox {
                 label: "Enabled",
@@ -295,58 +346,6 @@ fn UsePotion() -> Element {
                     });
                 },
                 checked: character().potion_key.enabled,
-            }
-            CharactersSelect::<PotionMode> {
-                label: "Mode",
-                disabled: character().id.is_none(),
-                on_selected: move |potion_mode| {
-                    save_character(Character {
-                        potion_mode,
-                        ..character.peek().clone()
-                    });
-                },
-                selected: character().potion_mode,
-            }
-            match character().potion_mode {
-                PotionMode::EveryMillis(millis) => rsx! {
-                    CharactersMillisInput {
-                        label: "Every",
-                        disabled: character().id.is_none(),
-                        on_value: move |millis| {
-                            save_character(Character {
-                                potion_mode: PotionMode::EveryMillis(millis),
-                                ..character.peek().clone()
-                            });
-                        },
-                        value: millis,
-                    }
-                },
-                PotionMode::Percentage(percent) => rsx! {
-                    div { class: "grid grid-cols-2 gap-2",
-                        CharactersPercentageInput {
-                            label: "Below health",
-                            disabled: character().id.is_none(),
-                            on_value: move |percent| {
-                                save_character(Character {
-                                    potion_mode: PotionMode::Percentage(percent as f32),
-                                    ..character.peek().clone()
-                                });
-                            },
-                            value: percent as u32,
-                        }
-                        CharactersMillisInput {
-                            label: "Health update every",
-                            disabled: character().id.is_none(),
-                            on_value: move |millis| {
-                                save_character(Character {
-                                    health_update_millis: millis,
-                                    ..character.peek().clone()
-                                });
-                            },
-                            value: character().health_update_millis,
-                        }
-                    }
-                },
             }
         }
     }
@@ -490,6 +489,18 @@ fn SectionMovement() -> Element {
                     disabled,
                 }
                 CharactersCheckbox {
+                    label: "Has extended teleport range",
+                    on_checked: move |has_extended_teleport_range| {
+                        save_character(Character {
+                            has_extended_teleport_range,
+                            ..character.peek().clone()
+                        });
+                    },
+                    checked: character().has_extended_teleport_range,
+                    tooltip: "Applicable only for mage class when teleport range increase buff is turned on.",
+                    disabled,
+                }
+                CharactersCheckbox {
                     label: "Disable teleport on fall",
                     on_checked: move |disable_teleport_on_fall| {
                         save_character(Character {
@@ -551,20 +562,7 @@ fn SectionFamiliars() -> Element {
 
     rsx! {
         Section { title: "Familiars",
-            CharactersCheckbox {
-                label: "Enable swapping",
-                on_checked: move |enable_familiars_swapping| {
-                    save_character(Character {
-                        familiars: Familiars {
-                            enable_familiars_swapping,
-                            ..familiars.peek().clone()
-                        },
-                        ..character.peek().clone()
-                    });
-                },
-                checked: familiars().enable_familiars_swapping,
-            }
-            div { class: "grid grid-cols-2 gap-3 mt-2",
+            div { class: "grid grid-cols-3 gap-4",
                 CharactersSelect::<SwappableFamiliars> {
                     label: "Swappable slots",
                     disabled: !familiars().enable_familiars_swapping,
@@ -579,8 +577,8 @@ fn SectionFamiliars() -> Element {
                     },
                     selected: familiars().swappable_familiars,
                 }
-                CharactersMillisInput {
-                    label: "Swap check every",
+                CharactersDurationInput {
+                    label: "Swap check every (mm:ss)",
                     disabled: !familiars().enable_familiars_swapping,
                     on_value: move |swap_check_millis| {
                         save_character(Character {
@@ -592,6 +590,20 @@ fn SectionFamiliars() -> Element {
                         });
                     },
                     value: familiars().swap_check_millis,
+                }
+
+                CharactersCheckbox {
+                    label: "Swapping enabled",
+                    on_checked: move |enable_familiars_swapping| {
+                        save_character(Character {
+                            familiars: Familiars {
+                                enable_familiars_swapping,
+                                ..familiars.peek().clone()
+                            },
+                            ..character.peek().clone()
+                        });
+                    },
+                    checked: familiars().enable_familiars_swapping,
                 }
 
                 CharactersCheckbox {
@@ -770,7 +782,7 @@ fn CharactersKeyInput(
     let label = if optional {
         format!("{label} (optional)")
     } else {
-        label.to_string()
+        label
     };
 
     rsx! {
@@ -861,6 +873,25 @@ fn CharactersPercentageInput(
     rsx! {
         Labeled { label,
             PercentageInput { value, on_value, disabled }
+        }
+    }
+}
+
+#[component]
+fn CharactersDurationInput(
+    label: &'static str,
+    value: u64,
+    on_value: Callback<u64>,
+    #[props(default)] disabled: bool,
+) -> Element {
+    rsx! {
+        Labeled { label,
+            DurationInput {
+                value,
+                on_value,
+                disabled,
+                parts: DurationParts::MinutesAndSeconds,
+            }
         }
     }
 }

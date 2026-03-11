@@ -274,7 +274,7 @@ fn loop_with_fps(fps: u32, mut on_tick: impl FnMut()) {
                 use log::debug;
 
                 last_logged_instant = now;
-                debug!(target: "context", "ticking running late at {}ms", elapsed_duration.as_millis());
+                debug!(target: "backend/context", "ticking running late at {}ms", elapsed_duration.as_millis());
             }
         }
     }

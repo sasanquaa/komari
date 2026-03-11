@@ -3,11 +3,7 @@ use super::{
     actions::next_action,
     timeout::{Lifecycle, Timeout, next_timeout_lifecycle},
 };
-use crate::{
-    Position,
-    ecs::{transition, transition_if},
-    player::{PlayerEntity, transition_from_action},
-};
+use crate::{Position, player::PlayerEntity};
 
 /// Updates the [`Player::Stalling`] contextual state.
 ///
@@ -36,22 +32,33 @@ pub fn update_stalling_state(player: &mut PlayerEntity, timeout: Timeout, max_ti
             position: Position { y, .. },
             ..
         })) => {
-            if is_terminal && player.context.auto_mob_reachable_y_require_update(y) {
-                transition_if!(
-                    player,
-                    Player::Stalling(Timeout::default(), max_timeout),
-                    !player.context.is_stationary
-                );
+            if !is_terminal {
+                return;
+            }
+
+            if player.context.auto_mob_reachable_y_require_update(y) {
+                if !player.context.is_stationary {
+                    player.state = Player::Stalling(Timeout::default(), max_timeout);
+                    return;
+                }
 
                 player.context.auto_mob_track_reachable_y(y);
             }
 
-            transition_from_action!(player, next_state, is_terminal);
+            player.context.clear_action_completed();
         }
-        Some(PlayerAction::PingPong(_) | PlayerAction::Key(_) | PlayerAction::Move(_)) => {
-            transition_from_action!(player, next_state, is_terminal);
+        Some(
+            action @ (PlayerAction::PingPong(_) | PlayerAction::Key(_) | PlayerAction::Move(_)),
+        ) => {
+            if is_terminal {
+                if !action.is_key_action_without_position() {
+                    player.context.clear_unstucking(false);
+                }
+                player.context.clear_action_completed();
+                player.state = next_state;
+            }
         }
-        Some(PlayerAction::SolveRune) | None => transition!(player, next_state),
+        Some(PlayerAction::SolveRune) | None => player.state = next_state,
         Some(_) => unreachable!(),
     }
 }

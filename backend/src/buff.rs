@@ -9,7 +9,7 @@ use strum::EnumIter;
 use crate::{
     Character, Settings,
     detect::BuffKind as DetectorBuffKind,
-    ecs::{Resources, transition, transition_if},
+    ecs::Resources,
     player::Player,
     task::{Task, Update, update_detection_task},
 };
@@ -206,8 +206,13 @@ pub enum Buff {
 
 #[inline]
 pub fn run_system(resources: &Resources, buff: &mut BuffEntity, player_state: Player) {
-    transition_if!(buff, Buff::No, !buff.context.enabled);
-    transition_if!(matches!(player_state, Player::CashShopThenExit(_)));
+    if !buff.context.enabled {
+        buff.state = Buff::No;
+        return;
+    }
+    if matches!(player_state, Player::CashShopThenExit(_)) {
+        return;
+    }
 
     let kind = buff.context.kind;
     let Update::Ok(has_buff) =
@@ -229,14 +234,24 @@ pub fn run_system(resources: &Resources, buff: &mut BuffEntity, player_state: Pl
     let max_count = buff.context.max_fail_count;
     match (has_buff, buff.state) {
         (true, Buff::Volatile) | (true, Buff::Yes) | (true, Buff::No) => {
-            transition!(buff, Buff::Yes)
+            buff.state = Buff::Yes;
         }
-        (false, Buff::No) => transition!(buff, Buff::No),
+        (false, Buff::No) => {
+            buff.state = Buff::No;
+        }
         (false, Buff::Yes) => {
-            transition_if!(buff, Buff::Volatile, Buff::No, max_count > 1)
+            buff.state = if max_count > 1 {
+                Buff::Volatile
+            } else {
+                Buff::No
+            };
         }
         (false, Buff::Volatile) => {
-            transition_if!(buff, Buff::No, Buff::Volatile, count >= max_count)
+            buff.state = if count >= max_count {
+                Buff::No
+            } else {
+                Buff::Volatile
+            };
         }
     }
 }

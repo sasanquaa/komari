@@ -512,7 +512,7 @@ fn input_method_inner_from(window: Window, method: InputMethod, seed: &[u8]) -> 
         InputMethod::ForegroundRpc(url) | InputMethod::FocusedRpc(url) => {
             let result = InputService::new(url, seed.to_vec());
             if result.is_err() {
-                info!(target: "rpc", "failed to connect to input server possibly because of incorrect URL, fallback to default input method...");
+                info!(target: "backend/rpc", "failed to connect to input server possibly because of incorrect URL, fallback to default input method...");
 
                 return InputMethodInner::Default(
                     PlatformInput::new(window, PlatformInputKind::Focused)

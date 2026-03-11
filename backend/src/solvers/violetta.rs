@@ -44,7 +44,7 @@ struct Mushroom {
 impl Default for ViolettaSolver {
     fn default() -> Self {
         Self {
-            tracker: ByteTracker::new(FPS as u64, 0.75, 0.6, 0.75, IouGating::Full),
+            tracker: ByteTracker::new(FPS as u64, 0.25, 0.1, 0.25, IouGating::None),
             numbers: vec![],
             mushrooms: [Mushroom::default(); MUSHROOM_COUNT],
             last_moving_time: Instant::now(),
@@ -182,6 +182,13 @@ impl ViolettaSolver {
 
             tracks.remove(j);
             update_mushroom_from_track(mushroom, track);
+        }
+
+        if tracks.is_empty()
+            || unprocessed_indexes.is_empty()
+            || unprocessed_indexes.len() > tracks.len()
+        {
+            return;
         }
 
         let gate = tracks.len() != unprocessed_indexes.len();

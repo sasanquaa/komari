@@ -62,7 +62,7 @@ impl TransparentShapeSolver {
             Some(track) => {
                 let next_cursor = predicted_center(track);
                 if self.current_track_id != Some(track.track_id()) {
-                    debug!(target: "player", "shape id switches from {:?} to {}", self.current_track_id, track.track_id());
+                    debug!(target: "backend/player", "shape id switches from {:?} to {}", self.current_track_id, track.track_id());
                 }
                 self.current_track_id = Some(track.track_id());
                 self.last_cursor = Some(next_cursor);

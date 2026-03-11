@@ -9,12 +9,11 @@ use super::{
 use crate::{
     ActionKeyWith,
     bridge::KeyKind,
-    ecs::{Resources, transition, transition_if},
+    ecs::Resources,
     minimap::Minimap,
     player::{
         MOVE_TIMEOUT, PlayerAction, PlayerEntity, actions::update_from_auto_mob_action,
-        next_action, state::LastMovement, timeout::ChangeAxis, transition_to_moving,
-        transition_to_moving_if,
+        next_action, state::LastMovement, timeout::ChangeAxis,
     },
 };
 
@@ -34,6 +33,10 @@ const TIMEOUT: u32 = MOVE_TIMEOUT + 3;
 /// Maximum y distance from the destination allowed to skip normal falling and use teleportation
 /// for mage.
 const TELEPORT_FALL_THRESHOLD: i32 = 16;
+
+/// Maximum y distance from the destination allowed to skip normal falling and use teleportation
+/// for mage when teleport boost is enabled.
+const EXTENDED_TELEPORT_FALL_THRESHOLD: i32 = 20;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Falling {
@@ -88,38 +91,47 @@ pub fn update_falling_state(
         ChangeAxis::Vertical,
     ) {
         MovingLifecycle::Started(moving) => {
-            transition_if!(
-                player,
-                Player::Falling(falling.moving(moving.timeout_started(false))),
-                player.context.stalling_buffered.stalling(),
-                {
-                    player
-                        .context
-                        .clear_stalling_buffer_states_if_possible(resources);
-                }
-            );
+            if player.context.stalling_buffered.stalling() {
+                let moving = moving.timeout_started(false);
+                let falling = falling.moving(moving);
+
+                player
+                    .context
+                    .clear_stalling_buffer_states_if_possible(resources);
+                player.state = Player::Falling(falling);
+                return;
+            }
 
             // Stall until stationary before doing a fall by resetting timeout started
-            transition_if!(
-                player,
-                Player::Falling(
+            if !player.context.is_stationary {
+                player.state = Player::Falling(
                     falling
                         .moving(moving.timeout_started(false))
-                        .anchor(moving.pos)
-                ),
-                !player.context.is_stationary
-            );
+                        .anchor(moving.pos),
+                );
+                return;
+            }
 
             // Check if destination is already reached before starting
             let (y_distance, y_direction) = moving.y_distance_direction_from(true, moving.pos);
-            transition_to_moving_if!(player, moving, y_direction >= 0);
+            if y_direction >= 0 {
+                player.state = Player::Moving(moving.dest, moving.exact, moving.intermediates);
+                return;
+            }
 
             // Do the fall
+            player.context.last_movement = Some(LastMovement::Falling);
+            player.state = Player::Falling(falling.moving(moving));
+            resources.input.send_key_down(KeyKind::Down);
+
+            let teleport_fall_threshold = if player.context.config.has_extended_teleport_range {
+                EXTENDED_TELEPORT_FALL_THRESHOLD
+            } else {
+                TELEPORT_FALL_THRESHOLD
+            };
             let can_teleport = !player.context.config.disable_teleport_on_fall
                 && player.context.config.teleport_key.is_some()
-                && y_distance < TELEPORT_FALL_THRESHOLD;
-            player.context.last_movement = Some(LastMovement::Falling);
-            resources.input.send_key_down(KeyKind::Down);
+                && y_distance < teleport_fall_threshold;
             if can_teleport {
                 resources
                     .input
@@ -127,12 +139,11 @@ pub fn update_falling_state(
             } else {
                 resources.input.send_key(player.context.config.jump_key);
             }
-
-            transition!(player, Player::Falling(falling.moving(moving)))
         }
-        MovingLifecycle::Ended(moving) => transition_to_moving!(player, moving, {
+        MovingLifecycle::Ended(moving) => {
             resources.input.send_key_up(KeyKind::Down);
-        }),
+            player.state = Player::Moving(moving.dest, moving.exact, moving.intermediates);
+        }
         MovingLifecycle::Updated(mut moving) => {
             if moving.timeout.total == STOP_DOWN_KEY_TICK {
                 resources.input.send_key_up(KeyKind::Down);
@@ -145,9 +156,9 @@ pub fn update_falling_state(
             } else if falling.timeout_on_complete {
                 moving.timeout.current = TIMEOUT;
             }
+
             // Sets initial next state first
             player.state = Player::Falling(falling.moving(moving));
-
             update_from_action(resources, player, minimap_state, moving)
         }
     }
@@ -166,15 +177,15 @@ fn update_from_action(
     match next_action(&player.context) {
         Some(PlayerAction::AutoMob(mob)) => {
             // Ignore `timeout_on_complete` for auto-mobbing intermediate destination
-            transition_to_moving_if!(
-                player,
-                moving,
-                moving.completed && moving.is_destination_intermediate() && y_direction >= 0,
-                {
-                    resources.input.send_key_up(KeyKind::Down);
-                }
-            );
-            transition_if!(has_teleport_key && !moving.completed);
+            if moving.completed && moving.is_destination_intermediate() && y_direction >= 0 {
+                resources.input.send_key_up(KeyKind::Down);
+                player.state = Player::Moving(moving.dest, moving.exact, moving.intermediates);
+                return;
+            }
+
+            if has_teleport_key && !moving.completed {
+                return;
+            }
 
             let (x_distance, x_direction) = moving.x_distance_direction_from(false, cur_pos);
             let (y_distance, _) = moving.y_distance_direction_from(false, cur_pos);
@@ -188,17 +199,16 @@ fn update_from_action(
                 y_distance,
             )
         }
+
         Some(PlayerAction::Key(
             key @ Key {
                 with: ActionKeyWith::Any,
                 ..
             },
         )) => {
-            transition_if!(
-                player,
-                Player::UseKey(UseKey::from_key(key)),
-                !has_teleport_key && moving.completed && y_distance < FALLING_TO_USE_KEY_THRESHOLD
-            )
+            if !has_teleport_key && moving.completed && y_distance < FALLING_TO_USE_KEY_THRESHOLD {
+                player.state = Player::UseKey(UseKey::from_key(key));
+            }
         }
         Some(
             PlayerAction::Key(Key {

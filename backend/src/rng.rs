@@ -18,6 +18,13 @@ pub struct Rng {
     perlin: Perlin,
 }
 
+#[cfg(test)]
+impl Default for Rng {
+    fn default() -> Self {
+        Self::new(rand::rng().random(), rand::rng().random())
+    }
+}
+
 impl Rng {
     pub fn new(rng_seed: RngSeed, perlin_seed: PerlinSeed) -> Self {
         Self {

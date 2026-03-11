@@ -12,6 +12,7 @@ use dioxus::{document::EvalError, prelude::*};
 
 pub mod button;
 pub mod checkbox;
+pub mod duration;
 pub mod file;
 pub mod icons;
 pub mod key;

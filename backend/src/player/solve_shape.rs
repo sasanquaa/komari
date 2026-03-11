@@ -8,11 +8,10 @@ use tokio::sync::mpsc::{self, error::TryRecvError};
 use crate::{
     bridge::MouseKind,
     detect::Detector,
-    ecs::{Resources, transition, transition_if, try_ok_transition},
+    ecs::Resources,
     player::{
         Player, PlayerAction, PlayerEntity, next_action,
         timeout::{Lifecycle, Timeout, next_timeout_lifecycle},
-        transition_from_action,
     },
     solvers::TransparentShapeSolver,
     task::{Task, Update, update_detection_task},
@@ -71,13 +70,15 @@ pub fn update_solving_shape_state(resources: &Resources, player: &mut PlayerEnti
     };
 
     match next_action(&player.context) {
-        Some(PlayerAction::SolveShape) => transition_from_action!(
-            player,
-            player_next_state,
-            matches!(player_next_state, Player::Idle)
-        ),
+        Some(PlayerAction::SolveShape) => {
+            if matches!(player_next_state, Player::Idle) {
+                player.context.clear_action_completed();
+            }
+
+            player.state = player_next_state;
+        }
         Some(_) => unreachable!(),
-        None => transition!(player, Player::Idle), // Force cancel if not from action
+        None => player.state = Player::Idle, // Force cancel if not from action
     }
 }
 
@@ -95,20 +96,20 @@ fn update_waiting(resources: &Resources, solving_shape: &mut SolvingShape) {
         return;
     }
 
-    let title = try_ok_transition!(
-        solving_shape,
-        State::Completed,
-        resources.detector().detect_lie_detector_shape()
-    );
+    let title = match resources.detector().detect_lie_detector_shape() {
+        Ok(val) => val,
+        Err(_) => {
+            solving_shape.state = State::Completed;
+            return;
+        }
+    };
 
-    transition!(solving_shape, State::Solving(Timeout::default()), {
-        let tl = title.tl() + Point::new(0, 20);
-        let br = tl + Point::new(755, 505);
-        let region = Rect::from_points(tl, br);
-
-        solving_shape.solving = Some(Rc::new(RefCell::new(start_solving_task(region))));
-        debug!(target: "player", "lie detector transparent shape region: {region:?}");
-    });
+    let tl = title.tl() + Point::new(0, 20);
+    let br = tl + Point::new(755, 505);
+    let region = Rect::from_points(tl, br);
+    solving_shape.solving = Some(Rc::new(RefCell::new(start_solving_task(region))));
+    debug!(target:"backend/player","lie detector transparent shape region: {region:?}");
+    solving_shape.state = State::Solving(Timeout::default());
 }
 
 fn update_solving(resources: &Resources, solving_shape: &mut SolvingShape) {
@@ -123,23 +124,26 @@ fn update_solving(resources: &Resources, solving_shape: &mut SolvingShape) {
         &mut *solving_shape.lie_detector_task.borrow_mut(),
         |detector| Ok(detector.detect_lie_detector_shape().is_ok()),
     );
-    if let Update::Ok(has_lie_detector) = update {
-        transition_if!(solving_shape, State::Completed, !has_lie_detector);
+    if let Update::Ok(has_lie_detector) = update
+        && !has_lie_detector
+    {
+        solving_shape.state = State::Completed;
+        return;
     }
 
     match next_timeout_lifecycle(timeout, 545) {
-        Lifecycle::Ended => transition!(solving_shape, State::Completed),
+        Lifecycle::Ended => {
+            solving_shape.state = State::Completed;
+        }
         Lifecycle::Started(timeout) | Lifecycle::Updated(timeout) => {
-            transition!(solving_shape, State::Solving(timeout), {
-                let mut solving = solving_shape.solving.as_mut().unwrap().borrow_mut();
-                let _ = solving.detector_tx.try_send(resources.detector_cloned());
-
-                if let Ok(cursor) = solving.cursor_rx.try_recv() {
-                    resources
-                        .input
-                        .send_mouse(cursor.x, cursor.y, MouseKind::Move);
-                }
-            })
+            let mut solving = solving_shape.solving.as_mut().unwrap().borrow_mut();
+            let _ = solving.detector_tx.try_send(resources.detector_cloned());
+            if let Ok(cursor) = solving.cursor_rx.try_recv() {
+                resources
+                    .input
+                    .send_mouse(cursor.x, cursor.y, MouseKind::Move);
+            }
+            solving_shape.state = State::Solving(timeout);
         }
     }
 }

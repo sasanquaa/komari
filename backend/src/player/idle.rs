@@ -13,12 +13,11 @@ use super::{
 use crate::{
     ActionKeyDirection, ActionKeyWith, Position,
     bridge::KeyKind,
-    ecs::{Resources, transition, transition_if},
+    ecs::Resources,
     minimap::Minimap,
     player::{
         PlayerEntity, SolvingShape, exchange_booster::ExchangingBooster,
-        solve_violetta::SolvingVioletta, transition_from_action, unstuck::Unstucking,
-        use_booster::UsingBooster,
+        solve_violetta::SolvingVioletta, unstuck::Unstucking, use_booster::UsingBooster,
     },
     rng::Rng,
 };
@@ -80,18 +79,15 @@ fn update_from_action(resources: &Resources, player: &mut PlayerEntity, minimap_
                         .collect::<Vec<_>>()
                 })
                 .or(Some(vec![point]));
-            transition!(player, next);
+            player.state = next;
         }
 
         Some(PlayerAction::Move(Move { position, .. })) => {
             let x = get_x_destination(&resources.rng, position);
             let point = Point::new(x, position.y);
 
-            debug!(target: "player", "handling move: {point:?}");
-            transition!(
-                player,
-                Player::Moving(point, position.allow_adjusting, None)
-            )
+            debug!(target: "backend/player", "handling move: {point:?}");
+            player.state = Player::Moving(point, position.allow_adjusting, None);
         }
 
         Some(PlayerAction::Key(Key {
@@ -101,11 +97,8 @@ fn update_from_action(resources: &Resources, player: &mut PlayerEntity, minimap_
             let x = get_x_destination(&resources.rng, position);
             let point = Point::new(x, position.y);
 
-            debug!(target: "player", "handling move: {point:?}");
-            transition!(
-                player,
-                Player::Moving(point, position.allow_adjusting, None)
-            );
+            debug!(target: "backend/player", "handling move: {point:?}");
+            player.state = Player::Moving(point, position.allow_adjusting, None);
         }
 
         Some(PlayerAction::Key(
@@ -119,16 +112,16 @@ fn update_from_action(resources: &Resources, player: &mut PlayerEntity, minimap_
             let last_pos = context.last_known_pos.unwrap();
             let last_direction = context.last_known_direction;
 
-            transition_if!(
-                player,
-                Player::DoubleJumping(DoubleJumping::new(
-                    Moving::new(last_pos, last_pos, false, None,),
-                    true,
-                    true,
-                )),
-                Player::UseKey(UseKey::from_key(key)),
-                matches!(direction, ActionKeyDirection::Any) || direction == last_direction
-            );
+            player.state =
+                if matches!(direction, ActionKeyDirection::Any) || direction == last_direction {
+                    Player::DoubleJumping(DoubleJumping::new(
+                        Moving::new(last_pos, last_pos, false, None),
+                        true,
+                        true,
+                    ))
+                } else {
+                    Player::UseKey(UseKey::from_key(key))
+                };
         }
 
         Some(PlayerAction::Key(
@@ -137,25 +130,34 @@ fn update_from_action(resources: &Resources, player: &mut PlayerEntity, minimap_
                 with: ActionKeyWith::Any | ActionKeyWith::Stationary,
                 ..
             },
-        )) => transition!(player, Player::UseKey(UseKey::from_key(key))),
+        )) => {
+            player.state = Player::UseKey(UseKey::from_key(key));
+        }
 
         Some(PlayerAction::SolveRune) => {
             let idle = match minimap_state {
                 Minimap::Idle(idle) => idle,
-                _ => transition_from_action!(player, Player::Idle),
+                _ => {
+                    player.context.clear_action_completed();
+                    return;
+                }
             };
             let rune = match idle.rune() {
                 Some(rune) => rune,
-                None => transition_from_action!(player, Player::Idle),
+                None => {
+                    player.context.clear_action_completed();
+                    return;
+                }
             };
 
             context.last_destinations = Some(vec![rune]);
-            transition_if!(
-                player,
-                Player::Moving(rune, false, None),
-                !context.config.rune_platforms_pathing
-            );
-            transition_if!(!context.is_stationary);
+            if !context.config.rune_platforms_pathing {
+                player.state = Player::Moving(rune, false, None);
+                return;
+            }
+            if !context.is_stationary {
+                return;
+            }
 
             let intermediates = find_intermediate_points(
                 &idle.platforms,
@@ -175,9 +177,11 @@ fn update_from_action(resources: &Resources, player: &mut PlayerEntity, minimap_
                             .collect(),
                     );
                     let (point, exact) = intermediates.next().unwrap();
-                    transition!(player, Player::Moving(point, exact, Some(intermediates)));
+                    player.state = Player::Moving(point, exact, Some(intermediates));
                 }
-                None => transition!(player, Player::Moving(rune, false, None)),
+                None => {
+                    player.state = Player::Moving(rune, false, None);
+                }
             }
         }
 
@@ -186,42 +190,38 @@ fn update_from_action(resources: &Resources, player: &mut PlayerEntity, minimap_
             update_from_ping_pong_action(resources, player, minimap_state, ping_pong, last_pos)
         }
 
-        Some(PlayerAction::FamiliarsSwap(swapping)) => transition!(
-            player,
-            Player::FamiliarsSwapping(FamiliarsSwapping::new(
+        Some(PlayerAction::FamiliarsSwap(swapping)) => {
+            player.state = Player::FamiliarsSwapping(FamiliarsSwapping::new(
                 swapping.swappable_slots,
-                swapping.swappable_rarities
-            ))
-        ),
+                swapping.swappable_rarities,
+            ));
+        }
 
         Some(PlayerAction::Panic(panic)) => {
-            transition!(player, Player::Panicking(Panicking::new(panic.to)))
+            player.state = Player::Panicking(Panicking::new(&resources.rng, panic.to));
         }
 
         Some(PlayerAction::UseBooster(using)) => {
-            transition!(player, Player::UsingBooster(UsingBooster::new(using.kind)))
+            player.state = Player::UsingBooster(UsingBooster::new(using.kind));
         }
 
         Some(PlayerAction::ExchangeBooster(exchanging)) => {
-            transition!(
-                player,
-                Player::ExchangingBooster(ExchangingBooster::new(
-                    exchanging.amount,
-                    exchanging.all
-                ))
-            )
+            player.state = Player::ExchangingBooster(ExchangingBooster::new(
+                exchanging.amount,
+                exchanging.all,
+            ));
         }
 
         Some(PlayerAction::Unstuck) => {
-            transition!(player, Player::Unstucking(Unstucking::new_esc()))
+            player.state = Player::Unstucking(Unstucking::new_esc());
         }
 
         Some(PlayerAction::SolveShape) => {
-            transition!(player, Player::SolvingShape(SolvingShape::default()))
+            player.state = Player::SolvingShape(SolvingShape::default());
         }
 
         Some(PlayerAction::SolveVioletta) => {
-            transition!(player, Player::SolvingVioletta(SolvingVioletta::default()))
+            player.state = Player::SolvingVioletta(SolvingVioletta::default());
         }
 
         None => (),

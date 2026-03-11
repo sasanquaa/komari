@@ -8,11 +8,11 @@ use super::{
 use crate::{
     ActionKeyWith,
     bridge::{InputKeyDownOptions, KeyKind},
-    ecs::{Resources, transition, transition_if},
+    ecs::Resources,
     minimap::Minimap,
     player::{
         MOVE_TIMEOUT, PlayerAction, PlayerEntity, actions::update_from_auto_mob_action,
-        next_action, state::LastMovement, timeout::ChangeAxis, transition_to_moving,
+        next_action, state::LastMovement, timeout::ChangeAxis,
     },
 };
 
@@ -34,7 +34,11 @@ const X_NEAR_STATIONARY_THRESHOLD: f32 = 0.28;
 const Y_NEAR_STATIONARY_VELOCITY_THRESHOLD: f32 = 0.4;
 
 /// Minimum distance required to perform an up jump using teleport key with jump.
-const TELEPORT_WITH_JUMP_THRESHOLD: i32 = 20;
+const TELEPORT_WITH_JUMP_THRESHOLD: i32 = 19;
+
+/// Minimum distance required to perform an up jump using teleport key with jump when teleport
+/// increase buff is enabled.
+const EXTENDED_TELEPORT_WITH_JUMP_THRESHOLD: i32 = 20;
 
 /// Minimum distance required to perform an up jump and then teleport.
 const UP_JUMP_AND_TELEPORT_THRESHOLD: i32 = 23;
@@ -44,6 +48,7 @@ const SOFT_UP_JUMP_THRESHOLD: i32 = 16;
 #[derive(Debug, Clone, Copy)]
 struct Mage {
     state: MageState,
+    teleport_with_jump_threshold: i32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -87,6 +92,7 @@ impl UpJumping {
         let kind = up_jumping_kind(
             player_context.config.up_jump_key,
             player_context.config.teleport_key.is_some(),
+            player_context.config.has_extended_teleport_range,
         );
 
         Self {
@@ -136,22 +142,28 @@ pub fn update_up_jumping_state(
         MovingLifecycle::Started(moving) => {
             // Stall until near stationary
             let (x_velocity, y_velocity) = player.context.velocity;
-            transition_if!(
-                player,
-                Player::UpJumping(up_jumping.moving(moving.timeout_started(false))),
-                x_velocity > X_NEAR_STATIONARY_THRESHOLD
-                    || y_velocity > Y_NEAR_STATIONARY_VELOCITY_THRESHOLD
-            );
+            if x_velocity > X_NEAR_STATIONARY_THRESHOLD
+                || y_velocity > Y_NEAR_STATIONARY_VELOCITY_THRESHOLD
+            {
+                let moving = moving.timeout_started(false);
+                let up_jumping = up_jumping.moving(moving);
+
+                player.state = Player::UpJumping(up_jumping);
+                return;
+            }
 
             let is_inside_portal = match minimap_state {
                 Minimap::Idle(idle) => idle.is_position_inside_portal(moving.pos),
                 _ => false,
             };
-            transition_if!(player, Player::Idle, is_inside_portal, {
+            if is_inside_portal {
+                player.state = Player::Idle;
                 player.context.clear_action_completed();
-            });
+                return;
+            }
 
             player.context.last_movement = Some(LastMovement::UpJumping);
+            player.state = Player::UpJumping(up_jumping.moving(moving));
             match &mut up_jumping.kind {
                 UpJumpingKind::Mage(mage) => {
                     let (y_distance, _) = moving.y_distance_direction_from(true, moving.pos);
@@ -167,7 +179,7 @@ pub fn update_up_jumping_state(
 
                     resources.input.send_key_down(KeyKind::Up);
                     let can_jump =
-                        y_distance >= TELEPORT_WITH_JUMP_THRESHOLD && up_jump_key.is_none();
+                        y_distance >= mage.teleport_with_jump_threshold && up_jump_key.is_none();
                     if is_flight || can_jump {
                         resources.input.send_key(jump_key);
                     }
@@ -186,13 +198,12 @@ pub fn update_up_jumping_state(
                     }
                 }
             }
-            transition!(player, Player::UpJumping(up_jumping.moving(moving)));
         }
-        MovingLifecycle::Ended(moving) => transition_to_moving!(player, moving, {
+        MovingLifecycle::Ended(moving) => {
+            player.state = Player::Moving(moving.dest, moving.exact, moving.intermediates);
             resources.input.send_key_up(KeyKind::Up);
-        }),
+        }
         MovingLifecycle::Updated(mut moving) => {
-            let cur_pos = moving.pos;
             let (y_distance, y_direction) = moving.y_distance_direction_from(true, moving.pos);
             update_up_jump(
                 resources,
@@ -205,73 +216,86 @@ pub fn update_up_jumping_state(
 
             // Sets initial next state first
             player.state = Player::UpJumping(up_jumping.moving(moving));
-            match next_action(&player.context) {
-                Some(PlayerAction::AutoMob(mob)) => {
-                    transition_if!(
-                        player,
-                        Player::Moving(moving.dest, moving.exact, moving.intermediates),
-                        moving.completed
-                            && moving.is_destination_intermediate()
-                            && y_direction <= 0,
-                        {
-                            resources.input.send_key_up(KeyKind::Up);
-                        }
-                    );
-                    transition_if!(up_jumping.auto_mob_wait_completion && !moving.completed);
+            update_from_action(
+                resources,
+                player,
+                minimap_state,
+                up_jumping,
+                moving,
+                y_direction,
+            );
+        }
+    }
+}
 
-                    let (x_distance, x_direction) =
-                        moving.x_distance_direction_from(false, cur_pos);
-                    let (y_distance, _) = moving.y_distance_direction_from(false, cur_pos);
-                    update_from_auto_mob_action(
-                        resources,
-                        player,
-                        minimap_state,
-                        mob,
-                        x_distance,
-                        x_direction,
-                        y_distance,
-                    )
-                }
-                Some(PlayerAction::Key(
-                    key @ Key {
-                        with: ActionKeyWith::Any,
-                        ..
-                    },
-                )) => transition_if!(
-                    player,
-                    Player::UseKey(UseKey::from_key(key)),
-                    moving.completed && y_direction <= 0
-                ),
-                Some(PlayerAction::PingPong(ping_pong)) => {
-                    transition_if!(
-                        !moving.completed
-                            || !resources.rng.random_perlin_bool(
-                                cur_pos.x,
-                                cur_pos.y,
-                                resources.tick,
-                                0.7
-                            )
-                    );
-                    update_from_ping_pong_action(
-                        resources,
-                        player,
-                        minimap_state,
-                        ping_pong,
-                        cur_pos,
-                    );
-                }
-                None
-                | Some(
-                    PlayerAction::Key(Key {
-                        with: ActionKeyWith::Stationary | ActionKeyWith::DoubleJump,
-                        ..
-                    })
-                    | PlayerAction::Move(_)
-                    | PlayerAction::SolveRune,
-                ) => (),
-                _ => unreachable!(),
+fn update_from_action(
+    resources: &Resources,
+    player: &mut PlayerEntity,
+    minimap_state: Minimap,
+    up_jumping: UpJumping,
+    moving: Moving,
+    y_direction: i32,
+) {
+    let cur_pos = moving.pos;
+
+    match next_action(&player.context) {
+        Some(PlayerAction::AutoMob(mob)) => {
+            if moving.completed && moving.is_destination_intermediate() && y_direction <= 0 {
+                resources.input.send_key_up(KeyKind::Up);
+                player.state = Player::Moving(moving.dest, moving.exact, moving.intermediates);
+                return;
+            }
+
+            if up_jumping.auto_mob_wait_completion && !moving.completed {
+                return;
+            }
+
+            let (x_distance, x_direction) = moving.x_distance_direction_from(false, cur_pos);
+            let (y_distance, _) = moving.y_distance_direction_from(false, cur_pos);
+            update_from_auto_mob_action(
+                resources,
+                player,
+                minimap_state,
+                mob,
+                x_distance,
+                x_direction,
+                y_distance,
+            )
+        }
+
+        Some(PlayerAction::Key(
+            key @ Key {
+                with: ActionKeyWith::Any,
+                ..
+            },
+        )) => {
+            if moving.completed && y_direction <= 0 {
+                player.state = Player::UseKey(UseKey::from_key(key));
             }
         }
+
+        Some(PlayerAction::PingPong(ping_pong)) => {
+            if !moving.completed
+                || !resources
+                    .rng
+                    .random_perlin_bool(cur_pos.x, cur_pos.y, resources.tick, 0.7)
+            {
+                return;
+            }
+
+            update_from_ping_pong_action(resources, player, minimap_state, ping_pong, cur_pos);
+        }
+
+        Some(
+            PlayerAction::Key(Key {
+                with: ActionKeyWith::Stationary | ActionKeyWith::DoubleJump,
+                ..
+            })
+            | PlayerAction::Move(_)
+            | PlayerAction::SolveRune,
+        )
+        | None => (),
+        _ => unreachable!(),
     }
 }
 
@@ -356,7 +380,7 @@ fn update_mage_up_jump(
 
     match mage.state {
         MageState::Teleporting => {
-            if y_direction > 0 && y_distance < TELEPORT_WITH_JUMP_THRESHOLD {
+            if y_direction > 0 && y_distance < mage.teleport_with_jump_threshold {
                 resources.input.send_key(teleport_key);
                 moving.completed = true;
             }
@@ -364,7 +388,7 @@ fn update_mage_up_jump(
         MageState::UpJumping => match up_jump_key {
             Some(key) => {
                 resources.input.send_key(key);
-                transition!(mage, MageState::Teleporting);
+                mage.state = MageState::Teleporting;
             }
             None => {
                 if context.velocity.1 <= UP_JUMPED_Y_VELOCITY_THRESHOLD {
@@ -372,7 +396,7 @@ fn update_mage_up_jump(
                         resources.input.send_key(jump_key);
                     }
                 } else {
-                    transition!(mage, MageState::Teleporting);
+                    mage.state = MageState::Teleporting;
                 }
             }
         },
@@ -398,10 +422,19 @@ fn update_flying(resources: &Resources, moving: &mut Moving, y_direction: i32, k
 }
 
 #[inline]
-fn up_jumping_kind(up_jump_key: Option<KeyKind>, has_teleport_key: bool) -> UpJumpingKind {
+fn up_jumping_kind(
+    up_jump_key: Option<KeyKind>,
+    has_teleport_key: bool,
+    has_extended_teleport_range: bool,
+) -> UpJumpingKind {
     match (up_jump_key, has_teleport_key) {
         (Some(_), true) | (None, true) => UpJumpingKind::Mage(Mage {
             state: MageState::Teleporting, // Overwrite later
+            teleport_with_jump_threshold: if has_extended_teleport_range {
+                EXTENDED_TELEPORT_WITH_JUMP_THRESHOLD
+            } else {
+                TELEPORT_WITH_JUMP_THRESHOLD
+            },
         }),
         (Some(KeyKind::Up), false) => UpJumpingKind::UpArrow,
         (None, false) => UpJumpingKind::JumpKey,
@@ -501,6 +534,7 @@ mod tests {
             moving,
             kind: UpJumpingKind::Mage(Mage {
                 state: MageState::Teleporting,
+                teleport_with_jump_threshold: TELEPORT_WITH_JUMP_THRESHOLD,
             }),
             spam_delay: SPAM_DELAY,
             auto_mob_wait_completion: false,
@@ -622,6 +656,7 @@ mod tests {
             moving,
             kind: UpJumpingKind::Mage(Mage {
                 state: MageState::UpJumping,
+                teleport_with_jump_threshold: TELEPORT_WITH_JUMP_THRESHOLD,
             }),
             spam_delay: SPAM_DELAY,
             auto_mob_wait_completion: false,

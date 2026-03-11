@@ -20,6 +20,8 @@ pub fn PopupPlatformInputContent(
     let position = use_context::<AppState>().position;
     let mut platform = use_signal(|| value);
 
+    use_effect(use_reactive!(|value| platform.set(value)));
+
     rsx! {
         PopupContent { title: if modifying { "Modify platform" } else { "Add platform" },
             div { class: "grid grid-cols-3 gap-3 pb-10 overflow-y-auto",

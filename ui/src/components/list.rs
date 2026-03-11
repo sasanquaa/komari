@@ -108,7 +108,7 @@ where
         spawn(async move {
             loop {
                 let result = eval.recv::<ListEvent>().await;
-                debug!(target: "list"," event received {result:?}");
+                debug!(target: "ui/list"," event received {result:?}");
                 match result {
                     Ok(ListEvent::Move {
                         from,

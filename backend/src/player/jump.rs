@@ -4,10 +4,7 @@ use super::{
     state::LastMovement,
     timeout::{ChangeAxis, MovingLifecycle, next_moving_lifecycle_with_axis},
 };
-use crate::{
-    ecs::{Resources, transition},
-    player::{PlayerEntity, transition_to_moving},
-};
+use crate::{ecs::Resources, player::PlayerEntity};
 
 const TIMEOUT: u32 = MOVE_TIMEOUT + 3;
 
@@ -18,11 +15,16 @@ pub fn update_jumping_state(resources: &Resources, player: &mut PlayerEntity, mo
         TIMEOUT,
         ChangeAxis::Vertical,
     ) {
-        MovingLifecycle::Started(moving) => transition!(player, Player::Jumping(moving), {
+        MovingLifecycle::Started(moving) => {
             resources.input.send_key(player.context.config.jump_key);
             player.context.last_movement = Some(LastMovement::Jumping);
-        }),
-        MovingLifecycle::Ended(moving) => transition_to_moving!(player, moving),
-        MovingLifecycle::Updated(moving) => transition!(player, Player::Jumping(moving)),
+            player.state = Player::Jumping(moving);
+        }
+        MovingLifecycle::Ended(moving) => {
+            player.state = Player::Moving(moving.dest, moving.exact, moving.intermediates);
+        }
+        MovingLifecycle::Updated(moving) => {
+            player.state = Player::Jumping(moving);
+        }
     }
 }

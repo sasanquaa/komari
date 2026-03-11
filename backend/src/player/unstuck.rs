@@ -3,11 +3,9 @@ use opencv::core::Point;
 use super::timeout::{Lifecycle, Timeout, next_timeout_lifecycle};
 use crate::{
     bridge::KeyKind,
-    ecs::{Resources, transition},
+    ecs::Resources,
     minimap::Minimap,
-    player::{
-        MOVE_TIMEOUT, Player, PlayerAction, PlayerEntity, next_action, transition_from_action,
-    },
+    player::{MOVE_TIMEOUT, Player, PlayerAction, PlayerEntity, next_action},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -67,7 +65,8 @@ pub fn update_unstucking_state(
         panic!("state is not unstucking");
     };
     let Minimap::Idle(idle) = minimap_state else {
-        transition!(player, Player::Detecting);
+        player.state = Player::Detecting;
+        return;
     };
 
     match unstucking.kind {
@@ -77,8 +76,13 @@ pub fn update_unstucking_state(
             }
 
             match next_action(&player.context) {
-                Some(PlayerAction::Unstuck) => transition_from_action!(player, Player::Detecting),
-                Some(_) | None => transition!(player, Player::Detecting),
+                Some(PlayerAction::Unstuck) => {
+                    player.context.clear_action_completed();
+                    player.state = Player::Detecting;
+                }
+                Some(_) | None => {
+                    player.state = Player::Detecting;
+                }
             }
         }
         UnstuckingKind::Movement { timeout, random } => {
@@ -93,10 +97,8 @@ pub fn update_unstucking_state(
                     let to_right = match (random, pos) {
                         (true, _) => resources.rng.random_bool(0.5),
                         (_, Some(Point { y, .. })) if y <= Y_IGNORE_THRESHOLD => {
-                            transition!(
-                                player,
-                                Player::Unstucking(unstucking.movement(timeout, random))
-                            )
+                            player.state = Player::Unstucking(unstucking.movement(timeout, random));
+                            return;
                         }
                         (_, Some(Point { x, .. })) => x <= idle.bbox.width / 2,
                         (_, None) => unreachable!(),
@@ -107,29 +109,25 @@ pub fn update_unstucking_state(
                         resources.input.send_key_up(KeyKind::Left);
                     }
 
-                    transition!(
-                        player,
-                        Player::Unstucking(unstucking.movement(timeout, random))
-                    );
+                    player.state = Player::Unstucking(unstucking.movement(timeout, random));
                 }
-                Lifecycle::Ended => transition!(player, Player::Detecting, {
+                Lifecycle::Ended => {
                     resources.input.send_key_up(KeyKind::Right);
                     resources.input.send_key_up(KeyKind::Left);
-                }),
-                Lifecycle::Updated(timeout) => transition!(
-                    player,
-                    Player::Unstucking(unstucking.movement(timeout, random)),
-                    {
-                        let send_space = match (random, pos) {
-                            (true, _) => true,
-                            (_, Some(pos)) if pos.y > Y_IGNORE_THRESHOLD => true,
-                            _ => false,
-                        };
-                        if send_space {
-                            resources.input.send_key(context.config.jump_key);
-                        }
+                    player.state = Player::Detecting;
+                }
+                Lifecycle::Updated(timeout) => {
+                    let send_space = match (random, pos) {
+                        (true, _) => true,
+                        (_, Some(pos)) if pos.y > Y_IGNORE_THRESHOLD => true,
+                        _ => false,
+                    };
+                    if send_space {
+                        resources.input.send_key(context.config.jump_key);
                     }
-                ),
+
+                    player.state = Player::Unstucking(unstucking.movement(timeout, random));
+                }
             }
         }
     }

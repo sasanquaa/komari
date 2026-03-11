@@ -32,6 +32,8 @@ impl CharacterService for DefaultCharacterService {
         player_context.reset();
         if let Some(character) = self.character.as_ref() {
             player_context.config.link_key_timing_millis = character.link_key_timing_millis;
+            player_context.config.has_extended_teleport_range =
+                character.has_extended_teleport_range;
             player_context.config.disable_double_jumping = character.disable_double_jumping;
             player_context.config.disable_adjusting = character.disable_adjusting;
             player_context.config.disable_teleport_on_fall = character.disable_teleport_on_fall;
@@ -72,6 +74,7 @@ mod tests {
     fn mock_character() -> Character {
         Character {
             link_key_timing_millis: 30,
+            has_extended_teleport_range: true,
             disable_double_jumping: true,
             disable_adjusting: true,
             disable_teleport_on_fall: true,
@@ -129,7 +132,7 @@ mod tests {
         assert!(service.character().is_none());
 
         let character = mock_character();
-        service.update_character(Some(character.clone()));
+        service.update_character(Some(character));
         let current = service.character().unwrap();
 
         assert_eq!(current, &mock_character());
@@ -157,6 +160,10 @@ mod tests {
         assert_eq!(
             state.config.link_key_timing_millis,
             character.link_key_timing_millis
+        );
+        assert_eq!(
+            state.config.has_extended_teleport_range,
+            character.has_extended_teleport_range
         );
         assert_eq!(
             state.config.disable_double_jumping,

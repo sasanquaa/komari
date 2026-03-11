@@ -24,6 +24,11 @@ rand = "0.9.1"
 platforms = { path = "platforms" }
 backend = { path = "backend" }
 
+[workspace.lints.clippy]
+unnecessary_semicolon = "deny"
+declare_interior_mutable_const = "deny"
+redundant_clone = "deny"
+
 [profile]
 
 [profile.wasm-dev]

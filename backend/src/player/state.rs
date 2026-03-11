@@ -36,6 +36,9 @@ const MAX_BOOSTER_FAILED_COUNT: u32 = 5;
 /// there are no more cards to swap (e.g. All cards are at level 5).
 const MAX_FAMILIARS_SWAP_FAIL_COUNT: u32 = 3;
 
+/// The maximum number of times to retry detecting player's name.
+const MAX_NAME_RETRY_COUNT: u32 = 3;
+
 /// The maximum number of times horizontal movement can be repeated in non-auto-mobbing action.
 const HORIZONTAL_MOVEMENT_REPEAT_COUNT: u32 = 20;
 
@@ -163,6 +166,8 @@ pub struct PlayerConfiguration {
     pub link_key_timing_millis: u64,
     /// Whether up jump requires helding down the key for flight.
     pub up_jump_is_flight: bool,
+    /// Whether teleport range is extended (e.g. Starry Boost by Sia).
+    pub has_extended_teleport_range: bool,
     /// Whether up jump using a specific key (e.g. Hero, Night Lord, ... classes) should do a jump
     /// before sending the key.
     ///
@@ -225,6 +230,7 @@ impl Default for PlayerConfiguration {
     fn default() -> Self {
         Self {
             link_key_timing_millis: 0,
+            has_extended_teleport_range: false,
             disable_double_jumping: false,
             disable_adjusting: false,
             disable_teleport_on_fall: false,
@@ -389,6 +395,10 @@ pub struct PlayerContext {
 
     /// The number of times [`Player::FamiliarsSwapping`] failed.
     familiars_swap_failed_count: u32,
+
+    name: Option<String>,
+    name_task: Option<Task<Result<String>>>,
+    name_retry_count: u32,
 }
 
 impl PlayerContext {
@@ -402,6 +412,11 @@ impl PlayerContext {
             reset_to_idle_next_update: true,
             ..PlayerContext::default()
         };
+    }
+
+    #[inline]
+    pub fn name(&self) -> Option<String> {
+        self.name.clone()
     }
 
     #[inline]
@@ -740,7 +755,7 @@ impl PlayerContext {
             *count += 1;
         }
         let count = *count;
-        debug!(target: "player", "last movement {count_map:?}");
+        debug!(target: "backend/player", "last movement {count_map:?}");
         count >= count_max
     }
 
@@ -825,6 +840,7 @@ impl PlayerContext {
             Minimap::Detecting => return false,
         };
         let pos = self.last_known_pos.expect("in positional state");
+        let name = self.name();
         let Update::Ok(points) = update_detection_task(
             resources,
             self.config.auto_mob_use_key_when_pathing_update_millis,
@@ -834,6 +850,7 @@ impl PlayerContext {
                     minimap_bbox,
                     Rect::new(0, 0, minimap_bbox.width, minimap_bbox.height),
                     pos,
+                    name,
                 )
             },
         ) else {
@@ -864,7 +881,7 @@ impl PlayerContext {
                 let same_direction = (point - pos).dot(pathing_point - pos) > 0;
                 within_x_range && within_y_range && same_direction
             });
-        debug!(target: "player", "auto mob use key during pathing {use_key}");
+        debug!(target: "backend/player", "auto mob use key during pathing {use_key}");
 
         use_key
     }
@@ -1047,7 +1064,7 @@ impl PlayerContext {
                 })
             })
         {
-            debug!(target: "player", "auto mob ignored wrong position in {},{} / {}", mob_pos.x, y, mob_pos.y);
+            debug!(target: "backend/player", "auto mob ignored wrong position in {},{} / {}", mob_pos.x, y, mob_pos.y);
             return None;
         }
 
@@ -1081,7 +1098,7 @@ impl PlayerContext {
             self.last_known_pos.unwrap().y,
             AUTO_MOB_REACHABLE_Y_SOLIDIFY_COUNT - 1,
         );
-        debug!(target: "player", "auto mob initial reachable y map {:?}", self.auto_mob_reachable_y_map);
+        debug!(target: "backend/player", "auto mob initial reachable y map {:?}", self.auto_mob_reachable_y_map);
     }
 
     /// Tracks the currently picked reachable y to solidify the y position.
@@ -1110,7 +1127,7 @@ impl PlayerContext {
             }
             debug_assert!(*count <= AUTO_MOB_REACHABLE_Y_SOLIDIFY_COUNT);
 
-            debug!(target: "player", "auto mob additional reachable y {} / {}", pos.y, count);
+            debug!(target: "backend/player", "auto mob additional reachable y {} / {}", pos.y, count);
         }
     }
 
@@ -1166,7 +1183,7 @@ impl PlayerContext {
                 merged.push((range, count));
             }
             *vec = merged;
-            debug!(target: "player", "auto mob merged ignore xs {y} = {vec:?}");
+            debug!(target: "backend/player", "auto mob merged ignore xs {y} = {vec:?}");
         }
 
         if let Some((i, (_, count))) = vec
@@ -1183,7 +1200,7 @@ impl PlayerContext {
                 if !is_aborted && *count == 0 {
                     vec.remove(i);
                 }
-                debug!(target: "player", "auto mob updated ignore xs {:?}", self.auto_mob_ignore_xs_map);
+                debug!(target: "backend/player", "auto mob updated ignore xs {:?}", self.auto_mob_ignore_xs_map);
             }
             return;
         }
@@ -1192,7 +1209,7 @@ impl PlayerContext {
             let (range, count) = auto_mob_ignore_xs_range_value(x);
             vec.push((range, count + 1));
             vec.sort_by_key(|(r, _)| r.start);
-            debug!(target: "player", "auto mob new ignore xs {:?}", self.auto_mob_ignore_xs_map);
+            debug!(target: "backend/player", "auto mob new ignore xs {:?}", self.auto_mob_ignore_xs_map);
         }
     }
 
@@ -1254,6 +1271,22 @@ impl PlayerContext {
         minimap_state: Minimap,
         buffs: &BuffEntities,
     ) -> bool {
+        if self.has_auto_mob_action_only()
+            && self.name.is_none()
+            && self.name_retry_count < MAX_NAME_RETRY_COUNT
+        {
+            match update_detection_task(resources, 0, &mut self.name_task, move |detector| {
+                detector.detect_player_name()
+            }) {
+                Update::Ok(name) => {
+                    debug!(target: "backend/player", "detected player name: {name}");
+                    self.name = Some(name);
+                }
+                Update::Err(_) => self.name_retry_count += 1,
+                Update::Pending => (),
+            }
+        }
+
         if self.update_position_state(resources, minimap_state) {
             self.update_health_state(resources, player_state);
             self.update_rune_validating_state(
@@ -1376,7 +1409,7 @@ impl PlayerContext {
                 Lifecycle::Ended => {
                     if matches!(buffs[BuffKind::Rune].state, Buff::No) {
                         self.track_rune_fail_count();
-                        info!(target: "rune", "failed to solve {} time(s)", self.rune_failed_count);
+                        info!(target: "backend/rune", "failed to solve {} time(s)", self.rune_failed_count);
                     } else {
                         self.rune_failed_count = 0;
                         #[cfg(debug_assertions)]

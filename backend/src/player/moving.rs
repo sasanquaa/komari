@@ -15,7 +15,7 @@ use crate::{
     ActionKeyDirection, ActionKeyWith, MAX_PLATFORMS_COUNT,
     array::Array,
     bridge::KeyKind,
-    ecs::{Resources, transition, transition_if},
+    ecs::Resources,
     minimap::Minimap,
     pathing::{MovementHint, PlatformWithNeighbors, find_points_with},
     player::{
@@ -24,7 +24,6 @@ use crate::{
         grapple::{GRAPPLING_THRESHOLD, Grappling},
         next_action,
         solve_rune::SolvingRune,
-        transition_from_action,
         unstuck::Unstucking,
         use_key::UseKey,
     },
@@ -35,7 +34,7 @@ pub const MOVE_TIMEOUT: u32 = 5;
 
 /// Jumpable y distances.
 const JUMPABLE_RANGE: Range<i32> = 4..JUMP_THRESHOLD;
-const UP_JUMP_THRESHOLD: i32 = 10;
+const UP_JUMP_THRESHOLD: i32 = JUMP_THRESHOLD;
 
 /// Intermediate points to move by.
 ///
@@ -267,14 +266,13 @@ pub fn update_moving_state(
     let context = &mut player.context;
 
     player.state = Player::Idle; // Sets initial next state first
-    transition_if!(
-        player,
-        Player::Unstucking(Unstucking::new_movement(
+    if context.track_unstucking() {
+        player.state = Player::Unstucking(Unstucking::new_movement(
             Timeout::default(),
-            context.track_unstucking_transitioned()
-        )),
-        context.track_unstucking()
-    );
+            context.track_unstucking_transitioned(),
+        ));
+        return;
+    }
 
     let cur_pos = context.last_known_pos.unwrap();
     let moving = Moving::new(cur_pos, dest, exact, intermediates);
@@ -335,19 +333,17 @@ pub fn update_moving_state(
     if !skip_destination && y_direction > 0 && y_distance >= UP_JUMP_THRESHOLD {
         // In auto mob with platforms pathing and up jump only, immediately aborts the action
         // if there are no intermediate points and the distance is too big to up jump.
-        transition_if!(
-            player,
-            Player::Idle,
-            context.has_auto_mob_action_only()
-                && context.config.auto_mob_platforms_pathing
-                && context.config.auto_mob_platforms_pathing_up_jump_only
-                && intermediates.is_none()
-                && y_distance >= GRAPPLING_THRESHOLD,
-            {
-                debug!(target: "player", "auto mob aborted because distance for up jump only is too big");
-                context.clear_action_completed();
-            }
-        );
+        if context.has_auto_mob_action_only()
+            && context.config.auto_mob_platforms_pathing
+            && context.config.auto_mob_platforms_pathing_up_jump_only
+            && intermediates.is_none()
+            && y_distance >= GRAPPLING_THRESHOLD
+        {
+            debug!(target:"backend/player","auto mob aborted because distance for up jump only is too big");
+            context.clear_action_completed();
+            player.state = Player::Idle;
+            return;
+        }
 
         let next_state = Player::UpJumping(UpJumping::new(moving, resources, context));
         return abort_action_on_state_repeat(player, next_state, minimap_state);
@@ -370,34 +366,32 @@ pub fn update_moving_state(
         );
     }
 
-    debug!(target: "player", "reached {dest:?} with actual position {cur_pos:?}");
+    debug!(target: "backend/player", "reached {dest:?} with actual position {cur_pos:?}");
     if let Some(mut intermediates) = intermediates
         && let Some((dest, exact)) = intermediates.next()
     {
         context.clear_unstucking(false);
         context.clear_last_movement();
-        transition_if!(
-            player,
-            Player::Stalling(Timeout::default(), 3),
-            matches!(moving.intermediate_hint(), Some(MovementHint::WalkAndJump)),
-            {
-                // TODO: Any better way ???
-                context.stalling_timeout_state = Some(Player::Jumping(Moving::new(
-                    cur_pos,
-                    dest,
-                    exact,
-                    Some(intermediates),
-                )));
+        if matches!(moving.intermediate_hint(), Some(MovementHint::WalkAndJump)) {
+            context.stalling_timeout_state = Some(Player::Jumping(Moving::new(
+                cur_pos,
+                dest,
+                exact,
+                Some(intermediates),
+            )));
 
-                let key = if dest.x - cur_pos.x >= 0 {
-                    KeyKind::Right
-                } else {
-                    KeyKind::Left
-                };
-                resources.input.send_key_down(key);
-            }
-        );
-        transition!(player, Player::Moving(dest, exact, Some(intermediates)));
+            let key = if dest.x - cur_pos.x >= 0 {
+                KeyKind::Right
+            } else {
+                KeyKind::Left
+            };
+            resources.input.send_key_down(key);
+            player.state = Player::Stalling(Timeout::default(), 3);
+            return;
+        }
+
+        player.state = Player::Moving(dest, exact, Some(intermediates));
+        return;
     }
 
     update_from_action(player, moving);
@@ -412,17 +406,15 @@ fn abort_action_on_state_repeat(
     player_next_state: Player,
     minimap_state: Minimap,
 ) {
-    transition_if!(
-        player,
-        Player::Idle,
-        player.context.track_last_movement_repeated(),
-        {
-            info!(target: "player", "abort action due to repeated state");
-            player.context.auto_mob_track_ignore_xs(minimap_state, true);
-            player.context.clear_action_completed();
-        }
-    );
-    transition!(player, player_next_state);
+    if player.context.track_last_movement_repeated() {
+        info!(target:"backend/player","abort action due to repeated state");
+        player.context.auto_mob_track_ignore_xs(minimap_state, true);
+        player.context.clear_action_completed();
+        player.state = Player::Idle;
+        return;
+    }
+
+    player.state = player_next_state;
 }
 
 fn update_from_action(player: &mut PlayerEntity, moving: Moving) {
@@ -434,12 +426,13 @@ fn update_from_action(player: &mut PlayerEntity, moving: Moving) {
             wait_after_move_ticks,
             ..
         })) => {
-            transition_if!(
-                player,
-                Player::Stalling(Timeout::default(), wait_after_move_ticks),
-                wait_after_move_ticks > 0
-            );
-            transition_from_action!(player, Player::Idle);
+            if wait_after_move_ticks > 0 {
+                player.state = Player::Stalling(Timeout::default(), wait_after_move_ticks);
+                return;
+            }
+            player.state = Player::Idle;
+            player.context.clear_unstucking(false);
+            player.context.clear_action_completed();
         }
 
         Some(PlayerAction::Key(
@@ -448,30 +441,38 @@ fn update_from_action(player: &mut PlayerEntity, moving: Moving) {
                 direction,
                 ..
             },
-        )) => transition_if!(
-            player,
-            Player::DoubleJumping(DoubleJumping::new(moving, true, false)),
-            Player::UseKey(UseKey::from_key(key)),
-            matches!(direction, ActionKeyDirection::Any) || direction == last_direction
-        ),
+        )) => {
+            player.state =
+                if (matches!(direction, ActionKeyDirection::Any) || direction == last_direction) {
+                    Player::DoubleJumping(DoubleJumping::new(moving, true, false))
+                } else {
+                    Player::UseKey(UseKey::from_key(key))
+                };
+        }
 
         Some(PlayerAction::Key(
             key @ Key {
                 with: ActionKeyWith::Any | ActionKeyWith::Stationary,
                 ..
             },
-        )) => transition!(player, Player::UseKey(UseKey::from_key(key))),
-
-        Some(PlayerAction::AutoMob(mob)) => transition!(
-            player,
-            Player::UseKey(UseKey::from_auto_mob(mob, ActionKeyDirection::Any, true))
-        ),
-
-        Some(PlayerAction::SolveRune) => {
-            transition!(player, Player::SolvingRune(SolvingRune::default()))
+        )) => {
+            player.state = Player::UseKey(UseKey::from_key(key));
         }
 
-        Some(PlayerAction::PingPong(_)) => transition_from_action!(player, Player::Idle),
+        Some(PlayerAction::AutoMob(mob)) => {
+            player.state =
+                Player::UseKey(UseKey::from_auto_mob(mob, ActionKeyDirection::Any, true));
+        }
+
+        Some(PlayerAction::SolveRune) => {
+            player.state = Player::SolvingRune(SolvingRune::default());
+        }
+
+        Some(PlayerAction::PingPong(_)) => {
+            player.context.clear_unstucking(false);
+            player.context.clear_action_completed();
+            player.state = Player::Idle;
+        }
 
         Some(
             PlayerAction::SolveShape

@@ -5,12 +5,9 @@ use super::{
     timeout::{MovingLifecycle, next_moving_lifecycle_with_axis},
 };
 use crate::{
-    ecs::{Resources, transition, transition_if},
+    ecs::Resources,
     minimap::Minimap,
-    player::{
-        MOVE_TIMEOUT, PlayerEntity, moving::Moving, next_action, timeout::ChangeAxis,
-        transition_to_moving, transition_to_moving_if,
-    },
+    player::{MOVE_TIMEOUT, PlayerEntity, moving::Moving, next_action, timeout::ChangeAxis},
 };
 
 /// Minimum y distance from the destination required to perform a grappling hook.
@@ -81,23 +78,21 @@ pub fn update_grappling_state(
         ChangeAxis::Both,
     ) {
         MovingLifecycle::Started(moving) => {
-            transition_if!(
-                player,
-                Player::Grappling(grappling.moving(moving.timeout_started(false))),
-                player.context.stalling_buffered.stalling(),
-                {
-                    player
-                        .context
-                        .clear_stalling_buffer_states_if_possible(resources);
-                }
-            );
+            if player.context.stalling_buffered.stalling() {
+                player
+                    .context
+                    .clear_stalling_buffer_states_if_possible(resources);
+                player.state = Player::Grappling(grappling.moving(moving.timeout_started(false)));
+                return;
+            }
 
-            transition!(player, Player::Grappling(grappling.moving(moving)), {
-                player.context.last_movement = Some(LastMovement::Grappling);
-                resources.input.send_key(key);
-            })
+            resources.input.send_key(key);
+            player.context.last_movement = Some(LastMovement::Grappling);
+            player.state = Player::Grappling(grappling.moving(moving));
         }
-        MovingLifecycle::Ended(moving) => transition_to_moving!(player, moving),
+        MovingLifecycle::Ended(moving) => {
+            player.state = Player::Moving(moving.dest, moving.exact, moving.intermediates);
+        }
         MovingLifecycle::Updated(mut moving) => {
             let cur_pos = moving.pos;
             let (y_distance, y_direction) = moving.y_distance_direction_from(true, cur_pos);
@@ -106,22 +101,31 @@ pub fn update_grappling_state(
             if !grappling.did_y_changed {
                 grappling.did_y_changed = y_changed;
             }
+
             if !moving.completed
                 && (y_direction <= 0 || y_distance <= stopping_threshold(player.context.velocity.1))
             {
                 resources.input.send_key(key);
                 moving.completed = true;
             }
+
             // Sets initial next state first
             player.state = Player::Grappling(grappling.moving(moving));
-
             match next_action(&player.context) {
                 Some(PlayerAction::AutoMob(mob)) => {
-                    transition_if!(!moving.completed);
-                    transition_to_moving_if!(player, moving, moving.is_destination_intermediate());
-                    transition_if!(
-                        player.context.config.teleport_key.is_some() && !moving.completed
-                    );
+                    if !moving.completed {
+                        return;
+                    }
+
+                    if moving.is_destination_intermediate() {
+                        player.state =
+                            Player::Moving(moving.dest, moving.exact, moving.intermediates);
+                        return;
+                    }
+
+                    if player.context.config.teleport_key.is_some() && !moving.completed {
+                        return;
+                    }
 
                     let (x_distance, x_direction) =
                         moving.x_distance_direction_from(false, cur_pos);
@@ -137,15 +141,17 @@ pub fn update_grappling_state(
                     )
                 }
                 Some(PlayerAction::PingPong(ping_pong)) => {
-                    transition_if!(
-                        cur_pos.y < ping_pong.bound.y
-                            || !resources.rng.random_perlin_bool(
-                                cur_pos.x,
-                                cur_pos.y,
-                                resources.tick,
-                                0.7,
-                            )
-                    );
+                    if cur_pos.y < ping_pong.bound.y
+                        || !resources.rng.random_perlin_bool(
+                            cur_pos.x,
+                            cur_pos.y,
+                            resources.tick,
+                            0.7,
+                        )
+                    {
+                        return;
+                    }
+
                     update_from_ping_pong_action(
                         resources,
                         player,

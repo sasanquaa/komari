@@ -49,7 +49,7 @@ pub fn SectionRotation(disabled: bool) -> Element {
             RotationMode::PingPong => {
                 map.rotation_ping_pong_bound = bound;
             }
-        };
+        }
         save_map(map);
     };
 

@@ -75,7 +75,7 @@ pub fn ActionConfigurationsList(
                         to_index: event.to,
                     });
                 },
-                for (index , action) in actions.clone().into_iter().enumerate() {
+                for (index , action) in actions.into_iter().enumerate() {
                     ListItem { class: "flex items-end",
                         div {
                             class: "flex group flex-grow",

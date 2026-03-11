@@ -83,6 +83,8 @@ pub struct Character {
     pub up_jump_is_flight: bool,
     #[serde(default)]
     pub up_jump_specific_key_should_jump: bool,
+    #[serde(default)]
+    pub has_extended_teleport_range: bool,
     pub actions: Vec<ActionConfiguration>,
     #[serde(default, deserialize_with = "deserialize_with_ok_or_default")]
     pub elite_boss_behavior: EliteBossBehavior,
@@ -145,6 +147,7 @@ impl Default for Character {
             disable_grapple_on_double_jumping: false,
             up_jump_is_flight: false,
             up_jump_specific_key_should_jump: false,
+            has_extended_teleport_range: false,
             actions: vec![],
             elite_boss_behavior_key: KeyBinding::default(),
             elite_boss_behavior: EliteBossBehavior::default(),

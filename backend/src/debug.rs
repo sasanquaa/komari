@@ -35,6 +35,27 @@ pub struct ViolettaTrack {
     pub is_violetta: bool,
 }
 
+#[allow(unused)]
+pub fn debug_mobs(
+    mat: &impl MatTraitConst,
+    minimap: Rect,
+    points: Vec<Point>,
+    computed_from_player: bool,
+) {
+    let mut mat = mat.roi(minimap).unwrap().clone_pointee();
+
+    for point in points {
+        let color = if computed_from_player {
+            Scalar::new(0.0, 255.0, 0.0, 0.0)
+        } else {
+            Scalar::new(255.0, 0.0, 0.0, 0.0)
+        };
+        let _ = circle_def(&mut mat, point, 3, color);
+    }
+
+    debug_mat("Mobs", &mat, 0, []);
+}
+
 pub fn debug_spinning_arrows(mat: &impl MatTraitConst, spin_arrow: SpinArrow) {
     let last_last_arrow_head = spin_arrow.last_last_arrow_head.unwrap();
     let last_arrow_head = spin_arrow.last_arrow_head.unwrap();

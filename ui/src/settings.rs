@@ -13,6 +13,7 @@ use crate::{
     components::{
         button::{Button, ButtonStyle},
         checkbox::Checkbox,
+        duration::DurationInput,
         file::{FileInput, FileOutput},
         icons::{EyePasswordHideIcon, EyePasswordShowIcon},
         key::KeyInput,
@@ -450,15 +451,16 @@ fn SectionRunTimer() -> Element {
     rsx! {
         Section { title: "Run timer",
             div { class: "grid grid-cols-2 gap-3",
-                SettingsMillisInput {
-                    label: "Duration",
-                    on_value: move |run_timer_millis| {
-                        save_settings(Settings {
-                            run_timer_millis,
-                            ..settings.peek().clone()
-                        });
-                    },
-                    value: settings().run_timer_millis,
+                Labeled { label: "Duration (hh:mm:ss)",
+                    DurationInput {
+                        on_value: move |run_timer_millis| {
+                            save_settings(Settings {
+                                run_timer_millis,
+                                ..settings.peek().clone()
+                            });
+                        },
+                        value: settings().run_timer_millis,
+                    }
                 }
                 SettingsCheckbox {
                     label: "Enabled",
@@ -518,17 +520,15 @@ fn SectionOthers() -> Element {
                     },
                     checked: settings().enable_transparent_shape_solving,
                 }
-                if cfg!(feature = "violetta") {
-                    SettingsCheckbox {
-                        label: "Enable Violetta solving",
-                        on_checked: move |enable_violetta_solving| {
-                            save_settings(Settings {
-                                enable_violetta_solving,
-                                ..settings.peek().clone()
-                            });
-                        },
-                        checked: settings().enable_violetta_solving,
-                    }
+                SettingsCheckbox {
+                    label: "Enable Violetta solving",
+                    on_checked: move |enable_violetta_solving| {
+                        save_settings(Settings {
+                            enable_violetta_solving,
+                            ..settings.peek().clone()
+                        });
+                    },
+                    checked: settings().enable_violetta_solving,
                 }
                 SettingsCheckbox {
                     label: "Enable panic mode",

@@ -11,9 +11,9 @@ use crate::{
     array::Array,
     bridge::{KeyKind, MouseKind},
     detect::{FamiliarLevel, FamiliarRank},
-    ecs::{Resources, transition, transition_if, try_ok_transition, try_some_transition},
+    ecs::Resources,
     models::{FamiliarRarity, SwappableFamiliars},
-    player::{PlayerEntity, next_action, transition_from_action},
+    player::{PlayerEntity, next_action},
 };
 
 /// Number of familiar slots available.
@@ -108,15 +108,15 @@ pub fn update_familiars_swapping_state(resources: &Resources, player: &mut Playe
     let Player::FamiliarsSwapping(mut swapping) = player.state else {
         panic!("state is not familiars swapping")
     };
-    let familiar_key = try_some_transition!(
-        player,
-        Player::Idle,
-        player.context.config.familiar_key,
-        {
-            info!(target: "player", "aborted familiars swapping because familiar menu key is not set");
+    let familiar_key = match player.context.config.familiar_key {
+        Some(val) => val,
+        None => {
+            info!(target:"backend/player","aborted familiars swapping because familiar menu key is not set");
             player.context.clear_action_completed();
+            player.state = Player::Idle;
+            return;
         }
-    );
+    };
 
     match swapping.state {
         State::OpenMenu(_) => update_open_menu(resources, &mut swapping, familiar_key),
@@ -142,6 +142,7 @@ pub fn update_familiars_swapping_state(resources: &Resources, player: &mut Playe
         Some(_) => {
             let is_terminal = matches!(next, Player::Idle);
             if is_terminal {
+                player.context.clear_action_completed();
                 if swapping.success {
                     player.context.clear_familiars_swap_fail_count();
                 } else {
@@ -149,9 +150,9 @@ pub fn update_familiars_swapping_state(resources: &Resources, player: &mut Playe
                 }
             }
 
-            transition_from_action!(player, next, is_terminal)
+            player.state = next;
         }
-        None => transition!(player, Player::Idle), // Force cancel if not from action
+        None => player.state = Player::Idle, // Force cancel if not from action
     }
 }
 
@@ -161,29 +162,30 @@ fn update_open_menu(resources: &Resources, swapping: &mut FamiliarsSwapping, key
     };
 
     match next_timeout_lifecycle(timeout, 120) {
-        Lifecycle::Started(timeout) => transition!(swapping, State::OpenMenu(timeout), {
+        Lifecycle::Started(timeout) => {
             resources.input.send_mouse(
                 swapping.mouse_rest.x,
                 swapping.mouse_rest.y,
                 MouseKind::Move,
             );
-        }),
-        Lifecycle::Ended => {
-            transition_if!(
-                swapping,
-                State::FindSlots,
-                resources.detector().detect_familiar_menu_opened()
-            );
-            transition!(swapping, State::Completing(Timeout::default(), false), {
-                // Do not count as success
-                swapping.success = true;
-            });
+            swapping.state = State::OpenMenu(timeout);
         }
-        Lifecycle::Updated(timeout) => transition!(swapping, State::OpenMenu(timeout), {
+        Lifecycle::Ended => {
+            if resources.detector().detect_familiar_menu_opened() {
+                swapping.state = State::FindSlots;
+                return;
+            }
+
+            swapping.success = true;
+            swapping.state = State::Completing(Timeout::default(), false);
+        }
+        Lifecycle::Updated(timeout) => {
             if timeout.current == 60 {
                 resources.input.send_key(key);
             }
-        }),
+
+            swapping.state = State::OpenMenu(timeout);
+        }
     }
 }
 
@@ -199,42 +201,36 @@ fn update_find_slots(resources: &Resources, swapping: &mut FamiliarsSwapping) {
                 });
             }
         } else {
-            debug!(target: "player", "familiar slots is not 3 but was {}, aborting...", vec.len());
-            debug!(target: "player", "detected familiar slots were {vec:?}");
+            debug!(target: "backend/player", "familiar slots is not 3 but was {}, aborting...", vec.len());
+            debug!(target: "backend/player", "detected familiar slots were {vec:?}");
             // Weird spots with false positives
-            transition!(swapping, State::Completing(Timeout::default(), false), {
-                // Do not count as success
-                swapping.success = true;
-            });
+            swapping.success = true;
+            swapping.state = State::Completing(Timeout::default(), false);
+            return;
         }
     }
 
-    transition!(swapping, State::FreeSlots(FAMILIAR_SLOTS - 1, false));
+    swapping.state = State::FreeSlots(FAMILIAR_SLOTS - 1, false);
 }
 
 fn update_free_slots(resources: &Resources, swapping: &mut FamiliarsSwapping) {
     #[inline]
     fn find_cards_or_complete(resources: &Resources, swapping: &mut FamiliarsSwapping) {
-        transition_if!(
-            swapping,
-            State::FindCards(Timeout::default()),
-            swapping.slots.iter().any(|slot| slot.is_free),
-            {
-                if let Ok(bbox) = resources.detector().detect_familiar_level_button() {
-                    // Optionally sort the familiar cards first so that the lowest-level one are on top
-                    // by clicking level button
-                    let (x, y) = bbox_click_point(bbox);
-                    resources.input.send_mouse(x, y, MouseKind::Click);
-                } else {
-                    let rest = swapping.mouse_rest;
-                    resources.input.send_mouse(rest.x, rest.y, MouseKind::Move);
-                }
+        if swapping.slots.iter().any(|slot| slot.is_free) {
+            if let Ok(bbox) = resources.detector().detect_familiar_level_button() {
+                let (x, y) = bbox_click_point(bbox);
+                resources.input.send_mouse(x, y, MouseKind::Click);
+            } else {
+                let rest = swapping.mouse_rest;
+                resources.input.send_mouse(rest.x, rest.y, MouseKind::Move);
             }
-        );
+            swapping.state = State::FindCards(Timeout::default());
+            return;
+        }
+
         // No slot is free so move to completing.
-        transition!(swapping, State::Completing(Timeout::default(), false), {
-            swapping.success = true;
-        });
+        swapping.success = true;
+        swapping.state = State::Completing(Timeout::default(), false);
     }
 
     let State::FreeSlots(index, was_freeing) = swapping.state else {
@@ -242,7 +238,7 @@ fn update_free_slots(resources: &Resources, swapping: &mut FamiliarsSwapping) {
     };
     let is_free = swapping.slots[index].is_free;
     match (is_free, index) {
-        (true, index) if index > 0 => transition!(swapping, State::FreeSlots(index - 1, false)),
+        (true, index) if index > 0 => swapping.state = State::FreeSlots(index - 1, false),
         (true, 0) => find_cards_or_complete(resources, swapping),
         (false, _) => {
             let can_free = match swapping.swappable_slots {
@@ -257,15 +253,13 @@ fn update_free_slots(resources: &Resources, swapping: &mut FamiliarsSwapping) {
             }
 
             // Bail and retry as this could indicate the menu closed/overlap
-            transition_if!(
-                swapping,
-                State::OpenMenu(Timeout::default()),
-                was_freeing,
-                {
-                    swapping.slots = Array::new();
-                }
-            );
-            transition!(swapping, State::FreeSlot(Timeout::default(), index));
+            if was_freeing {
+                swapping.slots = Array::new();
+                swapping.state = State::OpenMenu(Timeout::default());
+                return;
+            }
+
+            swapping.state = State::FreeSlot(Timeout::default(), index);
         }
         (true, _) => unreachable!(),
     }
@@ -281,13 +275,13 @@ fn update_free_slot(resources: &Resources, swapping: &mut FamiliarsSwapping) {
     };
 
     match next_timeout_lifecycle(timeout, FAMILIAR_FREE_SLOTS_TIMEOUT) {
-        Lifecycle::Started(timeout) => transition!(swapping, State::FreeSlot(timeout, index), {
-            // On start, move mouse to hover over the familiar slot to check level
+        Lifecycle::Started(timeout) => {
             let bbox = swapping.slots[index].bbox;
             let x = bbox.x + bbox.width / 2;
             resources.input.send_mouse(x, bbox.y + 20, MouseKind::Move);
-        }),
-        Lifecycle::Ended => transition!(swapping, State::FreeSlots(index, true)),
+            swapping.state = State::FreeSlot(timeout, index);
+        }
+        Lifecycle::Ended => swapping.state = State::FreeSlots(index, true),
         Lifecycle::Updated(mut timeout) => {
             let bbox = swapping.slots[index].bbox;
             let (x, y) = bbox_click_point(bbox);
@@ -305,30 +299,30 @@ fn update_free_slot(resources: &Resources, swapping: &mut FamiliarsSwapping) {
                         }
                         Ok(FamiliarLevel::LevelOther) => {
                             // If current slot is already non-level-5, check next slot
-                            transition_if!(swapping, State::FreeSlots(index - 1, false), index > 0);
+                            if index > 0 {
+                                swapping.state = State::FreeSlots(index - 1, false);
+                                return;
+                            }
 
                             // If there is no more slot to check and any of them is free,
                             // starts finding cards for swapping
-                            transition_if!(
-                                swapping,
-                                State::FindCards(Timeout::default()),
-                                swapping.slots.iter().any(|slot| slot.is_free),
-                                {
-                                    resources.input.send_mouse(
-                                        swapping.mouse_rest.x,
-                                        swapping.mouse_rest.y,
-                                        MouseKind::Move,
-                                    );
-                                }
-                            );
+                            if swapping.slots.iter().any(|slot| slot.is_free) {
+                                resources.input.send_mouse(
+                                    swapping.mouse_rest.x,
+                                    swapping.mouse_rest.y,
+                                    MouseKind::Move,
+                                );
+                                swapping.state = State::FindCards(Timeout::default());
+                                return;
+                            }
 
                             // All of the slots are occupied and non-level-5
-                            transition!(swapping, State::Completing(Timeout::default(), false), {
-                                swapping.success = true;
-                            });
+                            swapping.success = true;
+                            swapping.state = State::Completing(Timeout::default(), false);
+                            return;
                         }
                         // Could mean UI being closed
-                        Err(_) => transition!(swapping, State::FreeSlots(index, true)),
+                        Err(_) => swapping.state = State::FreeSlots(index, true),
                     }
                 }
                 FAMILIAR_CHECK_FREE_TICK => {
@@ -352,7 +346,7 @@ fn update_free_slot(resources: &Resources, swapping: &mut FamiliarsSwapping) {
                 _ => (),
             }
 
-            transition!(swapping, State::FreeSlot(timeout, index));
+            swapping.state = State::FreeSlot(timeout, index);
         }
     }
 }
@@ -367,11 +361,10 @@ fn update_find_cards(resources: &Resources, swapping: &mut FamiliarsSwapping) {
         Lifecycle::Ended => {
             if swapping.cards.is_empty() {
                 let vec = resources.detector().detect_familiar_cards();
-                transition_if!(
-                    swapping,
-                    State::Scrolling(Timeout::default(), None, 0),
-                    vec.is_empty()
-                );
+                if vec.is_empty() {
+                    swapping.state = State::Scrolling(Timeout::default(), None, 0);
+                    return;
+                }
 
                 for pair in vec {
                     let rarity = match pair.1 {
@@ -384,16 +377,14 @@ fn update_find_cards(resources: &Resources, swapping: &mut FamiliarsSwapping) {
                 }
             }
 
-            transition_if!(
-                swapping,
-                // Try scroll even if it is empty
-                State::Scrolling(Timeout::default(), None, 0),
-                State::Swapping(Timeout::default(), 0),
-                swapping.cards.is_empty()
-            );
+            swapping.state = if swapping.cards.is_empty() {
+                State::Scrolling(Timeout::default(), None, 0)
+            } else {
+                State::Swapping(Timeout::default(), 0)
+            };
         }
         Lifecycle::Started(timeout) | Lifecycle::Updated(timeout) => {
-            transition!(swapping, State::FindCards(timeout))
+            swapping.state = State::FindCards(timeout);
         }
     }
 }
@@ -409,10 +400,11 @@ fn update_swapping(resources: &Resources, swapping: &mut FamiliarsSwapping) {
     };
 
     match next_timeout_lifecycle(timeout, SWAPPING_TIMEOUT) {
-        Lifecycle::Started(timeout) => transition!(swapping, State::Swapping(timeout, index), {
+        Lifecycle::Started(timeout) => {
             let (x, y) = bbox_click_point(swapping.cards[index]);
             resources.input.send_mouse(x, y, MouseKind::Move);
-        }),
+            swapping.state = State::Swapping(timeout, index);
+        }
         Lifecycle::Ended => {
             // Check free slot in timeout
             for i in 0..FAMILIAR_SLOTS {
@@ -422,20 +414,18 @@ fn update_swapping(resources: &Resources, swapping: &mut FamiliarsSwapping) {
             }
 
             // Save if all slots are occupied. Could also mean UI is already closed.
-            transition_if!(
-                swapping,
-                State::Saving(Timeout::default()),
-                swapping.slots.iter().all(|slot| !slot.is_free)
-            );
+            if swapping.slots.iter().all(|slot| !slot.is_free) {
+                swapping.state = State::Saving(Timeout::default());
+                return;
+            }
 
             // At least one slot is free and there are more cards. Could mean double click
             // failed or familiar already level 5, advances either way.
-            transition_if!(
-                swapping,
-                State::Swapping(Timeout::default(), index + 1),
-                State::Completing(Timeout::default(), false),
-                index + 1 < swapping.cards.len().min(MAX_CHECK_COUNT)
-            );
+            swapping.state = if index + 1 < swapping.cards.len().min(MAX_CHECK_COUNT) {
+                State::Swapping(Timeout::default(), index + 1)
+            } else {
+                State::Completing(Timeout::default(), false)
+            };
         }
         Lifecycle::Updated(timeout) => {
             if timeout.current == SWAPPING_DETECT_LEVEL_TICK {
@@ -455,16 +445,15 @@ fn update_swapping(resources: &Resources, swapping: &mut FamiliarsSwapping) {
                     }
                     Err(_) => {
                         // Recoverable in an edge case where the mouse overlap with the level
-                        transition_if!(
-                            swapping,
-                            State::Completing(Timeout::default(), false),
-                            !resources.detector().detect_familiar_menu_opened()
-                        );
+                        if !resources.detector().detect_familiar_menu_opened() {
+                            swapping.state = State::Completing(Timeout::default(), false);
+                            return;
+                        }
                     }
                 }
             }
 
-            transition!(swapping, State::Swapping(timeout, index));
+            swapping.state = State::Swapping(timeout, index);
         }
     }
 }
@@ -489,45 +478,40 @@ fn update_scrolling(resources: &Resources, swapping: &mut FamiliarsSwapping) {
     match next_timeout_lifecycle(timeout, SCROLLING_TIMEOUT) {
         Lifecycle::Started(timeout) => {
             // TODO: recoverable?
-            let scrollbar = try_ok_transition!(
-                swapping,
-                State::Completing(Timeout::default(), false),
-                resources.detector().detect_familiar_scrollbar()
-            );
-
-            transition!(
-                swapping,
-                State::Scrolling(timeout, Some(scrollbar), retry_count),
-                {
-                    let (x, y) = bbox_click_point(scrollbar);
-                    resources.input.send_mouse(x, y, MouseKind::Scroll);
+            let scrollbar = match resources.detector().detect_familiar_scrollbar() {
+                Ok(val) => val,
+                Err(_) => {
+                    swapping.state = State::Completing(Timeout::default(), false);
+                    return;
                 }
-            );
+            };
+
+            let (x, y) = bbox_click_point(scrollbar);
+            resources.input.send_mouse(x, y, MouseKind::Scroll);
+            swapping.state = State::Scrolling(timeout, Some(scrollbar), retry_count);
         }
         Lifecycle::Ended => {
-            let current_scrollbar = try_ok_transition!(
-                swapping,
-                State::Completing(Timeout::default(), false),
-                resources.detector().detect_familiar_scrollbar()
-            );
-
-            transition_if!(
-                swapping,
-                State::FindCards(Timeout::default()),
-                (current_scrollbar.y - scrollbar.unwrap().y).abs() >= SCROLLBAR_SCROLLED_THRESHOLD,
-                {
-                    swapping.cards = Array::new(); // Reset cards array
+            let current_scrollbar = match resources.detector().detect_familiar_scrollbar() {
+                Ok(val) => val,
+                Err(_) => {
+                    swapping.state = State::Completing(Timeout::default(), false);
+                    return;
                 }
-            );
+            };
+
+            if (current_scrollbar.y - scrollbar.unwrap().y).abs() >= SCROLLBAR_SCROLLED_THRESHOLD {
+                swapping.cards = Array::new();
+                swapping.state = State::FindCards(Timeout::default());
+                return;
+            }
 
             // Try again because scrolling might have failed. This could also indicate
             // the list is empty.
-            transition_if!(
-                swapping,
-                State::Scrolling(Timeout::default(), Some(current_scrollbar), retry_count + 1),
-                State::Completing(Timeout::default(), false),
-                retry_count < MAX_RETRY
-            );
+            swapping.state = if retry_count < MAX_RETRY {
+                State::Scrolling(Timeout::default(), Some(current_scrollbar), retry_count + 1)
+            } else {
+                State::Completing(Timeout::default(), false)
+            };
         }
         Lifecycle::Updated(timeout) => {
             if timeout.current == SCROLLING_REST_TICK {
@@ -535,7 +519,7 @@ fn update_scrolling(resources: &Resources, swapping: &mut FamiliarsSwapping) {
                 resources.input.send_mouse(x + 70, y, MouseKind::Move);
             }
 
-            transition!(swapping, State::Scrolling(timeout, scrollbar, retry_count));
+            swapping.state = State::Scrolling(timeout, scrollbar, retry_count);
         }
     }
 }
@@ -548,21 +532,23 @@ fn update_saving(resources: &Resources, swapping: &mut FamiliarsSwapping) {
 
     match next_timeout_lifecycle(timeout, 20) {
         Lifecycle::Started(timeout) => {
-            let button = try_ok_transition!(
-                swapping,
-                State::Completing(Timeout::default(), false),
-                resources.detector().detect_familiar_save_button()
-            );
+            let button = match resources.detector().detect_familiar_save_button() {
+                Ok(val) => val,
+                Err(_) => {
+                    swapping.state = State::Completing(Timeout::default(), false);
+                    return;
+                }
+            };
 
-            transition!(swapping, State::Saving(timeout,), {
-                let (x, y) = bbox_click_point(button);
-                resources.input.send_mouse(x, y, MouseKind::Click);
-            });
+            let (x, y) = bbox_click_point(button);
+            resources.input.send_mouse(x, y, MouseKind::Click);
+            swapping.state = State::Saving(timeout);
         }
-        Lifecycle::Ended => transition!(swapping, State::Completing(Timeout::default(), false), {
+        Lifecycle::Ended => {
             swapping.success = true;
-        }),
-        Lifecycle::Updated(timeout) => transition!(swapping, State::Saving(timeout)),
+            swapping.state = State::Completing(Timeout::default(), false);
+        }
+        Lifecycle::Updated(timeout) => swapping.state = State::Saving(timeout),
     }
 }
 
@@ -575,14 +561,13 @@ fn update_completing(
 ) {
     match next_timeout_lifecycle(timeout, 20) {
         Lifecycle::Started(timeout) | Lifecycle::Updated(timeout) => {
-            transition!(swapping, State::Completing(timeout, completed))
+            swapping.state = State::Completing(timeout, completed);
         }
         Lifecycle::Ended => {
-            transition!(swapping, State::Completing(Timeout::default(), true), {
-                if resources.detector().detect_familiar_menu_opened() {
-                    resources.input.send_key(KeyKind::Esc);
-                }
-            })
+            if resources.detector().detect_familiar_menu_opened() {
+                resources.input.send_key(KeyKind::Esc);
+            }
+            swapping.state = State::Completing(Timeout::default(), true);
         }
     }
 }

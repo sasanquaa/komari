@@ -45,6 +45,7 @@ fn main() {
     let change_channel_menu = resources_dir.join("change_channel_menu_ideal_ratio.png");
     let admin = resources_dir.join("admin_ideal_ratio.png");
     let timer = resources_dir.join("timer_ideal_ratio.png");
+    let level = resources_dir.join("level_ideal_ratio.png");
     let lie_detector_shape = resources_dir.join("lie_detector_shape_ideal_ratio.png");
     let lie_detector_shape_prepare =
         resources_dir.join("lie_detector_shape_prepare_ideal_ratio.png");
@@ -258,6 +259,7 @@ fn main() {
         change_channel_menu.to_str().unwrap()
     );
     println!("cargo:rustc-env=TIMER_TEMPLATE={}", timer.to_str().unwrap());
+    println!("cargo:rustc-env=LEVEL_TEMPLATE={}", level.to_str().unwrap());
     println!(
         "cargo:rustc-env=LIE_DETECTOR_SHAPE_TEMPLATE={}",
         lie_detector_shape.to_str().unwrap()

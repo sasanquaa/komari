@@ -185,7 +185,7 @@ pub fn SectionActions(actions: Memo<Vec<Action>>, disabled: bool) -> Element {
         };
         let insert_index = insert_index.min(actions.len());
         let action_ref = actions.insert_mut(insert_index, action);
-        debug!(target: "actions", "move action from {from_index} to {insert_index}");
+        debug!(target: "ui/actions", "move action from {from_index} to {insert_index}");
 
         if from_condition != to_condition || to_index_local == 0 {
             *action_ref = action_ref.with_condition(to_condition);

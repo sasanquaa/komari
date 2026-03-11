@@ -9,7 +9,7 @@ use super::{
 use crate::{
     ActionKeyDirection, ActionKeyWith,
     bridge::KeyKind,
-    ecs::{Resources, transition, transition_if},
+    ecs::Resources,
     minimap::Minimap,
     player::{
         Player, PlayerEntity,
@@ -19,7 +19,6 @@ use crate::{
         next_action,
         state::LastMovement,
         timeout::{ChangeAxis, MovingLifecycle, Timeout, next_moving_lifecycle_with_axis},
-        transition_to_moving, transition_to_moving_if,
     },
 };
 
@@ -86,22 +85,22 @@ pub fn update_adjusting_state(
     match next_moving_lifecycle_with_axis(moving, cur_pos, MOVE_TIMEOUT, ChangeAxis::Both) {
         MovingLifecycle::Started(moving) => {
             context.last_movement = Some(LastMovement::Adjusting);
-            transition!(player, Player::Adjusting(adjusting.moving(moving)))
+            player.state = Player::Adjusting(adjusting.moving(moving));
         }
-        MovingLifecycle::Ended(moving) => transition_to_moving!(player, moving, {
+        MovingLifecycle::Ended(moving) => {
             resources.input.send_key_up(KeyKind::Right);
             resources.input.send_key_up(KeyKind::Left);
-        }),
+            player.state = Player::Moving(moving.dest, moving.exact, moving.intermediates);
+        }
         MovingLifecycle::Updated(mut moving) => {
             let mut adjusting = adjusting;
             let threshold = context.double_jump_threshold(is_intermediate);
             let (x_distance, x_direction) = moving.x_distance_direction_from(true, moving.pos);
 
-            transition_to_moving_if!(
-                player,
-                moving,
-                !context.config.disable_double_jumping && x_distance >= threshold
-            );
+            if !context.config.disable_double_jumping && x_distance >= threshold {
+                player.state = Player::Moving(moving.dest, moving.exact, moving.intermediates);
+                return;
+            }
 
             // Movement logics
             if !moving.completed {
@@ -184,29 +183,32 @@ fn update_from_action(
                 ..
             },
         )) => {
-            transition_if!(!moving.completed || y_distance > 0);
-            transition_if!(
-                player,
+            if !moving.completed || y_distance > 0 {
+                return;
+            }
+
+            player.state = if matches!(direction, ActionKeyDirection::Any)
+                || direction == context.last_known_direction
+            {
                 Player::DoubleJumping(DoubleJumping::new(
                     moving.timeout(Timeout::default()).completed(false),
                     true,
                     false,
-                )),
-                Player::UseKey(UseKey::from_key(key)),
-                matches!(direction, ActionKeyDirection::Any)
-                    || direction == context.last_known_direction
-            );
+                ))
+            } else {
+                Player::UseKey(UseKey::from_key(key))
+            };
         }
         Some(PlayerAction::Key(
             key @ Key {
                 with: ActionKeyWith::Any,
                 ..
             },
-        )) => transition_if!(
-            player,
-            Player::UseKey(UseKey::from_key(key)),
-            moving.completed && y_distance <= USE_KEY_Y_THRESHOLD
-        ),
+        )) => {
+            if moving.completed && y_distance <= USE_KEY_Y_THRESHOLD {
+                player.state = Player::UseKey(UseKey::from_key(key));
+            }
+        }
         Some(PlayerAction::AutoMob(mob)) => update_from_auto_mob_action(
             resources,
             player,

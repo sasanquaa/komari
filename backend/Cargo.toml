@@ -10,6 +10,7 @@ futures = { workspace = true }
 tonic = "0.13.1"
 bit-vec = "0.8"
 base64 = "0.22.1"
+strsim = "0.11.1"
 nalgebra = "0.34.1"
 lapjv = "0.3.0"
 prost = "0.13.5"
@@ -19,7 +20,6 @@ ort = { version = "2.0.0-rc.10", default-features = false, features = [
     "cuda",
 ] }
 opencv = { version = "0.97.2", default-features = false, features = [
-    "dnn",
     "imgcodecs",
     "imgproc",
     "highgui",
@@ -44,5 +44,5 @@ tonic-build = "*"
 [dev-dependencies]
 mockall = { version = "0.13.1", features = ["nightly"] }
 
-[features]
-violetta = []
+[lints]
+workspace = true

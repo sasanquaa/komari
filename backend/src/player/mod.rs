@@ -22,7 +22,7 @@ use use_key::{UseKey, update_use_key_state};
 use crate::{
     bridge::KeyKind,
     buff::BuffEntities,
-    ecs::{Resources, transition, transition_if},
+    ecs::Resources,
     minimap::{Minimap, MinimapEntity},
     models::ActionKeyDirection,
     player::{
@@ -167,19 +167,16 @@ pub fn run_system(
     minimap: &MinimapEntity,
     buffs: &BuffEntities,
 ) {
-    transition_if!(
-        player,
-        Player::CashShopThenExit(CashShop::new()),
-        player.context.rune_cash_shop,
-        {
-            resources.input.send_key_up(KeyKind::Up);
-            resources.input.send_key_up(KeyKind::Down);
-            resources.input.send_key_up(KeyKind::Left);
-            resources.input.send_key_up(KeyKind::Right);
-            player.context.rune_cash_shop = false;
-            player.context.reset_to_idle_next_update = false;
-        }
-    );
+    if player.context.rune_cash_shop {
+        resources.input.send_key_up(KeyKind::Up);
+        resources.input.send_key_up(KeyKind::Down);
+        resources.input.send_key_up(KeyKind::Left);
+        resources.input.send_key_up(KeyKind::Right);
+        player.context.rune_cash_shop = false;
+        player.context.reset_to_idle_next_update = false;
+        player.state = Player::CashShopThenExit(CashShop::new());
+        return;
+    }
 
     let did_update =
         player
@@ -193,30 +190,27 @@ pub fn run_system(
         // `update_non_positional_context` is here to continue updating
         // `Player::Unstucking` returned from below when the player
         // is inside the edges of the minimap. And also `Player::CashShopThenExit`.
-        transition_if!(update_non_positional_state(
-            resources,
-            player,
-            minimap.state,
-            true
-        ));
+        if update_non_positional_state(resources, player, minimap.state, true) {
+            return;
+        }
 
         let is_stucking = match minimap.state {
             Minimap::Detecting => false,
             Minimap::Idle(idle) => !idle.partially_overlapping,
         };
-        transition_if!(
-            player,
-            Player::Unstucking(Unstucking::new_movement(
+        if is_stucking {
+            let unstucking = Unstucking::new_movement(
                 Timeout::default(),
-                player.context.track_unstucking_transitioned()
-            )),
-            is_stucking,
-            {
-                player.context.last_known_direction = ActionKeyDirection::Any;
-            }
-        );
-        transition!(player, Player::Detecting);
-    };
+                player.context.track_unstucking_transitioned(),
+            );
+            player.state = Player::Unstucking(unstucking);
+            player.context.last_known_direction = ActionKeyDirection::Any;
+            return;
+        }
+
+        player.state = Player::Detecting;
+        return;
+    }
 
     if player.context.reset_to_idle_next_update {
         player.context.reset_to_idle_next_update = false;
@@ -296,7 +290,7 @@ fn update_positional_state(
     minimap_state: Minimap,
 ) {
     match player.state {
-        Player::Detecting => transition!(player, Player::Idle),
+        Player::Detecting => player.state = Player::Idle,
         Player::Idle => update_idle_state(resources, player, minimap_state),
         Player::Moving(_, _, _) => update_moving_state(resources, player, minimap_state),
         Player::Adjusting(_) => update_adjusting_state(resources, player, minimap_state),

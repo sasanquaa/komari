@@ -142,7 +142,7 @@ fn update_operation(mut operation: Operation, update: OperationUpdate) -> Operat
                 };
             }
             _ => {
-                info!(target: "operation", "invalid run update provided for the current state");
+                info!(target: "backend/operation", "invalid run update provided for the current state");
             }
         },
     }

@@ -7,8 +7,8 @@ use super::{
 };
 use crate::{
     bridge::KeyKind,
-    ecs::{Resources, transition, transition_if},
-    player::{PlayerContext, PlayerEntity, next_action, timeout::Timeout, transition_from_action},
+    ecs::Resources,
+    player::{PlayerContext, PlayerEntity, next_action, timeout::Timeout},
     solvers::{RuneSolver, SolvingState},
 };
 
@@ -75,12 +75,14 @@ pub fn update_solving_rune_state(resources: &Resources, player: &mut PlayerEntit
         Some(PlayerAction::SolveRune) => {
             let is_terminal = matches!(player_next_state, Player::Idle);
             if is_terminal {
+                player.context.clear_action_completed();
                 player.context.start_validating_rune();
             }
-            transition_from_action!(player, player_next_state, is_terminal)
+
+            player.state = player_next_state;
         }
         Some(_) => unreachable!(),
-        None => transition!(player, Player::Idle), // Force cancel if not from action
+        None => player.state = Player::Idle, // Force cancel if not from action
     }
 }
 
@@ -95,15 +97,15 @@ fn update_precondition(
 
     match next_timeout_lifecycle(timeout, 15) {
         Lifecycle::Ended => {
-            transition_if!(
-                solving_rune,
-                State::Calibrating(Timeout::default()),
-                State::Precondition(timeout),
-                player_context.is_stationary && resources.input.all_keys_cleared()
-            )
+            solving_rune.state =
+                if player_context.is_stationary && resources.input.all_keys_cleared() {
+                    State::Calibrating(Timeout::default())
+                } else {
+                    State::Precondition(timeout)
+                };
         }
         Lifecycle::Started(timeout) | Lifecycle::Updated(timeout) => {
-            transition!(solving_rune, State::Precondition(timeout))
+            solving_rune.state = State::Precondition(timeout);
         }
     }
 }
@@ -122,26 +124,28 @@ fn update_calibrating(
 
     match next_timeout_lifecycle(timeout, COOLDOWN_AND_SOLVE_TIMEOUT) {
         Lifecycle::Started(timeout) => {
-            transition!(solving_rune, State::Calibrating(timeout), {
-                resources.input.send_key(interact_key);
-            })
+            resources.input.send_key(interact_key);
+            solving_rune.state = State::Calibrating(timeout);
         }
-
-        Lifecycle::Ended => transition!(solving_rune, State::Completed),
+        Lifecycle::Ended => {
+            solving_rune.state = State::Completed;
+        }
         Lifecycle::Updated(timeout) => {
             if timeout.current.is_multiple_of(SOLVE_INTERVAL) {
                 match solving_rune.solver.solve(resources.detector()) {
                     SolvingState::Calibrating => {
-                        transition!(solving_rune, State::Calibrating(timeout))
+                        solving_rune.state = State::Calibrating(timeout);
+                        return;
                     }
                     SolvingState::Solving => {
-                        transition!(solving_rune, State::Solving(Timeout::default()))
+                        solving_rune.state = State::Solving(Timeout::default());
+                        return;
                     }
                     SolvingState::Complete(_) | SolvingState::Error => unreachable!(),
                 }
             }
 
-            transition!(solving_rune, State::Calibrating(timeout));
+            solving_rune.state = State::Calibrating(timeout);
         }
     }
 }
@@ -153,26 +157,30 @@ fn update_solving(resources: &Resources, solving_rune: &mut SolvingRune) {
 
     match next_timeout_lifecycle(timeout, 150) {
         Lifecycle::Started(timeout) => {
-            transition!(solving_rune, State::Solving(timeout))
+            solving_rune.state = State::Solving(timeout);
         }
-        Lifecycle::Ended => transition!(solving_rune, State::Completed),
+        Lifecycle::Ended => {
+            solving_rune.state = State::Completed;
+        }
         Lifecycle::Updated(timeout) => match solving_rune.solver.solve(resources.detector()) {
             SolvingState::Calibrating => {
                 unreachable!()
             }
-            SolvingState::Solving => transition!(solving_rune, State::Solving(timeout)),
-            SolvingState::Complete(arrows) => transition!(
-                solving_rune,
-                State::PressKeys(Timeout::default(), arrows.map(|arrow| arrow.key), 0),
-                {
-                    info!(target: "rune", "solve result {arrows:?}");
-                    #[cfg(debug_assertions)]
-                    resources
-                        .debug
-                        .set_last_rune_result(resources.detector_cloned(), arrows);
-                }
-            ),
-            SolvingState::Error => transition!(solving_rune, State::Completed),
+            SolvingState::Solving => {
+                solving_rune.state = State::Solving(timeout);
+            }
+            SolvingState::Complete(arrows) => {
+                info!(target:"backend/rune","solve result {arrows:?}");
+                #[cfg(debug_assertions)]
+                resources
+                    .debug
+                    .set_last_rune_result(resources.detector_cloned(), arrows);
+                solving_rune.state =
+                    State::PressKeys(Timeout::default(), arrows.map(|arrow| arrow.key), 0);
+            }
+            SolvingState::Error => {
+                solving_rune.state = State::Completed;
+            }
         },
     }
 }
@@ -186,18 +194,18 @@ fn update_press_keys(resources: &Resources, solving_rune: &mut SolvingRune) {
 
     match next_timeout_lifecycle(timeout, PRESS_KEY_INTERVAL) {
         Lifecycle::Started(timeout) => {
-            transition!(solving_rune, State::PressKeys(timeout, keys, key_index), {
-                resources.input.send_key(keys[key_index]);
-            })
+            resources.input.send_key(keys[key_index]);
+            solving_rune.state = State::PressKeys(timeout, keys, key_index);
         }
-        Lifecycle::Ended => transition_if!(
-            solving_rune,
-            State::PressKeys(Timeout::default(), keys, key_index + 1),
-            State::Completed,
-            key_index + 1 < keys.len()
-        ),
+        Lifecycle::Ended => {
+            solving_rune.state = if key_index + 1 < keys.len() {
+                State::PressKeys(Timeout::default(), keys, key_index + 1)
+            } else {
+                State::Completed
+            };
+        }
         Lifecycle::Updated(timeout) => {
-            transition!(solving_rune, State::PressKeys(timeout, keys, key_index))
+            solving_rune.state = State::PressKeys(timeout, keys, key_index);
         }
     }
 }

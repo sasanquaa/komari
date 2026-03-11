@@ -74,6 +74,10 @@ fn main() {
             ))
         })
         .level(level)
+        .filter(|metadata| {
+            let target = metadata.target();
+            target.starts_with("backend") || target.starts_with("ui")
+        })
         .chain(stdout())
         .chain(fern::log_file(current_exe().unwrap().parent().unwrap().join("log.txt")).unwrap())
         .apply()

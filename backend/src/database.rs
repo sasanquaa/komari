@@ -24,8 +24,7 @@ static CONNECTION: LazyLock<Mutex<Connection>> = LazyLock::new(|| {
         .unwrap()
         .parent()
         .unwrap()
-        .join("local.db")
-        .to_path_buf();
+        .join("local.db");
     let conn = Connection::open(path.to_str().unwrap()).expect("failed to open local.db");
     conn.execute_batch(
         format!(

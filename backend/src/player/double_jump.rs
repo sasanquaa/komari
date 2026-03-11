@@ -15,7 +15,7 @@ use super::{
 use crate::{
     ActionKeyDirection, ActionKeyWith,
     bridge::KeyKind,
-    ecs::{Resources, transition, transition_if},
+    ecs::Resources,
     minimap::Minimap,
     player::{
         PlayerEntity,
@@ -25,7 +25,6 @@ use crate::{
         next_action,
         state::LastMovement,
         timeout::{ChangeAxis, Timeout},
-        transition_from_action, transition_to_moving,
     },
 };
 
@@ -155,21 +154,23 @@ pub fn update_double_jumping_state(
         MovingLifecycle::Started(moving) => {
             // Stall until near stationary by resetting started
             let (x_velocity, y_velocity) = player.context.velocity;
-            transition_if!(
-                player,
-                Player::DoubleJumping(double_jumping.moving(moving.timeout_started(false))),
-                double_jumping.require_near_stationary
-                    && (x_velocity > X_NEAR_STATIONARY_VELOCITY_THRESHOLD
-                        || y_velocity > Y_NEAR_STATIONARY_VELOCITY_THRESHOLD)
-            );
+            if double_jumping.require_near_stationary
+                && (x_velocity > X_NEAR_STATIONARY_VELOCITY_THRESHOLD
+                    || y_velocity > Y_NEAR_STATIONARY_VELOCITY_THRESHOLD)
+            {
+                player.state =
+                    Player::DoubleJumping(double_jumping.moving(moving.timeout_started(false)));
+                return;
+            }
 
             player.context.last_movement = Some(LastMovement::DoubleJumping);
-            transition!(player, Player::DoubleJumping(double_jumping.moving(moving)));
+            player.state = Player::DoubleJumping(double_jumping.moving(moving));
         }
-        MovingLifecycle::Ended(moving) => transition_to_moving!(player, moving, {
+        MovingLifecycle::Ended(moving) => {
             resources.input.send_key_up(KeyKind::Right);
             resources.input.send_key_up(KeyKind::Left);
-        }),
+            player.state = Player::Moving(moving.dest, moving.exact, moving.intermediates);
+        }
         MovingLifecycle::Updated(mut moving) => {
             let (x_distance, x_direction) = moving.x_distance_direction_from(true, moving.pos);
             let mut double_jumping = double_jumping;
@@ -300,17 +301,19 @@ fn update_from_action(
                 ..
             },
         )) => {
-            transition_if!(!moving.completed);
+            if !moving.completed {
+                return;
+            }
+
             // Ignore proximity check when it is forced to double jumped as this indicates the
             // player is already near the destination.
-            transition_if!(
-                player,
-                Player::UseKey(UseKey::from_key(key)),
-                forced
-                    || (!moving.exact
-                        && x_distance <= USE_KEY_X_THRESHOLD
-                        && y_distance <= USE_KEY_Y_THRESHOLD)
-            );
+            if forced
+                || (!moving.exact
+                    && x_distance <= USE_KEY_X_THRESHOLD
+                    && y_distance <= USE_KEY_Y_THRESHOLD)
+            {
+                player.state = Player::UseKey(UseKey::from_key(key));
+            }
         }
         None
         | Some(
@@ -346,15 +349,20 @@ fn update_from_ping_pong_action(
         PingPongDirection::Right => cur_pos.x - bound.x - bound.width >= 0,
     };
     if hit_x_bound_edge {
-        transition_from_action!(player, Player::Idle);
+        player.context.clear_unstucking(false);
+        player.state = Player::Idle;
+        return;
     }
-    transition_if!(!double_jumped);
+
+    if !double_jumped {
+        return;
+    }
+
     // TODO: Add test
-    transition_if!(
-        player,
-        Player::Idle,
-        player.context.stalling_buffered.stalling()
-    );
+    if player.context.stalling_buffered.stalling() {
+        player.state = Player::Idle;
+        return;
+    }
 
     resources.input.send_key_up(KeyKind::Left);
     resources.input.send_key_up(KeyKind::Right);
@@ -381,24 +389,24 @@ fn update_from_ping_pong_action(
             false,
             None,
         );
-        transition_if!(
-            player,
-            Player::Grappling(Grappling::new(moving)),
-            Player::UpJumping(UpJumping::new(moving, resources, &player.context)),
-            has_grappling
-        )
+        player.state = if has_grappling {
+            Player::Grappling(Grappling::new(moving))
+        } else {
+            Player::UpJumping(UpJumping::new(moving, resources, &player.context))
+        };
+        return;
     }
 
-    transition_if!(
-        player,
-        Player::Falling(Falling::new(
+    if cur_pos.y > bound_y_max || should_downward {
+        player.state = Player::Falling(Falling::new(
             Moving::new(cur_pos, Point::new(cur_pos.x, bound.y), false, None),
             cur_pos,
             true,
-        )),
-        cur_pos.y > bound_y_max || should_downward
-    );
-    transition!(player, Player::UseKey(UseKey::from_ping_pong(ping_pong)));
+        ));
+        return;
+    }
+
+    player.state = Player::UseKey(UseKey::from_ping_pong(ping_pong));
 }
 
 /// Gets the mage teleport direction when the player is already at destination.

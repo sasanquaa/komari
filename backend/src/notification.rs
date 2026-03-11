@@ -386,10 +386,10 @@ async fn post_discord_notification(
         .send()
         .await
         .inspect(|_| {
-            debug!(target: "notification", "calling Webhook API {:?} succeeded", notification.kind);
+            debug!(target: "backend/notification", "calling Webhook API {:?} succeeded", notification.kind);
         })
         .inspect_err(|err| {
-            error!(target: "notification", "calling Webhook API failed {err}");
+            error!(target: "backend/notification", "calling Webhook API failed {err}");
         });
 
     Ok(())

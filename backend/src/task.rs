@@ -171,7 +171,7 @@ mod tests {
             match task.poll_inner() {
                 Some(value) => assert_eq!(value, 0),
                 None => yield_now().await,
-            };
+            }
         }
         assert_matches!(task.poll_inner(), None);
         assert!(task.completed());

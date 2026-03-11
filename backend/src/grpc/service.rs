@@ -166,7 +166,7 @@ impl InputService {
         };
 
         if let Err(status) = f(client) {
-            info!(target: "rpc", "rpc call failed: {status}");
+            info!(target: "backend/rpc", "rpc call failed: {status}");
             self.state = State::Disconnected;
         }
     }
@@ -193,7 +193,7 @@ impl InputService {
 
         let endpoint = self.endpoint.clone();
         let seed = self.seed.clone();
-        info!(target: "rpc", "connecting to input server {}", endpoint.uri());
+        info!(target: "backend/rpc", "connecting to input server {}", endpoint.uri());
 
         let task = spawn(async move {
             let mut client = KeyInputClient::connect(endpoint).await.ok()?;

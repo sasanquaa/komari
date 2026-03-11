@@ -10,7 +10,7 @@ runs:
         Add-Content $env:GITHUB_ENV "RUST_BACKTRACE=1"
         Add-Content $env:GITHUB_ENV "RUSTC_WRAPPER=sccache"
         Add-Content $env:GITHUB_ENV "VCPKG_ENABLE_METRICS=0"
-        Add-Content $env:GITHUB_ENV "VCPKG_VERSION=2025.10.17"
+        Add-Content $env:GITHUB_ENV "VCPKG_VERSION=2026.02.27"
         Add-Content $env:GITHUB_ENV "VCPKG_ROOT=$env:GITHUB_WORKSPACE\vcpkg"
         Add-Content $env:GITHUB_ENV "VCPKG_INSTALLED_DIR=$env:GITHUB_WORKSPACE\vcpkg\installed"
         Add-Content $env:GITHUB_ENV "OPENCV_MSVC_CRT=static"
@@ -66,3 +66,8 @@ runs:
     - name: Install protoc
       shell: pwsh
       run: choco install -y protoc --version "33.0.0"
+
+    - name: Install LLVM and Clang
+      uses: KyleMayes/install-llvm-action@v2
+      with:
+        version: "21"

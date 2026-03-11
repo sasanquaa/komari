@@ -7,7 +7,7 @@ use super::{Player, PlayerContext, use_key::UseKey};
 use crate::{
     array::Array,
     bridge::{KeyKind, LinkKeyKind},
-    ecs::{Resources, transition, transition_if},
+    ecs::Resources,
     minimap::Minimap,
     models::{
         Action, ActionKey, ActionKeyDirection, ActionKeyWith, ActionMove, FamiliarRarity, Position,
@@ -264,6 +264,12 @@ pub enum PlayerAction {
     Unstuck,
 }
 
+impl PlayerAction {
+    pub(super) fn is_key_action_without_position(&self) -> bool {
+        matches!(self, PlayerAction::Key(Key { position: None, .. }))
+    }
+}
+
 impl From<Action> for PlayerAction {
     fn from(action: Action) -> Self {
         match action {
@@ -272,92 +278,6 @@ impl From<Action> for PlayerAction {
         }
     }
 }
-
-macro_rules! transition_to_moving {
-    ($player:expr, $moving:expr) => {{
-        $player.state = Player::Moving($moving.dest, $moving.exact, $moving.intermediates);
-        return;
-    }};
-
-    ($player:expr, $moving:expr, $block:block) => {{
-        $block
-        $player.state = Player::Moving($moving.dest, $moving.exact, $moving.intermediates);
-        return;
-    }};
-}
-
-pub(super) use transition_to_moving;
-
-macro_rules! transition_to_moving_if {
-    ($player:expr, $moving:expr, $cond:expr) => {{
-        if $cond {
-            $player.state = Player::Moving($moving.dest, $moving.exact, $moving.intermediates);
-            return;
-        }
-    }};
-
-    ($player:expr, $moving:expr, $cond:expr, $block:block) => {{
-        if $cond {
-            $block
-            $player.state = Player::Moving($moving.dest, $moving.exact, $moving.intermediates);
-            return;
-        }
-    }};
-}
-
-pub(super) use transition_to_moving_if;
-
-macro_rules! transition_from_action {
-    ($player:expr, $state:expr) => {{
-        use $crate::{
-            models::Position,
-            player::{Key, PlayerAction},
-        };
-
-        match next_action(&$player.context).expect("has action") {
-            PlayerAction::SolveRune
-            | PlayerAction::PingPong(_)
-            | PlayerAction::Move(_)
-            | PlayerAction::Key(Key {
-                position: Some(Position { .. }),
-                ..
-            }) => {
-                $player.context.clear_unstucking(false);
-            }
-            _ => (),
-        }
-        $player.context.clear_action_completed();
-        $player.state = $state;
-        return;
-    }};
-
-    ($player:expr, $state:expr, $is_terminal:expr) => {{
-        use $crate::{
-            models::Position,
-            player::{Key, PlayerAction},
-        };
-
-        if $is_terminal {
-            match next_action(&$player.context).expect("has action") {
-                PlayerAction::SolveRune
-                | PlayerAction::PingPong(_)
-                | PlayerAction::Move(_)
-                | PlayerAction::Key(Key {
-                    position: Some(Position { .. }),
-                    ..
-                }) => {
-                    $player.context.clear_unstucking(false);
-                }
-                _ => (),
-            }
-            $player.context.clear_action_completed();
-        }
-        $player.state = $state;
-        return;
-    }};
-}
-
-pub(super) use transition_from_action;
 
 #[inline]
 pub(super) fn next_action(context: &PlayerContext) -> Option<PlayerAction> {
@@ -382,7 +302,10 @@ pub(super) fn update_from_ping_pong_action(
         PingPongDirection::Right => cur_pos.x - bound.x - bound.width >= 0,
     };
     if hit_x_bound_edge {
-        transition_from_action!(player, Player::Idle);
+        player.context.clear_action_completed();
+        player.context.clear_unstucking(false);
+        player.state = Player::Idle;
+        return;
     }
 
     release_arrow_keys(resources);
@@ -395,7 +318,7 @@ pub(super) fn update_from_ping_pong_action(
         PingPongDirection::Left => Player::Moving(Point::new(0, y), false, None),
         PingPongDirection::Right => Player::Moving(Point::new(minimap_width, y), false, None),
     };
-    transition!(player, moving)
+    player.state = moving;
 }
 
 /// Checks proximity in [`PlayerAction::AutoMob`] for transitioning to [`Player::UseKey`].
@@ -416,14 +339,11 @@ pub(super) fn update_from_auto_mob_action(
 ) {
     let should_terminate =
         x_distance <= AUTO_MOB_USE_KEY_X_THRESHOLD && y_distance <= AUTO_MOB_USE_KEY_Y_THRESHOLD;
-    transition_if!(
-        player,
-        Player::Idle,
-        should_terminate && player.context.stalling_buffered.stalling(),
-        {
-            player.context.clear_action_completed();
-        }
-    );
+    if should_terminate && player.context.stalling_buffered.stalling() {
+        player.context.clear_action_completed();
+        player.state = Player::Idle;
+        return;
+    }
 
     let direction = match x_direction {
         direction if direction > 0 => ActionKeyDirection::Right,
@@ -435,26 +355,21 @@ pub(super) fn update_from_auto_mob_action(
         Player::DoubleJumping(_) | Player::Adjusting(_)
     );
 
-    transition_if!(
-        player,
-        Player::UseKey(UseKey::from_auto_mob(mob, direction, should_terminate)),
-        should_check_pathing
-            && player
-                .context
-                .auto_mob_pathing_should_use_key(resources, minimap_state),
-        {
-            release_arrow_keys(resources);
-        }
-    );
-    transition_if!(
-        player,
-        Player::UseKey(UseKey::from_auto_mob(mob, direction, should_terminate)),
-        should_terminate,
-        {
-            player.context.last_known_direction = ActionKeyDirection::Any;
-            release_arrow_keys(resources);
-        }
-    );
+    if should_check_pathing
+        && player
+            .context
+            .auto_mob_pathing_should_use_key(resources, minimap_state)
+    {
+        release_arrow_keys(resources);
+        player.state = Player::UseKey(UseKey::from_auto_mob(mob, direction, should_terminate));
+        return;
+    }
+
+    if should_terminate {
+        release_arrow_keys(resources);
+        player.context.last_known_direction = ActionKeyDirection::Any;
+        player.state = Player::UseKey(UseKey::from_auto_mob(mob, direction, should_terminate));
+    }
 }
 
 fn release_arrow_keys(resources: &Resources) {

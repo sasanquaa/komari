@@ -4,11 +4,10 @@ use rand_distr::num_traits::clamp;
 use super::{Player, timeout::Timeout};
 use crate::{
     bridge::{KeyKind, MouseKind},
-    ecs::{Resources, transition, try_ok_transition, try_some_transition},
+    ecs::Resources,
     player::{
         Booster, PlayerEntity, next_action,
         timeout::{Lifecycle, next_timeout_lifecycle},
-        transition_from_action,
     },
 };
 
@@ -106,7 +105,7 @@ pub fn update_exchanging_booster_state(resources: &Resources, player: &mut Playe
         State::Exchanging(_, _) => update_exchanging(resources, &mut exchanging),
         State::Confirming(_, _) => update_confirming(resources, &mut exchanging),
         State::Completing(_, _) => update_completing(resources, &mut exchanging),
-    };
+    }
 
     let did_success = exchanging.success;
     let player_next_state = if matches!(exchanging.state, State::Completing(_, true)) {
@@ -118,15 +117,17 @@ pub fn update_exchanging_booster_state(resources: &Resources, player: &mut Playe
 
     match next_action(&player.context) {
         Some(_) => {
-            if is_terminal && did_success {
+            if !is_terminal {
+                return;
+            }
+
+            player.context.clear_action_completed();
+            if did_success {
                 player.context.clear_booster_fail_count(Booster::Hexa);
             }
-            transition_from_action!(player, player_next_state, is_terminal)
         }
-        None => transition!(
-            player,
-            Player::Idle // Force cancel if it is not initiated from an action
-        ),
+
+        None => player.state = Player::Idle,
     }
 }
 
@@ -137,33 +138,34 @@ fn update_open_hexa_menu(resources: &Resources, exchanging: &mut ExchangingBoost
 
     match next_timeout_lifecycle(timeout, 20) {
         Lifecycle::Started(timeout) => {
-            let (x, y) = try_some_transition!(
-                exchanging,
-                State::Completing(Timeout::default(), true),
-                resources
-                    .detector()
-                    .detect_hexa_quick_menu()
-                    .ok()
-                    .map(bbox_click_point)
-            );
+            let (x, y) = match resources
+                .detector()
+                .detect_hexa_quick_menu()
+                .ok()
+                .map(bbox_click_point)
+            {
+                Some(val) => val,
+                None => {
+                    exchanging.state = State::Completing(Timeout::default(), true);
+                    return;
+                }
+            };
 
-            transition!(exchanging, State::OpenHexaMenu(timeout), {
-                resources.input.send_mouse(x, y, MouseKind::Click);
-            });
+            resources.input.send_mouse(x, y, MouseKind::Click);
+            exchanging.state = State::OpenHexaMenu(timeout);
         }
         Lifecycle::Ended => {
-            let bbox = try_ok_transition!(
-                exchanging,
-                State::Completing(Timeout::default(), false),
-                resources.detector().detect_hexa_erda_conversion_button()
-            );
+            let bbox = match resources.detector().detect_hexa_erda_conversion_button() {
+                Ok(val) => val,
+                Err(_) => {
+                    exchanging.state = State::Completing(Timeout::default(), false);
+                    return;
+                }
+            };
 
-            transition!(
-                exchanging,
-                State::OpenExchangingMenu(Timeout::default(), bbox)
-            )
+            exchanging.state = State::OpenExchangingMenu(Timeout::default(), bbox);
         }
-        Lifecycle::Updated(timeout) => transition!(exchanging, State::OpenHexaMenu(timeout)),
+        Lifecycle::Updated(timeout) => exchanging.state = State::OpenHexaMenu(timeout),
     }
 }
 
@@ -174,22 +176,23 @@ fn update_open_exchanging_menu(resources: &Resources, exchanging: &mut Exchangin
 
     match next_timeout_lifecycle(timeout, 20) {
         Lifecycle::Started(timeout) => {
-            transition!(exchanging, State::OpenExchangingMenu(timeout, bbox), {
-                let (x, y) = bbox_click_point(bbox);
-                resources.input.send_mouse(x, y, MouseKind::Click);
-            });
+            let (x, y) = bbox_click_point(bbox);
+            resources.input.send_mouse(x, y, MouseKind::Click);
+            exchanging.state = State::OpenExchangingMenu(timeout, bbox);
         }
         Lifecycle::Ended => {
-            let bbox = try_ok_transition!(
-                exchanging,
-                State::Completing(Timeout::default(), false),
-                resources.detector().detect_hexa_booster_button()
-            );
+            let bbox = match resources.detector().detect_hexa_booster_button() {
+                Ok(val) => val,
+                Err(_) => {
+                    exchanging.state = State::Completing(Timeout::default(), false);
+                    return;
+                }
+            };
 
-            transition!(exchanging, State::OpenBoosterMenu(Timeout::default(), bbox))
+            exchanging.state = State::OpenBoosterMenu(Timeout::default(), bbox);
         }
         Lifecycle::Updated(timeout) => {
-            transition!(exchanging, State::OpenExchangingMenu(timeout, bbox))
+            exchanging.state = State::OpenExchangingMenu(timeout, bbox);
         }
     }
 }
@@ -201,22 +204,23 @@ fn update_open_booster_menu(resources: &Resources, exchanging: &mut ExchangingBo
 
     match next_timeout_lifecycle(timeout, 20) {
         Lifecycle::Started(timeout) => {
-            transition!(exchanging, State::OpenBoosterMenu(timeout, bbox), {
-                let (x, y) = bbox_click_point(bbox);
-                resources.input.send_mouse(x, y, MouseKind::Click);
-            })
+            let (x, y) = bbox_click_point(bbox);
+            resources.input.send_mouse(x, y, MouseKind::Click);
+            exchanging.state = State::OpenBoosterMenu(timeout, bbox);
         }
         Lifecycle::Ended => {
-            let bbox = try_ok_transition!(
-                exchanging,
-                State::Completing(Timeout::default(), false),
-                resources.detector().detect_hexa_max_button()
-            );
+            let bbox = match resources.detector().detect_hexa_max_button() {
+                Ok(val) => val,
+                Err(_) => {
+                    exchanging.state = State::Completing(Timeout::default(), false);
+                    return;
+                }
+            };
 
-            transition!(exchanging, State::Exchanging(Timeout::default(), bbox))
+            exchanging.state = State::Exchanging(Timeout::default(), bbox);
         }
         Lifecycle::Updated(timeout) => {
-            transition!(exchanging, State::OpenBoosterMenu(timeout, bbox))
+            exchanging.state = State::OpenBoosterMenu(timeout, bbox);
         }
     }
 }
@@ -233,23 +237,23 @@ fn update_exchanging(resources: &Resources, exchanging: &mut ExchangingBooster) 
 
     match next_timeout_lifecycle(timeout, max_timeout) {
         Lifecycle::Started(timeout) => {
-            transition!(exchanging, State::Exchanging(timeout, bbox), {
-                let (mut x, y) = bbox_click_point(bbox);
-                if is_specific_amount {
-                    x += 100; // Clicking the input box
-                }
-
-                resources.input.send_mouse(x, y, MouseKind::Click);
-            })
+            let (mut x, y) = bbox_click_point(bbox);
+            if is_specific_amount {
+                x += 100;
+            }
+            resources.input.send_mouse(x, y, MouseKind::Click);
+            exchanging.state = State::Exchanging(timeout, bbox);
         }
         Lifecycle::Ended => {
-            let bbox = try_ok_transition!(
-                exchanging,
-                State::Completing(Timeout::default(), false),
-                resources.detector().detect_hexa_convert_button()
-            );
+            let bbox = match resources.detector().detect_hexa_convert_button() {
+                Ok(val) => val,
+                Err(_) => {
+                    exchanging.state = State::Completing(Timeout::default(), false);
+                    return;
+                }
+            };
 
-            transition!(exchanging, State::Confirming(Timeout::default(), bbox))
+            exchanging.state = State::Confirming(Timeout::default(), bbox);
         }
         Lifecycle::Updated(timeout) => {
             if let ExchangeAmount::Specific(inner) = amount
@@ -263,7 +267,7 @@ fn update_exchanging(resources: &Resources, exchanging: &mut ExchangingBooster) 
                 resources.input.send_key(key);
             }
 
-            transition!(exchanging, State::Exchanging(timeout, bbox))
+            exchanging.state = State::Exchanging(timeout, bbox);
         }
     }
 }
@@ -274,17 +278,13 @@ fn update_confirming(resources: &Resources, exchanging: &mut ExchangingBooster) 
 
     match next_timeout_lifecycle(timeout, 20) {
         Lifecycle::Started(timeout) => {
-            transition!(exchanging, State::Confirming(timeout, bbox), {
-                let (x, y) = bbox_click_point(bbox);
-
-                resources.input.send_mouse(x, y, MouseKind::Click);
-                exchanging.success = true;
-            })
+            let (x, y) = bbox_click_point(bbox);
+            resources.input.send_mouse(x, y, MouseKind::Click);
+            exchanging.success = true;
+            exchanging.state = State::Confirming(timeout, bbox);
         }
-        Lifecycle::Ended => transition!(exchanging, State::Completing(Timeout::default(), false)),
-        Lifecycle::Updated(timeout) => {
-            transition!(exchanging, State::Confirming(timeout, bbox))
-        }
+        Lifecycle::Ended => exchanging.state = State::Completing(Timeout::default(), false),
+        Lifecycle::Updated(timeout) => exchanging.state = State::Confirming(timeout, bbox),
     }
 }
 
@@ -295,14 +295,14 @@ fn update_completing(resources: &Resources, exchanging: &mut ExchangingBooster) 
 
     match next_timeout_lifecycle(timeout, 20) {
         Lifecycle::Started(timeout) | Lifecycle::Updated(timeout) => {
-            transition!(exchanging, State::Completing(timeout, completed))
+            exchanging.state = State::Completing(timeout, completed);
         }
-        Lifecycle::Ended => transition!(exchanging, State::Completing(timeout, true), {
-            let detector = resources.detector();
-            if detector.detect_esc_settings() {
+        Lifecycle::Ended => {
+            if resources.detector().detect_esc_settings() {
                 resources.input.send_key(KeyKind::Esc);
             }
-        }),
+            exchanging.state = State::Completing(timeout, true);
+        }
     }
 }
 

@@ -12,7 +12,7 @@ use opencv::core::{MatTraitConst, Point, Rect, Vec4b};
 use crate::{
     array::Array,
     detect::{Detector, OtherPlayerKind},
-    ecs::{Resources, transition, transition_if, try_some_transition},
+    ecs::Resources,
     notification::NotificationKind,
     pathing::{MAX_PLATFORMS_COUNT, Platform, PlatformWithNeighbors, find_neighbors},
     player::{DOUBLE_JUMP_THRESHOLD, GRAPPLING_MAX_THRESHOLD, JUMP_THRESHOLD, Player},
@@ -182,7 +182,7 @@ impl MinimapIdle {
             let y_range = portal.y..(portal.y + portal.height);
 
             if x_range.contains(&pos.x) && y_range.contains(&pos.y) {
-                info!(target: "minimap", "position {pos:?} is inside portal {portal:?}");
+                info!(target: "backend/minimap", "position {pos:?} is inside portal {portal:?}");
                 return true;
             }
         }
@@ -218,7 +218,7 @@ fn update_detecting_state(resources: &Resources, minimap: &mut MinimapEntity) {
             let br = anchor_at(&detector.mat(), bbox.br(), size, -1)?;
             let anchors = Anchors { tl, br };
 
-            debug!(target: "minimap", "anchor points: {anchors:?}");
+            debug!(target: "backend/minimap", "anchor points: {anchors:?}");
             Ok((anchors, bbox))
         },
     ) else {
@@ -252,7 +252,9 @@ fn update_idle_state(
     minimap_state: MinimapIdle,
     player_state: Player,
 ) {
-    transition_if!(matches!(player_state, Player::CashShopThenExit(_)));
+    if matches!(player_state, Player::CashShopThenExit(_)) {
+        return;
+    }
 
     let MinimapIdle {
         anchors,
@@ -267,26 +269,31 @@ fn update_idle_state(
     } = minimap_state;
     let detector = resources.detector();
 
-    let tl_pixel = try_some_transition!(
-        minimap,
-        Minimap::Detecting,
-        pixel_at(&detector.mat(), anchors.tl.0)
-    );
-    let br_pixel = try_some_transition!(
-        minimap,
-        Minimap::Detecting,
-        pixel_at(&detector.mat(), anchors.br.0)
-    );
+    let tl_pixel = match pixel_at(&detector.mat(), anchors.tl.0) {
+        Some(val) => val,
+        None => {
+            minimap.state = Minimap::Detecting;
+            return;
+        }
+    };
+    let br_pixel = match pixel_at(&detector.mat(), anchors.br.0) {
+        Some(val) => val,
+        None => {
+            minimap.state = Minimap::Detecting;
+            return;
+        }
+    };
     let tl_match = anchor_match(anchors.tl.1, tl_pixel);
     let br_match = anchor_match(anchors.br.1, br_pixel);
     if !tl_match && !br_match {
         debug!(
-            target: "minimap",
+            target: "backend/minimap",
             "anchor pixels mismatch: {:?} != {:?}",
             (tl_pixel, br_pixel),
             (anchors.tl.1, anchors.br.1)
         );
-        transition!(minimap, Minimap::Detecting);
+        minimap.state = Minimap::Detecting;
+        return;
     }
 
     let partially_overlapping = (tl_match && !br_match) || (!tl_match && br_match);
@@ -386,7 +393,7 @@ fn update_rune_task(
     });
 
     if was_none && rune.value.is_some() && !resources.operation.halting() {
-        info!(target: "minimap", "sending notification for rune...");
+        info!(target: "backend/minimap", "sending notification for rune...");
         resources
             .notification
             .schedule_notification(NotificationKind::RuneAppear);
@@ -411,7 +418,7 @@ fn update_other_player_task(
         }
     });
     if !resources.operation.halting() && !has_player && threshold.value.is_some() {
-        info!(target: "minimap", "sending {kind:?} notification...");
+        info!(target: "backend/minimap", "sending {kind:?} notification...");
         let notification = match kind {
             OtherPlayerKind::Guildie => NotificationKind::PlayerGuildieAppear,
             OtherPlayerKind::Stranger => NotificationKind::PlayerStrangerAppear,

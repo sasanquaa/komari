@@ -40,6 +40,17 @@ impl EventHandler<WorldEvent> for WorldEventHandler {
                     return;
                 }
 
+                let is_panicking = matches!(
+                    context.world.player.state,
+                    Player::Panicking(Panicking {
+                        to: PanicTo::Channel,
+                        ..
+                    })
+                );
+                if is_panicking {
+                    return;
+                }
+
                 context
                     .resources
                     .notification
@@ -51,17 +62,6 @@ impl EventHandler<WorldEvent> for WorldEventHandler {
                     .settings()
                     .stop_on_fail_or_change_map
                 {
-                    return;
-                }
-
-                let is_panicking = matches!(
-                    context.world.player.state,
-                    Player::Panicking(Panicking {
-                        to: PanicTo::Channel,
-                        ..
-                    })
-                );
-                if is_panicking {
                     return;
                 }
 

@@ -9,7 +9,7 @@ use opencv::core::{MatTraitConst, Point, Rect, Vec4b};
 use strum::{Display, EnumIter};
 
 use crate::{
-    ecs::{Resources, transition, transition_if, try_ok_transition},
+    ecs::Resources,
     player::Player,
     task::{Task, Update, update_detection_task},
 };
@@ -66,7 +66,9 @@ impl IndexMut<SkillKind> for SkillEntities {
 }
 
 pub fn run_system(resources: &Resources, skill: &mut SkillEntity, player_state: Player) {
-    transition_if!(matches!(player_state, Player::CashShopThenExit(_)));
+    if matches!(player_state, Player::CashShopThenExit(_)) {
+        return;
+    }
 
     match skill.state {
         Skill::Detecting => update_detection_state(resources, skill),
@@ -84,14 +86,19 @@ fn update_idle_state(
 ) {
     let mat = resources.detector().mat();
     let result = mat.at_pt::<Vec4b>(anchor_point);
-    let pixel = try_ok_transition!(skill, Skill::Detecting, result);
+    let pixel = match result {
+        Ok(val) => val,
+        Err(_) => {
+            skill.state = Skill::Detecting;
+            return;
+        }
+    };
 
-    transition_if!(
-        skill,
-        Skill::Idle(anchor_point, anchor_pixel),
-        Skill::Detecting,
-        anchor_match(*pixel, anchor_pixel)
-    );
+    skill.state = if anchor_match(*pixel, anchor_pixel) {
+        Skill::Idle(anchor_point, anchor_pixel)
+    } else {
+        Skill::Detecting
+    };
 }
 
 #[inline]
@@ -106,10 +113,10 @@ fn update_detection_state(resources: &Resources, skill: &mut SkillEntity) {
     });
 
     match update {
-        Update::Ok((point, pixel)) => transition!(skill, Skill::Idle(point, pixel)),
-        Update::Err(_) => transition!(skill, Skill::Detecting),
+        Update::Ok((point, pixel)) => skill.state = Skill::Idle(point, pixel),
+        Update::Err(_) => skill.state = Skill::Detecting,
         Update::Pending => (),
-    };
+    }
 }
 
 #[inline]
@@ -128,7 +135,7 @@ fn get_anchor(mat: &impl MatTraitConst, bbox: Rect) -> (Point, Vec4b) {
     let point = (bbox.tl() + bbox.br()) / 2;
     let pixel = mat.at_pt::<Vec4b>(point).unwrap();
     let anchor = (point, *pixel);
-    debug!(target: "skill", "detected at {bbox:?} with anchor {anchor:?}");
+    debug!(target: "backend/skill", "detected at {bbox:?} with anchor {anchor:?}");
     anchor
 }
 

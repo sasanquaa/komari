@@ -82,11 +82,7 @@ impl RotatorService for DefaultRotatorService {
         self.args.enable_panic_mode = settings.enable_panic_mode;
         self.args.enable_rune_solving = settings.enable_rune_solving;
         self.args.enable_transparent_shape_solving = settings.enable_transparent_shape_solving;
-        self.args.enable_violetta_solving = if cfg!(feature = "violetta") {
-            settings.enable_violetta_solving
-        } else {
-            false
-        };
+        self.args.enable_violetta_solving = settings.enable_violetta_solving;
     }
 
     fn apply(&self, rotator: &mut dyn Rotator) {
