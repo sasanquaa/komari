@@ -35,7 +35,7 @@ serde_json = { workspace = true }
 strum = { workspace = true }
 ordered_hash_map = "0.4.0"
 noise = "0.9"
-reqwest = { version = "0.12.20", features = ["multipart"] }
+reqwest = { version = "0.12.20", features = ["multipart", "json"] }
 include_dir = "0.7.4"
 
 [build-dependencies]
