@@ -94,9 +94,14 @@ There are two modes available for configuring potion usage:
 
 ##### Movement
 
+- `Up jump is flight` — Treats up jump as flight (e.g., Illium).
+- `Jump then up jump if possible` — Jumps first, then up jumps if available (e.g., Night Lord).
+- `Has extended teleport range` — Teleportation has extended range (e.g., Explorer Mages).
+- `Disable grapple on double jumping` - Disables performing a grapple during double jumping.
 - `Disable teleport on fall` – Disables teleport after falling (useful for mage classes).
 - `Disable double jumping` – Disables the `DoubleJumping` state (e.g., makes the bot only walk).  
   - Works only if the action does not have `Use with = DoubleJump`.
+- `Disable grapple on double jumping` — Prevents grappling during double jump.
 - `Disable walking` – Disables the `Adjusting` state (forces horizontal movement by double jumps only).  
   - Works only if the action does not have `Adjust` ticked.
 
